@@ -1,0 +1,48 @@
+/**
+ * Design tokens, read straight off the approved mockups.
+ *
+ * One invariant runs through the whole app and must not be broken by a later screen:
+ *   green  = actual / tracked / running
+ *   grey   = planned / untracked / idle
+ * A colour that means two things means nothing.
+ */
+
+@import 'tailwindcss';
+
+@theme {
+  /* surfaces */
+  --color-bg: #0b0d0f;
+  --color-card: #14171a;
+  --color-card-hover: #1a1e22;
+  --color-rail-active: #12261a;
+  --color-border: #1f2429;
+  --color-border-strong: #2a3138;
+
+  /* text */
+  --color-text: #e8eaed;
+  --color-text-dim: #8a9199;
+  --color-text-faint: #5b6269;
+
+  /* accent — running / actual / success */
+  --color-accent: #22c55e;
+  --color-accent-soft: #4ade80;
+  --color-accent-dim: #1a7f3d;
+
+  /* priority */
+  --color-prio-high: #ef4444;
+  --color-prio-med: #f59e0b;
+  --color-prio-low: #6b7280;
+
+  /* planning blocks */
+  --color-block-blue: #1b3a5c;
+  --color-block-teal: #14493f;
+  --color-block-amber: #4a3a1c;
+
+  /* shape */
+  --radius-card: 12px;
+  --radius-pill: 999px;
+
+  /* type */
+  --font-sans: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
+}

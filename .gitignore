@@ -1,0 +1,16 @@
+node_modules/
+out/
+dist/
+data/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
+
+# User data and credentials never belong in the repo
+*.db
+*.db-*
+*.bak-*
+secrets.json
+media/

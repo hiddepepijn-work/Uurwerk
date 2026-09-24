@@ -1,0 +1,50 @@
+{
+  "name": "uurwerk",
+  "version": "0.1.0",
+  "description": "Internship time tracker, planner and weekly Dutch reporter",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.cjs",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint packages scripts --ext .ts,.tsx",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "tsx scripts/seed.ts",
+    "migrate:check": "tsx scripts/check-migration.ts",
+    "tidy": "tsx scripts/tidy-segments.ts",
+    "reset": "tsx scripts/reset-data.ts",
+    "inspect": "tsx scripts/inspect-today.ts",
+    "icons": "tsx scripts/make-icons.ts",
+    "shortcut": "powershell -ExecutionPolicy Bypass -File scripts/install-shortcut.ps1"
+  },
+  "dependencies": {
+    "docx": "^9.1.0",
+    "node-sqlite3-wasm": "^0.8.30",
+    "nodemailer": "^6.9.16"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.10.2",
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.3.0",
+    "electron-vite": "^2.3.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}

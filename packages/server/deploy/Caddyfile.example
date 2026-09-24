@@ -1,0 +1,34 @@
+# TLS, and nothing else.
+#
+# Caddy gets the certificate, terminates TLS and hands the request to the server on
+# localhost. The server itself never listens on a public address, so a broken proxy means
+# "unreachable" rather than "open".
+#
+# Replace the hostname with yours, put this in /etc/caddy/Caddyfile and run:
+#   caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+
+uurwerk.example.nl {
+	encode zstd gzip
+
+	# The uploads from the desktop app. Same origin as the pages, same process.
+	# A timelapse is the biggest thing that goes over it.
+	request_body {
+		max_size 64MB
+	}
+
+	reverse_proxy 127.0.0.1:8787 {
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/uurwerk.log
+		# The day payload names are unguessable and end up in the URL of every image, so
+		# the access log is itself a list of readable filenames. Keep it short-lived.
+		format json
+	}
+}
