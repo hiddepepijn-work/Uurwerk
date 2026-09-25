@@ -2,6 +2,7 @@
   "name": "uurwerk-mobile",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Uurwerk on the iPhone. Not installed on its own: the root package.json holds the modules; this file tells the Capacitor CLI which native plugins the app uses.",
   "dependencies": {
     "@capacitor/core": "^8.5.2",
