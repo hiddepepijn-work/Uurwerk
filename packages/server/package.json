@@ -2,12 +2,23 @@
   "name": "uurwerk-server",
   "version": "0.1.0",
   "private": true,
-  "description": "Receives published internship days and shows them to a supervisor or a teacher, each behind their own login",
+  "description": "The VPS end of Uurwerk: the main copy of the data, sync for the devices, and the published days for supervisor and teacher",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "bin": { "uurwerk-users": "./bin/uurwerk-users.js" },
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "uurwerk-users": "./bin/uurwerk-users.js",
+    "uurwerk-devices": "./bin/uurwerk-devices.js"
+  },
   "scripts": {
     "start": "node src/server.js",
-    "users": "node bin/uurwerk-users.js"
+    "users": "node bin/uurwerk-users.js",
+    "devices": "node bin/uurwerk-devices.js"
+  },
+  "dependencies": {
+    "docx": "^9.1.0",
+    "node-sqlite3-wasm": "^0.8.30",
+    "nodemailer": "^6.9.16"
   }
 }

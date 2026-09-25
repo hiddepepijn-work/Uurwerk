@@ -29,6 +29,7 @@ import {
   sendHtml,
   sendText
 } from './http.js'
+import { DeviceStore } from './devices.js'
 import { Library } from './library.js'
 import { Sessions } from './sessions.js'
 import { BlobStore, contentTypeOf, isSafeName } from './storage.js'
@@ -92,6 +93,8 @@ export async function createUurwerkServer(config = readConfig()) {
   const sessions = new Sessions(config.sessionsFile, config.sessionHours)
   const library = new Library(blobs)
   const throttle = new Throttle()
+  const devices = new DeviceStore(config.devicesFile)
+  const app = await loadApp(config, blobs, library)
 
   const secure = !config.insecureCookies
   const site = { siteTitle: config.title }
@@ -144,6 +147,8 @@ export async function createUurwerkServer(config = readConfig()) {
   const authorised = (request) => {
     const header = request.headers.authorization ?? ''
     const token = header.startsWith('Bearer ') ? header.slice(7) : ''
+    // No token configured: the old upload door is simply shut. The server publishes itself now.
+    if (!config.publishToken) return false
     if (token.length !== config.publishToken.length) return false
     // Constant-time is overkill for a 64-character random token, but it costs nothing.
     let same = 0
@@ -165,6 +170,21 @@ export async function createUurwerkServer(config = readConfig()) {
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
     const path = decodeURIComponent(url.pathname)
     const method = request.method ?? 'GET'
+
+    // --------------------------------------------------------------------- api
+    // The devices' door: a device token, never a browser cookie, and throttled like a login.
+    if (path.startsWith('/api/')) {
+      const address = clientAddress(request, config.trustProxy)
+      const waiting = throttle.blockedFor(address)
+      if (waiting > 0) return sendText(response, 429, `Too many attempts. Wait ${waiting} s.`)
+      const device = devices.verify(request.headers.authorization)
+      if (!device) {
+        throttle.fail(address)
+        return sendText(response, 401, 'Unauthorized')
+      }
+      if (!app) return sendText(response, 503, 'The sync app is not built on this server (npm run build:server).')
+      return app.handle(request, response, path, method, device)
+    }
 
     // ------------------------------------------------------------------ ingest
     if (path.startsWith('/publish/')) {
@@ -433,7 +453,29 @@ export async function createUurwerkServer(config = readConfig()) {
     })
   }
 
-  return { server, config }
+  return { server, config, app }
+}
+
+/**
+ * The bundled backend (dist/app.js, built from app/ by `npm run build:server`). Without it
+ * the server still serves the published days; it just cannot be synced with.
+ */
+async function loadApp(config, blobs, library) {
+  const bundle = new URL('../dist/app.js', import.meta.url)
+  try {
+    const { startApp } = await import(bundle.href)
+    return await startApp({
+      dataDir: config.dataDir,
+      published: {
+        put: (name, bytes) => blobs.put(name, Buffer.from(bytes)),
+        remove: (name) => blobs.remove(name),
+        invalidate: () => library.invalidate()
+      }
+    })
+  } catch (error) {
+    if (error?.code === 'ERR_MODULE_NOT_FOUND' && String(error.message).includes('dist/app.js')) return null
+    throw error
+  }
 }
 
 /** `node src/server.js` — the entry point the systemd unit runs. */

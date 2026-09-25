@@ -19,7 +19,8 @@
     "reset": "tsx scripts/reset-data.ts",
     "inspect": "tsx scripts/inspect-today.ts",
     "icons": "tsx scripts/make-icons.ts",
-    "shortcut": "powershell -ExecutionPolicy Bypass -File scripts/install-shortcut.ps1"
+    "shortcut": "powershell -ExecutionPolicy Bypass -File scripts/install-shortcut.ps1",
+    "build:server": "esbuild packages/server/app/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=packages/server/dist/app.js --external:node-sqlite3-wasm --external:nodemailer --external:docx --log-level=warning"
   },
   "dependencies": {
     "docx": "^9.1.0",

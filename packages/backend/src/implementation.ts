@@ -315,7 +315,11 @@ export function buildImplementation(
         const forTeacher = publishService.prepare(date, 'teacher')
 
         for (const file of forSupervisor.files) {
-          await uploadFile(backend, file.path, file.remoteName)
+          await uploadFile(
+            backend,
+            host().fileFor({ id: file.artifactId, path: file.path }),
+            file.remoteName
+          )
         }
         await uploadJson(backend, forSupervisor.payloadName, forSupervisor.payload)
         await uploadJson(backend, forTeacher.payloadName, {
@@ -685,7 +689,7 @@ export function buildImplementation(
         const artifact = store.artifacts.get(id)
         if (artifact) {
           try {
-            unlinkSync(artifact.path)
+            unlinkSync(host().fileFor(artifact))
           } catch (error) {
             const code = (error as NodeJS.ErrnoException).code
             if (code !== 'ENOENT') log.warn('Could not delete a frame from disk.', { id, code })
@@ -777,6 +781,13 @@ export function buildImplementation(
       minimizeToTray: async () => host().window.minimizeToTray(),
       closeQuickAdd: async () => host().window.closeQuickAdd(),
       quit: async () => host().window.quit()
+    },
+
+    sync: {
+      status: async () => host().sync.status(),
+      pair: async (serverUrl, token, mode) => host().sync.pair(serverUrl, token, mode),
+      now: async () => host().sync.now(),
+      unpair: async () => host().sync.unpair()
     }
   }
 }
@@ -921,7 +932,7 @@ async function loadIncludedImages(
   for (const shot of screenshots) {
     if (!shot.included) continue
     try {
-      images.set(shot.id, new Uint8Array(await readFile(shot.path)))
+      images.set(shot.id, new Uint8Array(await readFile(host().fileFor(shot))))
     } catch (error) {
       log.warn('Approved screenshot could not be read; skipping it.', { path: shot.path, error })
     }

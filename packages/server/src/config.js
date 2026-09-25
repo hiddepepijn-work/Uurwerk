@@ -21,7 +21,11 @@ export function readConfig(env = process.env) {
     blobDir: resolve(dataDir, 'blobs'),
     usersFile: resolve(dataDir, 'users.json'),
     sessionsFile: resolve(dataDir, 'sessions.json'),
-    /** The bearer token the desktop app sends when it uploads. Required. */
+    devicesFile: resolve(dataDir, 'devices.json'),
+    /**
+     * The bearer token of the old upload door (PUT /publish/…). Optional now: a synced
+     * server publishes into its own library. Empty = that door stays shut.
+     */
     publishToken: env.UURWERK_PUBLISH_TOKEN ?? '',
     /** How long a login lasts. Short by default: this is somebody else's data. */
     sessionHours: Number(env.UURWERK_SESSION_HOURS ?? 12),
@@ -40,9 +44,6 @@ export function readConfig(env = process.env) {
 /** Fails loudly at startup rather than quietly at the first upload. */
 export function checkConfig(config) {
   const problems = []
-  if (!config.publishToken) {
-    problems.push('UURWERK_PUBLISH_TOKEN is not set. Set it to the same token as Settings → Publishing in the app.')
-  }
   if (config.publishToken && config.publishToken.length < 24) {
     problems.push('UURWERK_PUBLISH_TOKEN is shorter than 24 characters. Generate one with: openssl rand -hex 32')
   }

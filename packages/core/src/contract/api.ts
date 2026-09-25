@@ -576,6 +576,35 @@ export interface TimeTrackerAPI {
      */
     quit(): Promise<void>
   }
+
+  /**
+   * This copy of the database and the server. Only a device syncs; the server is the other end.
+   */
+  sync: {
+    status(): Promise<SyncStatus>
+    /**
+     * Links this device to the server with a device token made on the server. When the
+     * server is still empty this copy becomes its first data; otherwise this copy is replaced
+     * by the server's. Either way the app restarts to open the new file.
+     */
+    pair(serverUrl: string, token: string, mode: 'upload' | 'download'): Promise<SyncStatus>
+    /** One push-and-pull round, now rather than at the next tick. */
+    now(): Promise<SyncStatus>
+    unpair(): Promise<SyncStatus>
+  }
+}
+
+export interface SyncStatus {
+  paired: boolean
+  serverUrl: string
+  deviceId: string | null
+  online: boolean
+  /** Rows changed here and not yet on the server. */
+  pending: number
+  lastSyncAt: number | null
+  lastError: string | null
+  /** Only known when asking the server before pairing: does it already hold data? */
+  serverInitialized?: boolean
 }
 
 /** Whether the app is registered to start with Windows, and whether it even can be. */

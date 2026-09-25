@@ -1420,4 +1420,11 @@ export interface Settings {
   showMorningNotification: boolean
   /** Keep running in the tray when the window is closed. */
   closeToTray: boolean
+
+  // ------------------------------------------------------------------ sync
+  /**
+   * The VPS this copy syncs with, e.g. https://uurwerk.duckdns.org. Empty = this copy stands
+   * alone, the way the app worked before there was a server. Per device, never synced.
+   */
+  serverUrl: string
 }

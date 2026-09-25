@@ -66,7 +66,8 @@ export const DEFAULT_SETTINGS: Settings = {
   // Starting at login must not put a window in your face, and must never start a timer.
   startupBehaviour: 'tray',
   showMorningNotification: true,
-  closeToTray: true
+  closeToTray: true,
+  serverUrl: ''
 }
 
 export class SettingsRepo {

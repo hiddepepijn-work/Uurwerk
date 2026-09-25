@@ -12,6 +12,7 @@ import { app, BrowserWindow, powerMonitor, session } from 'electron'
 import { decideResume, type ArmedResume } from '@core/services/idle-resume.js'
 import { createBackend, type Backend } from '@backend/create.js'
 import { installHost } from '@backend/host.js'
+import { finishAdoption, swapInDownloadedCopy, SyncClient } from '@backend/sync-client.js'
 import { emitEvent } from './events.js'
 import { electronHost } from './host.js'
 import { registerIpc } from './ipc.js'
@@ -28,6 +29,7 @@ import { applyAutoLaunch, launchedAtLogin } from './startup.js'
 import { log } from './logger.js'
 
 let backend: Backend | null = null
+let syncClient: SyncClient | null = null
 let mainWindow: BrowserWindow | null = null
 let quickAddWindow: BrowserWindow | null = null
 let tickHandle: NodeJS.Timeout | null = null
@@ -56,8 +58,12 @@ if (!app.requestSingleInstanceLock()) {
 function start(): void {
   applyContentSecurityPolicy()
 
+  // A copy downloaded from the server while pairing is swapped in before anything opens it.
+  swapInDownloadedCopy(dbPath())
   backend = createBackend(dbPath())
-  installHost(electronHost(backend))
+  syncClient = new SyncClient(backend, dbPath())
+  installHost(electronHost(backend, syncClient))
+  finishAdoption(backend)
   const settings = backend.store.settings.get()
 
   // Runs and segments left open by a crash are closed here rather than carried into
@@ -66,7 +72,9 @@ function start(): void {
   if (repaired > 0) log.warn(`Repaired ${repaired} unfinished run(s) or segment(s) from a previous run.`)
 
   // Rebinding a hotkey in Settings has to take effect immediately, not next launch.
-  registerIpc(backend, () => setupHotkeys())
+  registerIpc(backend, syncClient, () => setupHotkeys())
+  // Offline first: the app is fully usable before, and without, the first round.
+  syncClient.start()
   setupTray()
   setupHotkeys()
   applyAutoLaunch(settings.autoLaunch)
@@ -296,6 +304,8 @@ function startCalendarSync(instance: Backend): void {
 
   const run = (): void => {
     if (!backend?.store.settings.get().calendarAutoSync) return
+    // Paired, the server syncs the calendars; doing it here too would import twice.
+    if (syncClient?.paired) return
     void syncAllAccounts(backend).catch((error: unknown) =>
       log.warn('Calendar auto-sync failed.', error)
     )
@@ -385,6 +395,7 @@ app.on('before-quit', () => {
   if (tickHandle) clearInterval(tickHandle)
   if (idleHandle) clearInterval(idleHandle)
   if (calendarHandle) clearInterval(calendarHandle)
+  syncClient?.stop()
   stopMorningCheck()
   stopScreenTime()
   stopCapture()

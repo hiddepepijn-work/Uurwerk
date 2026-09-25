@@ -14,12 +14,14 @@ import { CHANNELS, channelName } from '@core/contract/channels.js'
 import type { Settings } from '@core/contract/types.js'
 import type { Backend } from '@backend/create.js'
 import { buildImplementation } from '@backend/implementation.js'
+import { isServerOnly, type SyncClient } from '@backend/sync-client.js'
 
 import { emitEvent } from './events.js'
 import { log } from './logger.js'
 
 export function registerIpc(
   backend: Backend,
+  sync: SyncClient,
   onSettingsChanged?: (settings: Settings) => void
 ): void {
   const implementation = buildImplementation(backend, onSettingsChanged) as unknown as Record<
@@ -32,6 +34,8 @@ export function registerIpc(
       const channel = channelName(domain, method)
       ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
         try {
+          // Paired, the few server-only actions run on the server; everything else is local.
+          if (sync.paired && isServerOnly(domain, method)) return await sync.forward(domain, method, args)
           return await implementation[domain]![method]!(...args)
         } catch (error) {
           log.error(`IPC ${channel} failed`, error)

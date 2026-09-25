@@ -73,6 +73,8 @@ function target(backend: Backend): Target {
 
 /** True when a publish would work — used to refuse early, before anything is stamped. */
 export function isConfigured(backend: Backend): boolean {
+  // On the server the library is right here: nothing to configure.
+  if (host().publishSink) return true
   try {
     target(backend)
     return true
@@ -121,6 +123,9 @@ export async function uploadJson(
   name: string,
   value: PublishedDay | PublishIndex | object
 ): Promise<void> {
+  const sink = host().publishSink
+  if (sink) return sink.put(name, new TextEncoder().encode(JSON.stringify(value)))
+
   await send(target(backend), name, {
     method: 'PUT',
     body: JSON.stringify(value),
@@ -140,6 +145,12 @@ export async function uploadFile(
   remoteName: string
 ): Promise<void> {
   const bytes = await readFile(localPath)
+  const sink = host().publishSink
+  if (sink) {
+    await sink.put(remoteName, new Uint8Array(bytes))
+    log.info('Published a file.', { as: remoteName, from: basename(localPath) })
+    return
+  }
   const contentType = remoteName.endsWith('.webm') ? 'video/webm' : 'image/jpeg'
 
   await send(target(backend), remoteName, {
@@ -159,6 +170,11 @@ export async function uploadFile(
  * stopping at the first error would leave the rest of a revoked day online.
  */
 export async function deleteRemote(backend: Backend, names: string[]): Promise<void> {
+  const sink = host().publishSink
+  if (sink) {
+    for (const name of names) await sink.remove(name)
+    return
+  }
   const resolved = target(backend)
   const failed: string[] = []
 

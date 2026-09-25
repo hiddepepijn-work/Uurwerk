@@ -9,6 +9,7 @@ import { app, BrowserWindow, shell } from 'electron'
 
 import type { Backend } from '@backend/create.js'
 import type { Host } from '@backend/host.js'
+import type { SyncClient } from '@backend/sync-client.js'
 
 import { captureNow } from './capture.js'
 import { emitEvent } from './events.js'
@@ -17,9 +18,13 @@ import { getSecret, hasSecret, setSecret } from './secrets.js'
 import { applyAutoLaunch, getLoginItemStatus } from './startup.js'
 import { buildTimelapse } from './timelapse.js'
 
-export function electronHost(backend: Backend): Host {
+export function electronHost(backend: Backend, sync: SyncClient): Host {
   return {
-    emit: emitEvent,
+    emit: (event, payload) => {
+      emitEvent(event, payload)
+      // Every write announces itself this way, which makes it the natural moment to sync.
+      if (event === 'data:invalidated') sync.nudge()
+    },
     secrets: { get: getSecret, set: setSecret, has: hasSecret },
     reportDir,
     openPath: async (path) => {
@@ -56,6 +61,20 @@ export function electronHost(backend: Backend): Host {
       quit: async () => {
         app.quit()
       }
-    }
+    },
+    relaunch: async () => {
+      app.relaunch()
+      app.quit()
+    },
+    sync: {
+      status: async () => sync.status(),
+      pair: (serverUrl, token, mode) => sync.pair(serverUrl, token, mode),
+      now: async () => {
+        await sync.round()
+        return sync.status()
+      },
+      unpair: async () => sync.unpair()
+    },
+    fileFor: (artifact) => artifact.path
   }
 }

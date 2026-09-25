@@ -23,6 +23,8 @@ import type { AppEventName, AppEvents } from '@core/contract/events.js'
 export type SecretKey =
   | 'smtpPassword'
   | 'publishToken'
+  // The token this device syncs with. Made on the server, shown once, kept here.
+  | 'deviceToken'
   | `ics:${string}`
   | `icloud:${string}`
 
@@ -45,6 +47,24 @@ export interface Host {
   capture: Pick<TimeTrackerAPI['capture'], 'markNow' | 'buildTimelapse'>
   startup: TimeTrackerAPI['startup']
   window: TimeTrackerAPI['window']
+  /** Restart the app, e.g. to open a database downloaded from the server. */
+  relaunch(): Promise<void>
+  /** This copy and the server. Only a device has one; on the server every call refuses. */
+  sync: TimeTrackerAPI['sync']
+  /**
+   * Where the bytes of a screenshot or timelapse are on this machine. The laptop keeps them
+   * where it wrote them; the server keeps uploads under the artifact id, because the path in
+   * the row is the laptop's.
+   */
+  fileFor(artifact: { id: string; path: string }): string
+  /**
+   * Where published files go when this machine *is* the publishing server. Without one,
+   * publishing uploads over HTTP to the configured publish URL, as before.
+   */
+  publishSink?: {
+    put(name: string, bytes: Uint8Array): Promise<void>
+    remove(name: string): Promise<void>
+  }
 }
 
 let installed: Host | null = null

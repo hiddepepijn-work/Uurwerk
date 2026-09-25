@@ -123,7 +123,9 @@ export const CHANNELS = {
   publish: ['preview', 'now'],
   startup: ['getLoginItemStatus', 'setAutoLaunch'],
   // `quit` is the real exit: closing the window only hides it when close-to-tray is on.
-  window: ['minimizeToTray', 'closeQuickAdd', 'quit']
+  window: ['minimizeToTray', 'closeQuickAdd', 'quit'],
+  // This copy and the VPS. Offline first: everything above works without it.
+  sync: ['status', 'pair', 'now', 'unpair']
 } as const
 
 export type ChannelDomain = keyof typeof CHANNELS

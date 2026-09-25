@@ -14,3 +14,8 @@ Thumbs.db
 *.bak-*
 secrets.json
 media/
+
+# Built by npm run build:server, shipped by the deploy script
+packages/server/dist/
+packages/server/node_modules/
+packages/server/data/
