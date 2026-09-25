@@ -15,7 +15,7 @@ export function readConfig(env = process.env) {
   const dataDir = resolve(env.UURWERK_DATA_DIR ?? './data')
 
   return {
-    port: Number(env.UURWERK_PORT ?? 8787),
+    port: Number(env.UURWERK_PORT ?? 8790),
     host: env.UURWERK_HOST ?? '127.0.0.1',
     dataDir,
     blobDir: resolve(dataDir, 'blobs'),

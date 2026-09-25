@@ -1,0 +1,34 @@
+
+# Uurwerk. Same VPS as Reisbouwer, told apart by the host name; its own certificate.
+uurwerk.duckdns.org {
+	encode zstd gzip
+
+	# A first upload of the whole database and the screenshot files are the big ones.
+	request_body {
+		max_size 128MB
+	}
+
+	reverse_proxy 127.0.0.1:8790
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# To the journal, like Reisbouwer: Ubuntu's AppArmor profile keeps Caddy out of
+	# /var/log/caddy. Device tokens and cookies never reach the log.
+	log {
+		output stderr
+		format filter {
+			wrap console
+			fields {
+				request>remote_ip ip_mask {
+					ipv4 24
+					ipv6 48
+				}
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+			}
+		}
+	}
+}

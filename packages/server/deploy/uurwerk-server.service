@@ -1,5 +1,5 @@
 [Unit]
-Description=Uurwerk — published internship days for the supervisor and the teacher
+Description=Uurwerk — main copy of the data, sync for the devices, published days for supervisor and teacher
 After=network-online.target
 Wants=network-online.target
 
@@ -12,17 +12,17 @@ ExecStart=/usr/bin/node src/server.js
 Restart=on-failure
 RestartSec=3
 
-# Everything the process needs to know. The token must be the same one as
-# Settings -> Publishing in the desktop app.
+# Everything the process needs to know. 8790, not 8787: Reisbouwer has that one.
+# (MemoryDenyWriteExecute is left out on purpose: V8 JIT and WebAssembly need it.)
 Environment=UURWERK_DATA_DIR=/var/lib/uurwerk
 Environment=UURWERK_HOST=127.0.0.1
-Environment=UURWERK_PORT=8787
+Environment=UURWERK_PORT=8790
 Environment=UURWERK_TRUST_PROXY=1
 Environment=UURWERK_SESSION_HOURS=12
 Environment=UURWERK_TITLE=Uurwerk
-# Keep the token out of this file and out of `systemctl cat`: put it in
-# /etc/uurwerk.env as UURWERK_PUBLISH_TOKEN=…, owned by root, mode 0640.
-EnvironmentFile=/etc/uurwerk.env
+# Optional: the old upload door. Put UURWERK_PUBLISH_TOKEN=… in
+# /etc/uurwerk.env (root, 0640) only if something still PUTs to /publish/.
+EnvironmentFile=-/etc/uurwerk.env
 
 # The process reads its own data directory and nothing else on the machine.
 NoNewPrivileges=yes
@@ -37,7 +37,6 @@ ProtectControlGroups=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictNamespaces=yes
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 
 [Install]
