@@ -9,6 +9,7 @@
 
 import * as sqlite3 from 'node-sqlite3-wasm'
 import { MIGRATIONS } from './migrations/index.js'
+import { installSync, withoutLogging } from '../sync/schema.js'
 
 /**
  * node-sqlite3-wasm ships as CommonJS. A named import resolves fine once Rollup has bundled
@@ -92,7 +93,10 @@ export function openDatabase(filename: string): Db {
   db.exec('PRAGMA foreign_keys = ON')
   db.exec('PRAGMA synchronous = NORMAL')
 
-  runMigrations(db)
+  // Migrations run on every copy by themselves, so what they write is not a change to sync.
+  // The triggers are rewritten afterwards from the schema the migrations left behind.
+  withoutLogging(db, () => runMigrations(db))
+  installSync(db)
   return db
 }
 
