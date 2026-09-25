@@ -16,7 +16,6 @@
  * leaves you believing your supervisor got something.
  */
 
-import { shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { basename } from 'node:path'
 
@@ -24,9 +23,9 @@ import type { SendOutcome } from '@core/contract/api.js'
 import type { IsoWeek } from '@core/contract/types.js'
 import { buildWeekMail, mailtoUrl } from '@core/report/mail.js'
 
-import type { Backend } from './ipc.js'
-import { log } from './logger.js'
-import { getSecret } from './secrets.js'
+import type { Backend } from './create.js'
+import { log } from './log.js'
+import { host } from './host.js'
 
 export async function sendWeekReport(backend: Backend, week: IsoWeek): Promise<SendOutcome> {
   const settings = backend.store.settings.get()
@@ -62,9 +61,9 @@ export async function sendWeekReport(backend: Backend, week: IsoWeek): Promise<S
     }
   }
 
-  await shell.openExternal(mailtoUrl(draft))
+  await host().openExternal(mailtoUrl(draft))
   // mailto cannot carry a file, so the next best thing is putting it under the cursor.
-  shell.showItemInFolder(attachmentPath)
+  host().showItemInFolder(attachmentPath)
   log.info('Weekly report opened as a draft.', { week, to })
 
   return {
@@ -83,7 +82,7 @@ async function sendOverSmtp(
     throw new Error('SMTP is selected but the server or the username is missing. Check Settings → Reports.')
   }
 
-  const password = getSecret('smtpPassword')
+  const password = host().secrets.get('smtpPassword')
   if (!password) {
     throw new Error(
       'No SMTP password is stored. Enter it under Settings → Reports, or switch to draft mode.'

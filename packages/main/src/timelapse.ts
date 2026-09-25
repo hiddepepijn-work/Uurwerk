@@ -19,7 +19,7 @@ import type { Artifact, IsoDate } from '@core/contract/types.js'
 
 import { emitEvent } from './events.js'
 // Type-only, so this does not become a runtime cycle with ipc.ts.
-import type { Backend } from './ipc.js'
+import type { Backend } from '@backend/create.js'
 import { log } from './logger.js'
 import { timelapseDir } from './paths.js'
 import { createEncoderWindow } from './windows.js'

@@ -10,7 +10,12 @@
 
 import { app, BrowserWindow, powerMonitor, session } from 'electron'
 import { decideResume, type ArmedResume } from '@core/services/idle-resume.js'
-import { createBackend, emitEvent, registerIpc, type Backend } from './ipc.js'
+import { createBackend, type Backend } from '@backend/create.js'
+import { installHost } from '@backend/host.js'
+import { emitEvent } from './events.js'
+import { electronHost } from './host.js'
+import { registerIpc } from './ipc.js'
+import { dbPath } from './paths.js'
 import { captureNow, startCapture, stopCapture } from './capture.js'
 import { cancelTimelapse } from './timelapse.js'
 import { createMainWindow, createQuickAddWindow } from './windows.js'
@@ -18,7 +23,7 @@ import { registerHotkeys, unregisterHotkeys } from './hotkeys.js'
 import { createTray, destroyTray, update as updateTray } from './tray.js'
 import { startMorningCheck, stopMorningCheck } from './morning.js'
 import { startScreenTime, stopScreenTime } from './screen-time.js'
-import { syncAllAccounts } from './calendar/index.js'
+import { syncAllAccounts } from '@backend/calendar/index.js'
 import { applyAutoLaunch, launchedAtLogin } from './startup.js'
 import { log } from './logger.js'
 
@@ -51,7 +56,8 @@ if (!app.requestSingleInstanceLock()) {
 function start(): void {
   applyContentSecurityPolicy()
 
-  backend = createBackend()
+  backend = createBackend(dbPath())
+  installHost(electronHost(backend))
   const settings = backend.store.settings.get()
 
   // Runs and segments left open by a crash are closed here rather than carried into

@@ -12,7 +12,7 @@
 
 import { Notification } from 'electron'
 import { toIsoDate, toIsoWeek } from '@core/util/time.js'
-import type { Backend } from './ipc.js'
+import type { Backend } from '@backend/create.js'
 import { log } from './logger.js'
 
 /** Half-hourly is precise enough for something that may only fire once a day. */

@@ -30,7 +30,7 @@ import { toIsoDate } from '@core/util/time.js'
 import { foregroundWindowTitle } from './blocklist.js'
 import { emitEvent } from './events.js'
 // Type-only, so this does not become a runtime cycle with ipc.ts.
-import type { Backend } from './ipc.js'
+import type { Backend } from '@backend/create.js'
 import { log } from './logger.js'
 import { mediaDayDir } from './paths.js'
 

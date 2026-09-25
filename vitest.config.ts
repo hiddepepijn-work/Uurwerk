@@ -15,7 +15,8 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   resolve: {
     alias: {
-      '@core': resolve(__dirname, 'packages/core/src')
+      '@core': resolve(__dirname, 'packages/core/src'),
+      '@backend': resolve(__dirname, 'packages/backend/src')
     }
   },
   test: {

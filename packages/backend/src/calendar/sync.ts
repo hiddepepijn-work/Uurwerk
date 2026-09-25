@@ -18,7 +18,7 @@ import type { CalendarEvent, CalendarOrigin } from '@core/contract/types.js'
 import type { Store } from '@core/db/index.js'
 import { CalendarService, classify } from '@core/services/calendar/index.js'
 
-import { log } from '../logger.js'
+import { log } from '../log.js'
 import type { ParsedEvent } from './ics-parse.js'
 
 export interface SyncOutcome {

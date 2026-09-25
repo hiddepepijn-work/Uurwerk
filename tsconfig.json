@@ -20,6 +20,7 @@
     "baseUrl": ".",
     "paths": {
       "@core/*": ["packages/core/src/*"],
+      "@backend/*": ["packages/backend/src/*"],
       "@main/*": ["packages/main/src/*"],
       "@renderer/*": ["packages/renderer/src/*"]
     }

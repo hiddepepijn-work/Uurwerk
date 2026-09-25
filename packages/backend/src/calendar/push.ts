@@ -25,8 +25,8 @@
 import type { PlanBlock } from '@core/contract/types.js'
 import { atMinuteOfDay } from '@core/util/time.js'
 
-import type { Backend } from '../ipc.js'
-import { log } from '../logger.js'
+import type { Backend } from '../create.js'
+import { log } from '../log.js'
 import { calDavProviderFor } from './index.js'
 import type { ParsedEvent } from './ics-parse.js'
 

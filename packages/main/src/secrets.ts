@@ -14,21 +14,11 @@ import { safeStorage } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataRoot } from './paths.js'
+import type { SecretKey } from '@backend/host.js'
 import { log } from './logger.js'
 
-/**
- * `ics:<accountId>` covers subscribed calendars: a published calendar link is a credential
- * — anyone holding it can read the calendar — so it belongs in the vault beside the
- * passwords rather than in the database.
- */
-// `icloud:<accountId>` holds an app-specific password. Only the password: the Apple ID it
-// belongs to is on the account row, because it is an identifier rather than a credential and
-// the Settings screen has to be able to show you which account is connected.
-export type SecretKey =
-  | 'smtpPassword'
-  | 'publishToken'
-  | `ics:${string}`
-  | `icloud:${string}`
+// The key names are the backend's; this file is only where the laptop keeps the values.
+export type { SecretKey }
 
 const file = (): string => join(dataRoot(), 'secrets.json')
 

@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 const alias = {
   '@core': resolve(__dirname, 'packages/core/src'),
+  '@backend': resolve(__dirname, 'packages/backend/src'),
   '@main': resolve(__dirname, 'packages/main/src'),
   '@renderer': resolve(__dirname, 'packages/renderer/src')
 }

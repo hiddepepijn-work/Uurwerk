@@ -40,6 +40,22 @@ module.exports = {
       }
     },
     {
+      // The backend runs on the laptop and on the VPS. Anything Electron goes through host().
+      files: ['packages/backend/**/*.ts'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            paths: [
+              { name: 'electron', message: 'backend must stay electron-free — it also runs on the server. Use host().' },
+              { name: 'react', message: 'backend must stay react-free.' }
+            ],
+            patterns: [{ group: ['@main/*', '@renderer/*'], message: 'backend may not reach into main or renderer.' }]
+          }
+        ]
+      }
+    },
+    {
       files: ['packages/renderer/**/*.{ts,tsx}'],
       rules: {
         'no-restricted-imports': [

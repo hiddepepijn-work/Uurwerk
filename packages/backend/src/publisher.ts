@@ -24,9 +24,9 @@ import type { PublishAudience, PublishIndex, PublishedDay } from '@core/contract
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 
-import type { Backend } from './ipc.js'
-import { log } from './logger.js'
-import { getSecret } from './secrets.js'
+import type { Backend } from './create.js'
+import { log } from './log.js'
+import { host } from './host.js'
 
 /** The live status payload always lands on the same name — the page has to find it. */
 export const SNAPSHOT_NAME = 'snapshot.json'
@@ -63,7 +63,7 @@ function target(backend: Backend): Target {
     throw new Error('The publish URL must start with https://.')
   }
 
-  const token = getSecret('publishToken')
+  const token = host().secrets.get('publishToken')
   if (!token) {
     throw new Error('No publish token is stored. Add one under Settings → Publishing, or switch publishing off.')
   }

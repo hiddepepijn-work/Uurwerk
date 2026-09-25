@@ -20,7 +20,7 @@
 
 import { powerMonitor } from 'electron'
 import { toIsoDate } from '@core/util/time.js'
-import type { Backend } from './ipc.js'
+import type { Backend } from '@backend/create.js'
 import { log } from './logger.js'
 
 const TICK_MS = 60_000

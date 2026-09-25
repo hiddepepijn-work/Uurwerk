@@ -9,9 +9,9 @@
  * account row keeps only the host, which is enough to tell two subscriptions apart on screen.
  */
 
-import type { Backend } from '../ipc.js'
-import { log } from '../logger.js'
-import { getSecret, setSecret } from '../secrets.js'
+import type { Backend } from '../create.js'
+import { log } from '../log.js'
+import { host } from '../host.js'
 import { CalDavProvider } from './caldav.js'
 import { IcsProvider } from './ics.js'
 import type { CalendarProvider } from './provider.js'
@@ -54,7 +54,7 @@ export async function connectIcs(
   })
 
   // The URL never touches the database.
-  setSecret(secretKeyFor(account.id), trimmed)
+  host().secrets.set(secretKeyFor(account.id), trimmed)
 
   const [remote] = await provider.getCalendars()
   const calendar = backend.store.calendar.upsertCalendar({
@@ -112,7 +112,7 @@ export async function connectIcloud(
   })
 
   // The password never touches the database.
-  setSecret(icloudKeyFor(account.id), password)
+  host().secrets.set(icloudKeyFor(account.id), password)
 
   for (const remote of await provider.getCalendars()) {
     backend.store.calendar.upsertCalendar({
@@ -167,8 +167,8 @@ export async function ensureUurwerkCalendar(
 /** Forgets an account, its calendars, its links — and its credential. */
 export async function disconnectAccount(backend: Backend, accountId: string): Promise<void> {
   const account = backend.store.calendar.account(accountId)
-  if (account?.provider === 'icloud') setSecret(icloudKeyFor(accountId), '')
-  else setSecret(secretKeyFor(accountId), '')
+  if (account?.provider === 'icloud') host().secrets.set(icloudKeyFor(accountId), '')
+  else host().secrets.set(secretKeyFor(accountId), '')
 
   backend.store.calendar.removeAccount(accountId)
   log.info('Calendar account disconnected.', { accountId })
@@ -193,7 +193,7 @@ function providerFor(backend: Backend, accountId: string): CalendarProvider {
   if (!account) throw new Error(`Calendar account not found: ${accountId}`)
 
   if (account.provider === 'ics') {
-    const url = getSecret(secretKeyFor(accountId))
+    const url = host().secrets.get(secretKeyFor(accountId))
     if (!url) {
       throw new Error(
         `The link for “${account.displayName}” is missing from the vault. Reconnect the calendar.`
@@ -203,7 +203,7 @@ function providerFor(backend: Backend, accountId: string): CalendarProvider {
   }
 
   if (account.provider === 'icloud') {
-    const appPassword = getSecret(icloudKeyFor(accountId))
+    const appPassword = host().secrets.get(icloudKeyFor(accountId))
     if (!appPassword || !account.accountIdentifier) {
       throw new Error(
         `The password for “${account.displayName}” is missing from the vault. Reconnect iCloud.`
