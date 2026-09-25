@@ -1,0 +1,189 @@
+/**
+ * ★ Uurwerk on the iPhone. ★
+ *
+ * The same app as on the laptop — the same React screens, the same backend, the same
+ * database schema — running inside a Capacitor web view:
+ *
+ *   sql.js        the phone's own full copy of the database (database.ts)
+ *   PhoneSync     keeps it in step with the VPS; offline it simply waits (sync.ts)
+ *   backend       packages/backend, unchanged, behind a phone host (below)
+ *   window.api    the one seam the screens use, exactly as the Electron preload provides it
+ *
+ * Plus what only a phone does: the 09:00 and 21:00 questions with a spoken sound.
+ */
+
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { App as Capacitor } from '@capacitor/app'
+import { Preferences } from '@capacitor/preferences'
+
+import type { TimeTrackerAPI } from '@core/contract/api.js'
+import { CHANNELS } from '@core/contract/channels.js'
+import type { AppEventBus, AppEventName, AppEvents } from '@core/contract/events.js'
+import { openStoreWith } from '@core/db/index.js'
+import { invalidatedDomains } from '@backend/announce.js'
+import { createBackendFrom } from '@backend/create.js'
+import { installHost, unavailable, type SecretKey } from '@backend/host.js'
+import { buildImplementation } from '@backend/implementation.js'
+import { isServerOnly } from '@backend/server-only.js'
+
+import { App } from '@renderer/app/App.js'
+import './styles.css'
+
+import { openPhoneDatabase } from './database.js'
+import { onQuestionTapped, scheduleDailyQuestions } from './notifications.js'
+import { speakEvening, speakMorning } from './speech.js'
+import { PhoneSync } from './sync.js'
+
+// ------------------------------------------------------------------ events
+
+type Handler = (payload: unknown) => void
+const handlers = new Map<AppEventName, Set<Handler>>()
+
+function emit<K extends AppEventName>(event: K, payload: AppEvents[K]): void {
+  for (const handler of handlers.get(event) ?? []) handler(payload)
+}
+
+const bus: AppEventBus = {
+  on(event, handler) {
+    const set = handlers.get(event) ?? new Set<Handler>()
+    set.add(handler as Handler)
+    handlers.set(event, set)
+    return () => set.delete(handler as Handler)
+  }
+}
+
+// ------------------------------------------------------------------- start
+
+async function start(): Promise<void> {
+  console.info('[boot] 1 open db')
+  const database = await openPhoneDatabase()
+  console.info('[boot] 2 db open')
+  const backend = createBackendFrom(openStoreWith(database.driver))
+  console.info('[boot] 3 backend')
+  const sync = new PhoneSync(backend.store.db, (tables) => {
+    for (const domain of invalidatedDomains(tables)) emit('data:invalidated', { domain })
+  })
+
+  // Secrets on the phone: only the SMTP password could ever be set here, and mail goes out
+  // from the server. Kept in memory and Preferences so the Settings screen still works.
+  const vault = new Map<string, string>()
+  const secrets = {
+    get: (key: SecretKey) => vault.get(key) ?? null,
+    has: (key: SecretKey) => vault.has(key),
+    set: (key: SecretKey, value: string) => {
+      if (value) vault.set(key, value)
+      else vault.delete(key)
+      void Preferences.set({ key: `secret:${key}`, value })
+    }
+  }
+
+  installHost({
+    emit(event, payload) {
+      emit(event, payload)
+      if (event === 'data:invalidated') sync.nudge()
+    },
+    secrets,
+    reportDir: () => '',
+    openPath: unavailable('Opening a file'),
+    openExternal: async (url) => {
+      window.open(url, '_system')
+    },
+    showItemInFolder: () => undefined,
+    capture: {
+      markNow: unavailable('Taking a screenshot'),
+      buildTimelapse: unavailable('Encoding a timelapse')
+    },
+    startup: {
+      getLoginItemStatus: async () => ({
+        enabled: false,
+        registered: false,
+        supported: false,
+        reason: 'Not on a phone.'
+      }),
+      setAutoLaunch: unavailable('Start with Windows')
+    },
+    window: {
+      minimizeToTray: async () => undefined,
+      closeQuickAdd: async () => undefined,
+      quit: async () => undefined
+    },
+    relaunch: async () => window.location.reload(),
+    sync: {
+      status: async () => sync.status(),
+      pair: (url, token, mode) => sync.pair(url, token, mode),
+      now: async () => {
+        await sync.round()
+        return sync.status()
+      },
+      unpair: () => sync.unpair()
+    },
+    fileFor: (artifact) => artifact.path
+  })
+
+  // Deliberately no repairOnStartup(): an open segment here may be the laptop's timer,
+  // running right now, and closing it would stop the clock on the other machine.
+
+  const implementation = buildImplementation(backend) as unknown as Record<
+    string,
+    Record<string, (...args: unknown[]) => Promise<unknown>>
+  >
+  const api: Record<string, Record<string, (...args: unknown[]) => Promise<unknown>>> = {}
+  for (const [domain, methods] of Object.entries(CHANNELS)) {
+    api[domain] = {}
+    for (const method of methods as readonly string[]) {
+      api[domain]![method] = async (...args) =>
+        sync.paired && isServerOnly(domain, method)
+          ? sync.forward(domain, method, args)
+          : implementation[domain]![method]!(...args)
+    }
+  }
+  window.api = api as unknown as TimeTrackerAPI
+  window.events = bus
+
+  backend.trackingService.onChange((segment, reason) => {
+    emit('tracking:segmentChanged', { segment, reason })
+    emit('data:invalidated', { domain: 'sessions' })
+    if (reason === 'complete' || reason === 'start' || reason === 'switch') {
+      emit('data:invalidated', { domain: 'tasks' })
+    }
+  })
+  setInterval(() => {
+    const running = backend.trackingService.currentSegment()
+    if (running) {
+      emit('timer:tick', { sessionId: running.id, elapsedSec: Math.floor((Date.now() - running.startedAt) / 1000) })
+    }
+  }, 1000)
+
+  console.info('[boot] 4 render')
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  )
+
+  await sync.start()
+
+  onQuestionTapped((target, moment) => {
+    emit('ui:open', { target })
+    if (moment === 'morning') void speakMorning(window.api!)
+    else speakEvening()
+  })
+  void scheduleDailyQuestions().catch(() => undefined)
+
+  // Background: save the copy and hand the changes over while the app still may.
+  void Capacitor.addListener('pause', () => {
+    void database.flush()
+    void sync.round()
+  })
+  void Capacitor.addListener('resume', () => {
+    void sync.round()
+    void scheduleDailyQuestions().catch(() => undefined)
+  })
+}
+
+void start().catch((error: unknown) => {
+  document.getElementById('root')!.innerHTML = `<pre style="padding:24px;white-space:pre-wrap;color:#f88">Uurwerk kon niet starten:\n${
+    error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error)
+  }</pre>`
+})

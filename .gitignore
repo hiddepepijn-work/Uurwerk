@@ -19,3 +19,6 @@ media/
 packages/server/dist/
 packages/server/node_modules/
 packages/server/data/
+
+# Generated on the GitHub Mac by .github/workflows/ios.yml
+packages/mobile/ios/

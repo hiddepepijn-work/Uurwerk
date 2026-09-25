@@ -121,7 +121,7 @@ export function SettingsScreen() {
   const pretty = (accelerator: string): string => accelerator.replace('CommandOrControl', 'Ctrl')
 
   return (
-    <div className="mx-auto max-w-3xl p-8">
+    <div className="mx-auto max-w-3xl p-4 wide:p-8">
       <header className="mb-8">
         <h1 className="text-[32px] leading-tight font-semibold">Settings</h1>
       </header>

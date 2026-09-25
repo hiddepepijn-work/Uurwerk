@@ -45,7 +45,8 @@ export function Button({
     >
       {icon}
       {children}
-      {hint && <span className="ml-auto pl-4 text-xs opacity-60">{hint}</span>}
+      {/* A keyboard hint means nothing on a phone. */}
+      {hint && <span className="ml-auto hidden pl-4 text-xs opacity-60 wide:inline">{hint}</span>}
     </button>
   )
 }

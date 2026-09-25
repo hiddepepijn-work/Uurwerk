@@ -1,4 +1,4 @@
-import { Db, openDatabase } from './connection.js'
+import { Db, openDatabase, openDatabaseWith, type SqlDriver } from './connection.js'
 import { AreaRepo } from './repositories/areas.js'
 import { ArtifactRepo } from './repositories/artifacts.js'
 import { AvailabilityRepo } from './repositories/availability.js'
@@ -86,4 +86,8 @@ export function openStore(filename: string): Store {
   return createStore(openDatabase(filename))
 }
 
-export { Db, openDatabase } from './connection.js'
+export function openStoreWith(driver: SqlDriver): Store {
+  return createStore(openDatabaseWith(driver))
+}
+
+export { Db, openDatabase, openDatabaseWith, type SqlDriver } from './connection.js'

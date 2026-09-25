@@ -101,7 +101,7 @@ export function ReportsScreen() {
   const delta = report.totalTrackedMin - report.totalPlannedMin
 
   return (
-    <div className="p-8">
+    <div className="p-4 wide:p-8">
       <header className="mb-7 flex items-start justify-between gap-6">
         <div>
           <h1 className="text-[32px] leading-tight font-semibold">Report</h1>
@@ -137,7 +137,7 @@ export function ReportsScreen() {
         </div>
       )}
 
-      <div className="mb-7 grid grid-cols-4 gap-4">
+      <div className="mb-7 grid grid-cols-2 gap-3 wide:grid-cols-4 wide:gap-4">
         <StatCard
           icon={<ClockIcon size={16} />}
           label="Tracked"

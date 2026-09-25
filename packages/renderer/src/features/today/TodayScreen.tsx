@@ -116,18 +116,18 @@ export function TodayScreen({
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 wide:p-8">
       {/* The timeline sits below both columns and spans the full width, so a long day
           has room to be read rather than being squeezed beside the sidebar. */}
-      <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-6">
+      <div className="grid grid-cols-1 gap-6 wide:grid-cols-[minmax(0,1fr)_360px]">
         {/* ---------------------------------------------------------- left */}
         <div className="min-w-0">
-          <header className="mb-8 flex items-start justify-between">
+          <header className="mb-6 flex flex-col gap-3 wide:mb-8 wide:flex-row wide:items-start wide:justify-between">
             <div>
               <h1 className="text-[32px] leading-tight font-semibold">Today</h1>
               <p className="mt-1 text-[14px] text-text-dim">{formatLongDate(new Date())}</p>
             </div>
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex flex-wrap items-center gap-3 wide:pt-2">
               <span className="flex items-center gap-2 text-[13px] text-text-dim">
                 <span
                   className={`h-2 w-2 rounded-full ${tracking.running ? 'animate-pulse-dot bg-accent' : 'bg-text-faint'}`}
@@ -166,7 +166,7 @@ export function TodayScreen({
             onStop={() => void tracking.stop()}
           />
 
-          <div className="mt-9 grid grid-cols-4 gap-4">
+          <div className="mt-6 grid grid-cols-2 gap-3 wide:mt-9 wide:grid-cols-4 wide:gap-4">
           <StatCard
             icon={<ClockIcon size={16} />}
             label="Today"
@@ -220,7 +220,7 @@ export function TodayScreen({
       </div>
 
       {/* Full width, below both columns: a long day needs the room. */}
-      <section className="mt-10 border-t border-border pt-8">
+      <section className="mt-8 overflow-x-auto border-t border-border pt-6 wide:mt-10 wide:overflow-visible wide:pt-8">
         <TodayTimeline segments={timeline ?? []} />
       </section>
 

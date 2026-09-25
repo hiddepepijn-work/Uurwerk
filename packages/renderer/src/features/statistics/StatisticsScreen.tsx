@@ -91,7 +91,7 @@ export function StatisticsScreen() {
     'rounded-[10px] border border-border bg-card px-3 py-2 text-[13px] text-text outline-none focus:border-accent'
 
   return (
-    <div className="p-8">
+    <div className="p-4 wide:p-8">
       <header className="mb-7 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-[32px] leading-tight font-semibold">Statistics</h1>
@@ -144,7 +144,7 @@ export function StatisticsScreen() {
         </div>
       </header>
 
-      <div className="mb-6 grid grid-cols-3 gap-4 xl:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 wide:grid-cols-3 wide:gap-4 xl:grid-cols-6">
         <Tile icon={<ClockIcon size={16} />} label="Tracked" metric={data.tracked} />
         <Tile icon={<BarChartIcon size={16} />} label="Stage hours" metric={data.stage} />
         <Tile icon={<CalendarIcon size={16} />} label="Planned" metric={data.planned} />
@@ -164,7 +164,7 @@ export function StatisticsScreen() {
         />
       </div>
 
-      <div className="mb-6 grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-6">
+      <div className="mb-6 grid grid-cols-1 gap-6 wide:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card
           title={data.daily ? 'Hours by day' : 'Hours by week'}
           action={
@@ -250,7 +250,7 @@ export function StatisticsScreen() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 wide:grid-cols-2">
         <Card title="Projects">
           {data.projects.length === 0 ? (
             <p className="text-[13px] text-text-faint">Nothing tracked in this period.</p>

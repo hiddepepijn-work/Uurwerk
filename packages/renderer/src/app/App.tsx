@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { IconRail, type Screen } from './IconRail.js'
+import { BottomBar } from './BottomBar.js'
+import { EventComposer } from '../features/calendar/EventComposer.js'
+import { useCompact } from '../hooks/useCompact.js'
+import { toIsoDate } from '@core/util/time.js'
 import { TopBar } from './TopBar.js'
 import { TodayScreen } from '../features/today/TodayScreen.js'
 import { TasksScreen } from '../features/tasks/TasksScreen.js'
@@ -25,6 +29,9 @@ export function App() {
   const [planDayRequest, setPlanDayRequest] = useState(0)
   const tracking = useTracking()
   const [toast, setToast] = useState<string | null>(null)
+  /** The evening question — "anything to add to the agenda?" — opens this. */
+  const [composerOpen, setComposerOpen] = useState(false)
+  const compact = useCompact()
 
   const openSwitcher = useCallback(() => setSwitcherOpen(true), [])
 
@@ -51,6 +58,10 @@ export function App() {
         setPlanDayRequest(Date.now())
       } else if (target === 'today') setScreen('today')
       else if (target === 'tasks') setScreen('tasks')
+      else if (target === 'addEvent') {
+        setScreen('week')
+        setComposerOpen(true)
+      }
     })
   }, [])
 
@@ -70,11 +81,11 @@ export function App() {
   }, [])
 
   return (
-    <div className="flex h-full w-full bg-bg text-text">
-      <IconRail active={screen} onNavigate={setScreen} />
+    <div className={`flex h-full w-full bg-bg text-text ${compact ? 'flex-col pt-[env(safe-area-inset-top)]' : ''}`}>
+      {!compact && <IconRail active={screen} onNavigate={setScreen} />}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar running={tracking.running} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {!compact && <TopBar running={tracking.running} />}
 
         <main className="min-h-0 flex-1 overflow-y-auto">
           {screen === 'today' && (
@@ -94,6 +105,16 @@ export function App() {
           {screen === 'statistics' && <StatisticsScreen />}
         </main>
       </div>
+
+      {compact && <BottomBar active={screen} onNavigate={setScreen} />}
+
+      {composerOpen && (
+        <EventComposer
+          initialDate={toIsoDate(Date.now())}
+          onCreated={() => setComposerOpen(false)}
+          onClose={() => setComposerOpen(false)}
+        />
+      )}
 
       <TaskSwitcher
         open={switcherOpen}

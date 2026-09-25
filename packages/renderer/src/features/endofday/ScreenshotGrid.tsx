@@ -58,7 +58,7 @@ export function ScreenshotGrid({ screenshots, onToggle, onApproveAll, onDelete }
         </div>
       </div>
 
-      <div className="grid max-h-[46vh] grid-cols-3 gap-4 overflow-y-auto pr-1">
+      <div className="grid max-h-[46vh] grid-cols-2 gap-3 overflow-y-auto pr-1 wide:grid-cols-3 wide:gap-4">
         {screenshots.map((shot) => (
           <div
             key={shot.id}

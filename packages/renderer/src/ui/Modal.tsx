@@ -25,16 +25,17 @@ export function Modal({ open, title, subtitle, onClose, children, footer, width 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
+      // On a phone the dialog is the whole screen, above the tab bar, clear of the notch.
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] wide:p-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
     >
       <div
-        className="flex max-h-full w-full flex-col overflow-hidden rounded-[16px] border border-border bg-card"
+        className="flex h-full max-h-full w-full flex-col overflow-hidden border-border bg-card wide:h-auto wide:rounded-[16px] wide:border"
         style={{ maxWidth: width }}
       >
-        <header className="flex items-start justify-between border-b border-border px-7 py-6">
+        <header className="flex items-start justify-between border-b border-border px-4 py-4 wide:px-7 wide:py-6">
           <div>
             <h2 className="text-[22px] font-semibold text-text">{title}</h2>
             {subtitle && <p className="mt-1 text-[13px] text-text-dim">{subtitle}</p>}
@@ -50,10 +51,10 @@ export function Modal({ open, title, subtitle, onClose, children, footer, width 
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-7 py-6">{children}</div>
+        <div className="flex-1 overflow-y-auto px-4 py-4 wide:px-7 wide:py-6">{children}</div>
 
         {footer && (
-          <footer className="flex items-center justify-between gap-3 border-t border-border px-7 py-5">
+          <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 wide:flex-nowrap wide:px-7 wide:py-5">
             {footer}
           </footer>
         )}

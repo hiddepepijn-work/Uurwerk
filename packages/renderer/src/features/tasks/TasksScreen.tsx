@@ -92,13 +92,13 @@ export function TasksScreen({ tracking }: { tracking: Tracking }) {
   }
 
   return (
-    <div className="flex h-full flex-col p-8">
+    <div className="flex flex-col p-4 wide:h-full wide:p-8">
       <header className="mb-7">
         <h1 className="text-[32px] leading-tight font-semibold">Tasks</h1>
       </header>
 
-      <div className="mb-6 flex items-center gap-3">
-        <div className="relative w-[420px]">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="relative w-full wide:w-[420px]">
           <span className="absolute top-1/2 left-3.5 -translate-y-1/2 text-text-dim">
             <SearchIcon size={16} />
           </span>
@@ -128,7 +128,7 @@ export function TasksScreen({ tracking }: { tracking: Tracking }) {
         </Button>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 wide:min-h-0 wide:flex-1 wide:grid-cols-2">
         <div className="flex min-h-0 flex-col gap-5">
           <CurrentQueue
             tasks={tasks.filter((task) => task.status !== 'done')}
@@ -140,7 +140,7 @@ export function TasksScreen({ tracking }: { tracking: Tracking }) {
             onEdit={openEditor}
           />
 
-          <div className="grid shrink-0 grid-cols-3 gap-4">
+          <div className="grid shrink-0 grid-cols-3 gap-2 wide:gap-4">
             <StatCard icon={<ClockIcon size={16} />} label="Open" value={String(open.length)} sub="tasks" />
             <StatCard
               icon={<CalendarIcon size={16} />}

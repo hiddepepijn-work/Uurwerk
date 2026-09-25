@@ -23,15 +23,25 @@ const namespace = sqlite3 as unknown as {
 }
 const SqliteDatabase: DatabaseCtor = namespace.Database ?? namespace.default!.Database
 
-/** The driver's connection type, kept distinct from the constructor above. */
-type SqliteConnection = sqlite3.Database
+/**
+ * What Db needs from a SQLite driver. node-sqlite3-wasm (laptop, server) fits it as it is;
+ * the phone wraps sql.js to fit it. Nothing above this line knows which one is underneath.
+ */
+export interface SqlDriver {
+  all(sql: string, params?: never): unknown[]
+  get(sql: string, params?: never): unknown
+  run(sql: string, params?: never): { changes: number }
+  exec(sql: string): void
+  readonly inTransaction: boolean
+  close(): void
+}
 
 export type Row = Record<string, string | number | bigint | Uint8Array | null>
 export type Param = string | number | boolean | null
 
 /** Thin typed wrapper. Repositories talk to this, never to the driver directly. */
 export class Db {
-  constructor(private readonly raw: SqliteConnection) {}
+  constructor(private readonly raw: SqlDriver) {}
 
   all<T = Row>(sql: string, params: Param[] = []): T[] {
     return this.raw.all(sql, params as never) as T[]
@@ -87,7 +97,11 @@ export class Db {
  * Pass ':memory:' for tests.
  */
 export function openDatabase(filename: string): Db {
-  const raw = new SqliteDatabase(filename)
+  return openDatabaseWith(new SqliteDatabase(filename) as unknown as SqlDriver)
+}
+
+/** Same as openDatabase, over a driver that is already open — the phone's sql.js. */
+export function openDatabaseWith(raw: SqlDriver): Db {
   const db = new Db(raw)
 
   db.exec('PRAGMA foreign_keys = ON')

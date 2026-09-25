@@ -55,7 +55,7 @@ export function TimerHero({
   return (
     <div>
       <div
-        className={`font-mono text-[76px] leading-none font-semibold tracking-tight tabular-nums
+        className={`font-mono text-[56px] wide:text-[76px] leading-none font-semibold tracking-tight tabular-nums
           ${running ? 'text-text' : 'text-text-faint'}`}
       >
         {formatStopwatch(elapsedSec)}
@@ -116,7 +116,7 @@ export function TimerHero({
               variant="primary"
               icon={<StopIcon size={15} />}
               onClick={onStop}
-              className="w-[260px]"
+              className="w-auto flex-1 wide:w-[260px] wide:flex-none"
             >
               STOP
             </Button>
@@ -132,7 +132,7 @@ export function TimerHero({
               icon={<PlayIcon size={15} />}
               hint={hotkey}
               onClick={onStart}
-              className="w-[260px]"
+              className="w-auto flex-1 wide:w-[260px] wide:flex-none"
             >
               START
             </Button>

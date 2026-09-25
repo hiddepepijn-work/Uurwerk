@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { SyncStatus } from '@core/contract/api.js'
 import { api } from '../../api/client.js'
+import { useCompact } from '../../hooks/useCompact.js'
 import { Button } from '../../ui/Button.js'
 import { SettingRow, SettingsSection, textField } from './SettingsSection.js'
 
@@ -14,7 +15,9 @@ export function ServerSettings() {
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [url, setUrl] = useState('https://uurwerk.duckdns.org')
   const [token, setToken] = useState('')
-  const [mode, setMode] = useState<'upload' | 'download'>('upload')
+  // A phone always joins an existing server; the laptop is the one that uploads first.
+  const compact = useCompact()
+  const [mode, setMode] = useState<'upload' | 'download'>(compact ? 'download' : 'upload')
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 

@@ -32,6 +32,7 @@ import {
   type RowChange
 } from '@core/sync/engine.js'
 
+import { invalidatedDomains } from './announce.js'
 import type { Backend } from './create.js'
 import { emitEvent, host } from './host.js'
 import { log } from './log.js'
@@ -43,19 +44,7 @@ const TIMEOUT_MS = 30_000
 /** Screenshots per round, so a backlog after a week offline does not block the rows. */
 const FILES_PER_ROUND = 40
 
-/**
- * What only the server does. On a paired device these are sent to the server rather than
- * run on the local copy: the calendar secrets and the published library live there, and a
- * calendar synced from two places would import every appointment twice.
- */
-export const SERVER_ONLY: Record<string, readonly string[]> = {
-  calendar: ['connectIcs', 'connectIcloud', 'pushPlan', 'disconnect', 'syncNow'],
-  days: ['publish', 'unpublish'],
-  publish: ['now']
-}
-
-export const isServerOnly = (domain: string, method: string): boolean =>
-  SERVER_ONLY[domain]?.includes(method) ?? false
+export { SERVER_ONLY, isServerOnly } from './server-only.js'
 
 interface SyncResponse {
   received: ReceiveResult
@@ -171,24 +160,8 @@ export class SyncClient {
 
   /** Tells the screens which parts of the data moved underneath them. */
   private announce(changes: RowChange[]): void {
-    const tables = new Set(changes.map((change) => change.tbl))
-    const touched = (...names: string[]): boolean => names.some((name) => tables.has(name))
-
-    if (touched('tasks', 'task_dependencies', 'projects')) {
-      emitEvent('data:invalidated', { domain: 'tasks' })
-    }
-    if (touched('tracking_runs', 'time_segments', 'calendar_events')) {
-      emitEvent('data:invalidated', { domain: 'sessions' })
-    }
-    if (touched('plans', 'plan_blocks', 'availability', 'fixed_events', 'recurring_commitments', 'calendar_events')) {
-      emitEvent('data:invalidated', { domain: 'planning' })
-    }
-    if (touched('artifacts')) emitEvent('data:invalidated', { domain: 'artifacts' })
-    if (touched('day_reports', 'reports', 'published_files')) {
-      emitEvent('data:invalidated', { domain: 'reports' })
-    }
-    if (touched('settings', 'areas', 'organizations', 'work_types', 'calendar_accounts', 'calendars', 'classification_rules')) {
-      emitEvent('data:invalidated', { domain: 'settings' })
+    for (const domain of invalidatedDomains(new Set(changes.map((change) => change.tbl)))) {
+      emitEvent('data:invalidated', { domain })
     }
   }
 

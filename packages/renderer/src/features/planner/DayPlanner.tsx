@@ -398,7 +398,7 @@ export function DayPlanner({ date, open, onClose }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-6">
+      <div className="grid grid-cols-1 gap-6 wide:grid-cols-[300px_minmax(0,1fr)]">
         {/* ------------------------------------------------------- sidebar */}
         <div className="flex min-h-0 flex-col gap-5">
           <div className="rounded-[12px] border border-border bg-bg p-4">

@@ -1,5 +1,9 @@
 @import './tokens.css';
 
+/* Wider than a phone. Layouts are written phone-first and widen with `wide:`, so the
+   desktop window keeps exactly the layout it had and the phone gets one column. */
+@custom-variant wide (@media (min-width: 701px));
+
 /* The app is a desktop window, not a document: it never scrolls as a whole, only its
    content panes do. */
 html,

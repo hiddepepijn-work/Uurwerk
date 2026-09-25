@@ -174,6 +174,23 @@ export async function createUurwerkServer(config = readConfig()) {
     // --------------------------------------------------------------------- api
     // The devices' door: a device token, never a browser cookie, and throttled like a login.
     if (path.startsWith('/api/')) {
+      // The iPhone app runs in a web view at capacitor://localhost, so its calls are
+      // cross-origin. Only that origin is let in; a browser page elsewhere gets nothing,
+      // and every call still needs a device token — CORS is not the lock, the token is.
+      const origin = request.headers.origin
+      if (origin === 'capacitor://localhost' || origin === 'ionic://localhost') {
+        response.setHeader('Access-Control-Allow-Origin', origin)
+        response.setHeader('Vary', 'Origin')
+        response.setHeader('Access-Control-Expose-Headers', 'X-Uurwerk-Seq')
+        if (method === 'OPTIONS') {
+          response.writeHead(204, {
+            'Access-Control-Allow-Methods': 'GET, POST, PUT',
+            'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+            'Access-Control-Max-Age': '600'
+          })
+          return response.end()
+        }
+      }
       const address = clientAddress(request, config.trustProxy)
       const waiting = throttle.blockedFor(address)
       if (waiting > 0) return sendText(response, 429, `Too many attempts. Wait ${waiting} s.`)

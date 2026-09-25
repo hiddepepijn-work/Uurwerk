@@ -1,0 +1,18 @@
+/*
+ * The renderer's styles, unchanged. Tailwind scans from the build root, which for the
+ * phone is packages/mobile — so the renderer's screens are named as a source explicitly,
+ * or every class they use would be missing from the phone's stylesheet.
+ */
+@import '../../renderer/src/styles/globals.css';
+@source '../../renderer/src';
+
+/* A phone scrolls with momentum and never shows a text-selection loupe on a button. */
+html,
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  -webkit-user-select: none;
+  user-select: none;
+}

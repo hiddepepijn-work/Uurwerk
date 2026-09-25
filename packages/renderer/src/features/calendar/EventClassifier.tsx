@@ -236,7 +236,7 @@ export function EventClassifier({
         </div>
       )}
 
-      <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-6">
+      <div className="grid grid-cols-1 gap-6 wide:grid-cols-[minmax(0,1fr)_320px]">
         {/* ------------------------------------------------------------ left */}
         <div className="flex flex-col gap-5">
           <div className="rounded-[12px] border border-border bg-bg px-4 py-3">
@@ -288,7 +288,7 @@ export function EventClassifier({
               </span>
             </div>
           ) : (
-            <div className="grid grid-cols-[1fr_1fr_auto] gap-4">
+            <div className="grid grid-cols-1 gap-4 wide:grid-cols-[1fr_1fr_auto]">
               <div className="flex flex-col gap-2">
                 <span className="text-[13px] text-text-dim">Start</span>
                 <div className={readOnly}>{formatMoment(event.startsAt)}</div>

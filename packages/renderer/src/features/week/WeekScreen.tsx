@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useCompact } from '../../hooks/useCompact.js'
 import type { CalendarEvent, TimeSegment } from '@core/contract/types.js'
 import { nextWeek, previousWeek, toIsoWeek, weekRange } from '@core/util/time.js'
 import { api } from '../../api/client.js'
@@ -32,7 +33,13 @@ const MODES: Array<{ id: WeekMode; label: string; hint: string }> = [
  */
 export function WeekScreen() {
   const [week, setWeek] = useState(() => toIsoWeek(Date.now()))
-  const [mode, setMode] = useState<WeekMode>('plan')
+  const [chosenMode, setMode] = useState<WeekMode>('plan')
+  /**
+   * On the phone this tab is the calendar and nothing else: no hour tiles, no
+   * plan-versus-actual. Hours are the laptop's business; the phone is for seeing the week.
+   */
+  const compact = useCompact()
+  const mode: WeekMode = compact ? 'plan' : chosenMode
   const [planningDate, setPlanningDate] = useState<string | null>(null)
   /** null when closed; 1 or 2 for the horizon being planned. */
   const [rangeWeeks, setRangeWeeks] = useState<1 | 2 | null>(null)
@@ -177,10 +184,10 @@ export function WeekScreen() {
   }
 
   return (
-    <div className="p-8">
-      <header className="mb-7 flex items-start justify-between">
+    <div className="p-4 wide:p-8">
+      <header className="mb-7 flex flex-col gap-4 wide:flex-row wide:items-start wide:justify-between">
         <div>
-          <h1 className="text-[32px] leading-tight font-semibold">Week</h1>
+          <h1 className="text-[32px] leading-tight font-semibold">{compact ? 'Agenda' : 'Week'}</h1>
           <p className="mt-1 text-[14px] text-text-dim">
             {new Date(`${range.from}T12:00:00`).toLocaleDateString('en-GB', {
               day: 'numeric',
@@ -195,8 +202,8 @@ export function WeekScreen() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-[10px] border border-border bg-card p-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="hidden rounded-[10px] border border-border bg-card p-1 wide:flex">
             {MODES.map((option) => (
               <button
                 key={option.id}
@@ -213,24 +220,30 @@ export function WeekScreen() {
 
           {/* The two planners that had no way in until now. */}
           <div className="flex gap-1">
-            <Button variant="primary" size="sm" onClick={() => setRangeWeeks(1)}>
-              Plan this week
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setRangeWeeks(2)}>
-              Two weeks
-            </Button>
+            {!compact && (
+              <>
+                <Button variant="primary" size="sm" onClick={() => setRangeWeeks(1)}>
+                  Plan this week
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setRangeWeeks(2)}>
+                  Two weeks
+                </Button>
+              </>
+            )}
             <Button variant="secondary" size="sm" onClick={() => setComposingOn(today)}>
               New appointment
             </Button>
             {/* The button behind the same thing clicking empty space in Actual does, because
                 a gesture nobody is told about is a gesture nobody finds. */}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setStretch({ mode: 'add', date: today, startMin: 9 * 60 })}
-            >
-              Add hours
-            </Button>
+            {!compact && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setStretch({ mode: 'add', date: today, startMin: 9 * 60 })}
+              >
+                Add hours
+              </Button>
+            )}
             {/* Only offered once iCloud is connected: a subscribed link cannot be written to,
                 and a button that always fails is worse than no button. */}
             {(accounts ?? []).some((account) => account.provider === 'icloud') && (
@@ -313,7 +326,7 @@ export function WeekScreen() {
         </div>
       )}
 
-      <div className="mb-7 grid grid-cols-4 gap-4">
+      <div className="mb-7 hidden grid-cols-4 gap-4 wide:grid">
         <StatCard
           icon={<CalendarIcon size={16} />}
           label="Planned"
@@ -364,7 +377,7 @@ export function WeekScreen() {
         onAddTime={(date, startMin) => setStretch({ mode: 'add', date, startMin })}
       />
 
-      <div className="mt-5 flex items-center gap-6 text-[13px] text-text-dim">
+      <div className="mt-5 hidden items-center gap-6 text-[13px] text-text-dim wide:flex">
         <span className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-[3px] border border-block-blue bg-block-blue/70" /> Planned
         </span>

@@ -18,7 +18,7 @@ export type Screen =
   | 'statistics'
   | 'settings'
 
-const ITEMS: Array<{ id: Screen; label: string; Icon: typeof ClockIcon }> = [
+export const ITEMS: Array<{ id: Screen; label: string; Icon: typeof ClockIcon }> = [
   { id: 'today', label: 'Today', Icon: ClockIcon },
   { id: 'week', label: 'Week', Icon: CalendarIcon },
   { id: 'tasks', label: 'Tasks', Icon: ChecklistIcon },

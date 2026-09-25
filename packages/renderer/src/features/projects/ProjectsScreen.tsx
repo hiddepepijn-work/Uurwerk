@@ -42,7 +42,7 @@ export function ProjectsScreen() {
 
   if (projects && projects.length === 0) {
     return (
-      <div className="p-8">
+      <div className="p-4 wide:p-8">
         <h1 className="text-[32px] leading-tight font-semibold">Projects</h1>
         <div className="mt-8">
           <EmptyState
@@ -59,7 +59,7 @@ export function ProjectsScreen() {
   const total = overview ? overview.taskCount : 0
 
   return (
-    <div className="p-8">
+    <div className="p-4 wide:p-8">
       <header className="mb-7 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-[32px] leading-tight font-semibold">Projects</h1>
@@ -98,7 +98,7 @@ export function ProjectsScreen() {
             {overview.organizationName && <span>{overview.organizationName}</span>}
           </div>
 
-          <div className="mb-7 grid grid-cols-4 gap-4">
+          <div className="mb-7 grid grid-cols-2 gap-3 wide:grid-cols-4 wide:gap-4">
             <StatCard
               icon={<ChecklistIcon size={16} />}
               label="Done"

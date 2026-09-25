@@ -68,7 +68,7 @@ export function OrganizationSettings({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 gap-5 wide:grid-cols-2">
         <div className="overflow-hidden rounded-[12px] border border-border">
           <header className="border-b border-border bg-bg px-4 py-2.5 text-[13px] font-medium text-text">
             Organizations

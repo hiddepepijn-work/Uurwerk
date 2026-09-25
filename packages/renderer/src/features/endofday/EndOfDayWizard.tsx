@@ -282,7 +282,7 @@ export function EndOfDayWizard({ date, open, onClose }: Props) {
       )}
 
       {current === 'review' && review && (
-        <div className="grid grid-cols-[minmax(0,340px)_minmax(0,1fr)] gap-6">
+        <div className="grid grid-cols-1 gap-6 wide:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
           <div className="flex flex-col gap-5">
             <DaySummaryCard date={date} review={review} />
             <TopActivitiesCard review={review} />

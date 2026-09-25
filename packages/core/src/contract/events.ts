@@ -35,7 +35,7 @@ export interface AppEvents {
    * The main process owns the hotkeys but must not know how the UI is laid out, so it
    * names the destination and the renderer decides what that means.
    */
-  'ui:open': { target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay' }
+  'ui:open': { target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay' | 'addEvent' }
 }
 
 export type AppEventName = keyof AppEvents

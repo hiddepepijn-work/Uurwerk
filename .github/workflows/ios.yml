@@ -1,0 +1,122 @@
+# Builds the iPhone app as an unsigned .ipa on a GitHub Mac.
+#
+# iOS apps can only be compiled on macOS, and this project is developed on Windows, so the
+# Mac is borrowed here. The .ipa is unsigned on purpose: SideStore (or AltStore) on the
+# phone signs it with your own free Apple ID when it installs it, and re-signs it every
+# seven days. No Apple Developer account, no certificates in this repository.
+#
+# The result is attached to the rolling prerelease "ios-latest", so the phone can fetch it
+# from one fixed link, and kept as a workflow artifact as well.
+
+name: iPhone app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, vps-bron]
+    paths:
+      - 'packages/mobile/**'
+      - 'packages/renderer/**'
+      - 'packages/core/**'
+      - 'packages/backend/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ios.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the web part
+        run: npm run build:mobile
+
+      # iOS plays only PCM-style formats as a notification sound; the clips are kept as
+      # MP3 in the repo and converted here, where afconvert comes with the system.
+      - name: Voice clips to .caf
+        run: |
+          mkdir -p packages/mobile/dist/sounds
+          for clip in packages/mobile/sounds/*.mp3; do
+            name=$(basename "$clip" .mp3)
+            afconvert -f caff -d LEI16@24000 "$clip" "packages/mobile/dist/sounds/$name.caf"
+          done
+          ls -la packages/mobile/dist/sounds
+
+      - name: Generate the iOS project
+        working-directory: packages/mobile
+        run: |
+          rm -rf ios
+          npx cap add ios
+          npx cap sync ios
+
+      - name: App icon
+        run: |
+          set -e
+          ICONSET=packages/mobile/ios/App/App/Assets.xcassets/AppIcon.appiconset
+          # Through JPEG and back: iOS wants an icon without transparency, and that round
+          # trip is the simplest way to drop the alpha channel with what macOS ships.
+          sips -s format jpeg -z 1024 1024 resources/icon-source.png --out /tmp/icon.jpg >/dev/null
+          sips -s format png /tmp/icon.jpg --out "$ICONSET/AppIcon-512@2x.png" >/dev/null
+          ls "$ICONSET"
+
+      - name: Name, version and background behaviour
+        run: |
+          PLIST=packages/mobile/ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Uurwerk" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.1.${{ github.run_number }}" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 0.1.${{ github.run_number }}" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${{ github.run_number }}" "$PLIST"
+          # Dark app: keep the status bar light.
+          /usr/libexec/PlistBuddy -c "Add :UIUserInterfaceStyle string Dark" "$PLIST" || true
+
+      - name: Compile (unsigned)
+        working-directory: packages/mobile/ios/App
+        run: |
+          if [ -d App.xcworkspace ]; then TARGET="-workspace App.xcworkspace"; else TARGET="-project App.xcodeproj"; fi
+          xcodebuild $TARGET -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tail -40
+
+      - name: Package .ipa
+        working-directory: packages/mobile/ios/App
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry ../../Uurwerk.ipa Payload
+          ls -la ../../Uurwerk.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Uurwerk-ipa
+          path: packages/mobile/Uurwerk.ipa
+          retention-days: 30
+
+      - name: Publish to the ios-latest prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ios-latest >/dev/null 2>&1 || \
+            gh release create ios-latest --prerelease --title "Uurwerk voor iPhone (laatste build)" \
+              --notes "Ongetekende .ipa. Installeer met SideStore of AltStore; die ondertekenen hem met je eigen Apple ID." \
+              --target "${{ github.sha }}"
+          gh release upload ios-latest packages/mobile/Uurwerk.ipa --clobber

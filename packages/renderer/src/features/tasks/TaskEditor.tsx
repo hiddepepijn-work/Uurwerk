@@ -253,7 +253,7 @@ export function TaskEditor({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 wide:grid-cols-2">
           <label className="flex flex-col gap-2">
             <span className="text-[13px] text-text-dim">Project</span>
             <select
@@ -315,7 +315,7 @@ export function TaskEditor({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 wide:grid-cols-2">
           <label className="flex flex-col gap-2">
             <span className="text-[13px] text-text-dim">Estimate (hours)</span>
             <input
@@ -337,7 +337,7 @@ export function TaskEditor({
         {/* Both of these are constraints the planner obeys before it looks at any score:
             it will not place work before it can start, and a must-do day outranks the
             ordinary ranking on that day. */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 wide:grid-cols-2">
           <div className="flex flex-col gap-2">
             <span className="text-[13px] text-text-dim">Cannot start before</span>
             <DateField value={earliestStart} onChange={setEarliestStart} placeholder="Any time" />

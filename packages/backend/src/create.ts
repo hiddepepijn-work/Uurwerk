@@ -42,7 +42,11 @@ export interface Backend {
 }
 
 export function createBackend(dbPath: string): Backend {
-  const store = openStore(dbPath)
+  return createBackendFrom(openStore(dbPath))
+}
+
+/** Over a store that is already open — the phone opens its own, on sql.js. */
+export function createBackendFrom(store: Store): Backend {
   const stats = new StatsService(store)
   const planning = new PlanningService(store, stats)
   // One tracking service, shared: the timer façade wraps this same instance so both
