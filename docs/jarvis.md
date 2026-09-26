@@ -96,6 +96,9 @@ Belangrijk: ja/nee
 5. **Prioriteit** — en of het op een vaste dag moet.
 6. **Wat is ervoor nodig** / waar wacht het op (afhankelijkheden).
 7. **Bijzonderheden** → notitie.
+8. **Focus?** Stage altijd. Privé: bij een echte klus (30 min of meer, zoals kamer opruimen)
+   automatisch; bij twijfel vragen. Focus = telefoon alleen bank, WhatsApp en standaard-apps,
+   laptop sluit afleiders — tot de taak af is.
 Daarna stelt hij voor wanneer het in de planning komt, en zegt dat terug.
 
 **Al in de app** (telefoon én pc, zonder Jarvis):

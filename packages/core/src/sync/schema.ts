@@ -35,7 +35,9 @@ export const DEVICE_LOCAL_SETTINGS = [
   'startupBehaviour',
   'showMorningNotification',
   'closeToTray',
-  'serverUrl'
+  'serverUrl',
+  'focusShortcuts',
+  'focusBlockedApps'
 ] as const
 
 /** Epoch milliseconds, computed inside SQLite so a trigger can stamp a change. */

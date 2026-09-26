@@ -85,6 +85,11 @@ export const TOOLS: ToolSpec[] = [
         dueDate: date,
         earliestStartDate: date,
         notes: { type: 'string', description: 'Doel, Klaar als, Meenemen/voorbereiden, Bijzonderheden, Belangrijk: ja/nee' },
+        focusMode: {
+          type: 'string',
+          enum: ['auto', 'always', 'never'],
+          description: 'auto = stage altijd focus, privé vanaf 30 min; always/never als Hidde het anders wil'
+        },
         confirmed
       },
       ['title', 'areaId', 'confirmed']
@@ -314,9 +319,10 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
         estimateMin: typeof input.estimateMinutes === 'number' ? input.estimateMinutes : null,
         dueDate: (input.dueDate as string | undefined) ?? null,
         earliestStartDate: (input.earliestStartDate as string | undefined) ?? null,
-        notes: (input.notes as string | undefined) ?? null
+        notes: (input.notes as string | undefined) ?? null,
+        focusMode: (input.focusMode as 'auto' | 'always' | 'never' | undefined) ?? 'auto'
       })
-      return { created: task.title, taskId: task.id }
+      return { created: task.title, taskId: task.id, focus: task.focusMode }
     }
 
     case 'update_task': {

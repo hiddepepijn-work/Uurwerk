@@ -8,8 +8,7 @@ import type {
   Task,
   TaskDependency,
   TaskPatch,
-  WorkType
-} from '@core/contract/types.js'
+  WorkType, FocusMode } from '@core/contract/types.js'
 import { Button } from '../../ui/Button.js'
 import { DateField } from '../../ui/DateField.js'
 import { Modal } from '../../ui/Modal.js'
@@ -79,6 +78,7 @@ export function TaskEditor({
   const [earliestStart, setEarliestStart] = useState('')
   const [mustDo, setMustDo] = useState('')
   const [notes, setNotes] = useState('')
+  const [focusMode, setFocusMode] = useState<FocusMode>('auto')
   const [edges, setEdges] = useState<DependencyEdit[]>([])
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -96,6 +96,7 @@ export function TaskEditor({
     setEarliestStart(task?.earliestStartDate ?? '')
     setMustDo(task?.mustDoDate ?? '')
     setNotes(task?.notes ?? '')
+    setFocusMode(task?.focusMode ?? 'auto')
     setEdges(
       dependencies.map((dependency) => ({
         dependsOnTaskId: dependency.dependsOnTaskId,
@@ -150,7 +151,8 @@ export function TaskEditor({
         dueDate: due || null,
         earliestStartDate: earliestStart || null,
         mustDoDate: mustDo || null,
-        notes: notes.trim() || null
+        notes: notes.trim() || null,
+        focusMode
       }
 
       // The dependency write can be rejected for a cycle, so it goes last: a refused edge
@@ -356,6 +358,22 @@ export function TaskEditor({
             </span>
           </div>
         </div>
+
+        <label className="flex flex-col gap-2">
+          <span className="text-[13px] text-text-dim">Focus</span>
+          <select
+            value={focusMode}
+            onChange={(event) => setFocusMode(event.target.value as FocusMode)}
+            className={field}
+          >
+            <option value="auto">Automatic — stage always, private from 30 min</option>
+            <option value="always">Always — lock down until done</option>
+            <option value="never">Never</option>
+          </select>
+          <span className="text-[12px] text-text-faint">
+            While a focus task is on, the phone allows only the essentials and the laptop closes blocked apps — until it is done.
+          </span>
+        </label>
 
         <label className="flex flex-col gap-2">
           <span className="text-[13px] text-text-dim">Notes</span>

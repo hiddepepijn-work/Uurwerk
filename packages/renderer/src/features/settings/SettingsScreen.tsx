@@ -12,6 +12,7 @@ import { OrganizationSettings } from './OrganizationSettings.js'
 import { ProjectSettings } from './ProjectSettings.js'
 import { PublishSettings } from './PublishSettings.js'
 import { ServerSettings } from './ServerSettings.js'
+import { FocusSettings } from './FocusSettings.js'
 import { SettingRow, SettingsSection, Toggle, numberField, textField } from './SettingsSection.js'
 
 /** The three built-in areas; they cannot be archived, so they get no archive button. */
@@ -398,6 +399,8 @@ export function SettingsScreen() {
       <MailSettings settings={settings} onPatch={(changes) => void patch(changes)} />
 
       <ServerSettings />
+
+      <FocusSettings settings={settings} onPatch={(changes) => void patch(changes)} />
 
       <PublishSettings settings={settings} onPatch={(changes) => void patch(changes)} />
     </div>

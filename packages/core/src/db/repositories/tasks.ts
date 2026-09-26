@@ -21,6 +21,7 @@ interface TaskRow {
   blocked_reason: string | null
   must_do_date: string | null
   notes: string | null
+  focus_mode: Task['focusMode'] | null
   sort_order: number
   created_at: number
   completed_at: number | null
@@ -69,6 +70,7 @@ export class TaskRepo {
     blockedReason: row.blocked_reason,
     mustDoDate: row.must_do_date,
     notes: row.notes ?? null,
+    focusMode: row.focus_mode ?? 'auto',
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     completedAt: row.completed_at,
@@ -126,8 +128,8 @@ export class TaskRepo {
     this.db.run(
       `INSERT INTO tasks
          (id, project_id, area_id, work_type_id, title, priority, status, estimate_min,
-          due_date, earliest_start_date, notes, sort_order, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)`,
+          due_date, earliest_start_date, notes, focus_mode, sort_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         input.projectId ?? null,
@@ -140,6 +142,7 @@ export class TaskRepo {
         input.dueDate ?? null,
         input.earliestStartDate ?? null,
         input.notes?.trim() || null,
+        input.focusMode ?? 'auto',
         nextOrder,
         now
       ]
@@ -163,7 +166,7 @@ export class TaskRepo {
       `UPDATE tasks SET
          project_id = ?, area_id = ?, work_type_id = ?, title = ?, priority = ?, status = ?,
          estimate_min = ?, due_date = ?, earliest_start_date = ?, blocked_reason = ?,
-         must_do_date = ?, notes = ?, sort_order = ?, completed_at = ?
+         must_do_date = ?, notes = ?, focus_mode = ?, sort_order = ?, completed_at = ?
        WHERE id = ?`,
       [
         next.projectId,
@@ -178,6 +181,7 @@ export class TaskRepo {
         blockedReason,
         next.mustDoDate,
         next.notes?.trim() || null,
+        next.focusMode,
         next.sortOrder,
         completedAt,
         id

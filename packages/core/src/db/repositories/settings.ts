@@ -67,7 +67,9 @@ export const DEFAULT_SETTINGS: Settings = {
   startupBehaviour: 'tray',
   showMorningNotification: true,
   closeToTray: true,
-  serverUrl: ''
+  serverUrl: '',
+  focusShortcuts: false,
+  focusBlockedApps: ['steam', 'discord', 'epicgameslauncher', 'spotify']
 }
 
 export class SettingsRepo {

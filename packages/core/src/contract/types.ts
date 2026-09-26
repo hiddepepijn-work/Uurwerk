@@ -172,6 +172,8 @@ export interface Task {
   mustDoDate: IsoDate | null
   /** What done means, what is needed, particulars — what Jarvis asked when it was made. */
   notes: string | null
+  /** auto = the rule in domain/focus.ts; always / never override it for this task. */
+  focusMode: FocusMode
   sortOrder: number
   createdAt: number
   completedAt: number | null
@@ -189,7 +191,10 @@ export interface NewTask {
   dueDate?: IsoDate | null
   earliestStartDate?: IsoDate | null
   notes?: string | null
+  focusMode?: FocusMode
 }
+
+export type FocusMode = 'auto' | 'always' | 'never'
 
 export type TaskPatch = Partial<
   Pick<
@@ -206,6 +211,7 @@ export type TaskPatch = Partial<
     | 'blockedReason'
     | 'mustDoDate'
     | 'notes'
+    | 'focusMode'
     | 'sortOrder'
   >
 >
@@ -1431,4 +1437,10 @@ export interface Settings {
    * alone, the way the app worked before there was a server. Per device, never synced.
    */
   serverUrl: string
+
+  // ----------------------------------------------------------------- focus
+  /** Phone: turn the "Uurwerk" Focus on and off through two Shortcuts. Per device. */
+  focusShortcuts: boolean
+  /** Laptop: programs closed while a focus task is running, by process name. Per device. */
+  focusBlockedApps: string[]
 }

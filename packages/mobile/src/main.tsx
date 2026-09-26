@@ -37,6 +37,7 @@ import { onQuestionTapped, scheduleNotifications } from './notifications.js'
 import { AudioFocus, speakEvening, speakMorning } from './speech.js'
 import { PhoneSync } from './sync.js'
 import { widgetData } from './widget-data.js'
+import { FocusGuard } from './focus.js'
 
 // ------------------------------------------------------------------ events
 
@@ -158,6 +159,7 @@ async function start(): Promise<void> {
   }
   bus.on('data:invalidated', ({ domain }) => {
     if (domain === 'planning' || domain === 'tasks' || domain === 'sessions') reschedule()
+    if (domain === 'tasks') void focus.check()
   })
 
   // Deliberately no repairOnStartup(): an open segment here may be the laptop's timer,
@@ -181,7 +183,9 @@ async function start(): Promise<void> {
   window.events = bus
   window.audioFocus = AudioFocus
 
+  const focus = new FocusGuard(backend, (message) => emit('notify', { level: 'info', message }))
   backend.trackingService.onChange((segment, reason) => {
+    if (reason === 'start' || reason === 'switch') void focus.onTaskStarted(segment?.taskId ?? null)
     emit('tracking:segmentChanged', { segment, reason })
     emit('data:invalidated', { domain: 'sessions' })
     if (reason === 'complete' || reason === 'start' || reason === 'switch') {
