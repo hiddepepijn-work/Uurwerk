@@ -4,11 +4,26 @@
  * can mention today's actual appointments and tasks.
  */
 
+import { registerPlugin } from '@capacitor/core'
+
 import type { TimeTrackerAPI } from '@core/contract/api.js'
 
-function say(text: string): void {
+/**
+ * Native, in packages/capacitor-audio-focus: pauses Spotify or Apple Music while the app
+ * speaks, and lets it resume afterwards. In a browser there is nothing to pause.
+ */
+const AudioFocus = registerPlugin<{ take(): Promise<void>; release(): Promise<void> }>('AudioFocus', {
+  web: { take: async () => undefined, release: async () => undefined }
+})
+
+async function say(text: string): Promise<void> {
   if (!('speechSynthesis' in window)) return
+  await AudioFocus.take().catch(() => undefined)
   const utterance = new SpeechSynthesisUtterance(text)
+  // Hand the audio back however the speech ends, or the music would stay paused.
+  const release = (): void => void AudioFocus.release().catch(() => undefined)
+  utterance.onend = release
+  utterance.onerror = release
   utterance.lang = 'nl-NL'
   const dutch = window.speechSynthesis.getVoices().find((voice) => voice.lang.startsWith('nl'))
   if (dutch) utterance.voice = dutch
@@ -40,9 +55,9 @@ export async function speakMorning(api: TimeTrackerAPI): Promise<void> {
     ` Er ${urgent.length === 1 ? 'staat' : 'staan'} ${count(urgent.length, 'taak', 'taken')} met hoge prioriteit open.`,
     ' Wat wil je vandaag doen?'
   ]
-  say(parts.join(''))
+  await say(parts.join(''))
 }
 
-export function speakEvening(): void {
-  say('Hé Hidde. Zijn er nog afspraken die in de agenda moeten? Zet ze er meteen in.')
+export async function speakEvening(): Promise<void> {
+  await say('Hé Hidde. Zijn er nog afspraken die in de agenda moeten? Zet ze er meteen in.')
 }

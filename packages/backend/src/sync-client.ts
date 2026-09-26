@@ -34,7 +34,7 @@ import {
 
 import { invalidatedDomains } from './announce.js'
 import type { Backend } from './create.js'
-import { emitEvent, host } from './host.js'
+import { emitEvent, host, type SecretKey } from './host.js'
 import { log } from './log.js'
 
 const ROUND_EVERY_MS = 30_000
@@ -58,6 +58,7 @@ export class SyncClient {
   private online = false
   private lastSyncAt: number | null = null
   private lastError: string | null = null
+  private secretsHandedOver = false
 
   constructor(
     private readonly backend: Backend,
@@ -150,6 +151,11 @@ export class SyncClient {
       this.online = true
       this.lastError = null
       this.lastSyncAt = Date.now()
+
+      if (!this.secretsHandedOver) {
+        await this.handOverCalendarSecrets()
+        this.secretsHandedOver = true
+      }
     } catch (error) {
       this.online = false
       this.lastError = error instanceof Error ? error.message : String(error)
@@ -198,6 +204,26 @@ export class SyncClient {
         artifact.id,
         Date.now()
       ])
+    }
+  }
+
+  /**
+   * The calendar links and app passwords, for the server.
+   *
+   * Paired, the server is the one that syncs calendars — but the credentials were stored
+   * in this laptop's Windows vault, which the server cannot read. Once per start, anything
+   * the server is missing goes over the (TLS) sync connection into the server's own vault.
+   * Nothing is sent that the server already has.
+   */
+  private async handOverCalendarSecrets(): Promise<void> {
+    for (const account of this.backend.store.calendar.accounts()) {
+      const key: SecretKey = account.provider === 'icloud' ? `icloud:${account.id}` : `ics:${account.id}`
+      const value = host().secrets.get(key)
+      if (!value) continue
+      const present = await this.request<boolean>('POST', '/api/rpc/settings/hasSecret', [key])
+      if (present) continue
+      await this.request('POST', '/api/rpc/settings/setSecret', [key, value])
+      log.info('Handed a calendar credential to the server.', { account: account.displayName })
     }
   }
 

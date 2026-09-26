@@ -1,11 +1,11 @@
 /**
  * The two daily questions, as local notifications with a spoken sound.
  *
- *   09:00  "Hoi Hidde! Goedemorgen. Hoe ziet je ochtend eruit?"  → opens the day planner
+ *   08:30  "Hoi Hidde! Goedemorgen. Hoe ziet je ochtend eruit?"  → opens the day planner
  *   21:00  "Hé Hidde. Zijn er nog afspraken die in de agenda moeten?" → opens a new event
  *
- * iOS lets any notification be swiped away, so the morning one comes back: 09:05, 09:10 and
- * 09:15 are scheduled too, and tapping any of them cancels the rest of that day's series.
+ * iOS lets any notification be swiped away, so the morning one comes back: 08:35, 08:40 and
+ * 08:45 are scheduled too, and tapping any of them cancels the rest of that day's series.
  * Everything is scheduled on the phone itself, a week ahead and topped up at every start —
  * no server and no push, which is what makes it work without a paid Apple account.
  */
@@ -32,8 +32,8 @@ interface Moment {
 const MOMENTS: Moment[] = [
   {
     key: 'morning',
-    hour: 9,
-    minutes: [0, 5, 10, 15],
+    hour: 8,
+    minutes: [30, 35, 40, 45],
     sound: 'ochtend.caf',
     title: 'Goedemorgen Hidde',
     body: 'Hoe ziet je ochtend eruit? Tik om je dag te plannen.',

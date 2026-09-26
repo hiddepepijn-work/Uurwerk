@@ -1,0 +1,11 @@
+{
+  "name": "uurwerk-audio-focus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pauses other audio (Spotify, Apple Music) while Uurwerk speaks, and lets it resume afterwards. iOS only; a no-op elsewhere.",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  }
+}

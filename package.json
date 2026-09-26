@@ -34,7 +34,8 @@
     "docx": "^9.1.0",
     "node-sqlite3-wasm": "^0.8.30",
     "nodemailer": "^6.9.16",
-    "sql.js": "^1.14.2"
+    "sql.js": "^1.14.2",
+    "uurwerk-audio-focus": "file:packages/capacitor-audio-focus"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
