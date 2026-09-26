@@ -617,8 +617,10 @@ export interface JarvisAsk {
 export interface JarvisReply {
   conversationId: string
   text: string
-  /** MP3, base64, in the Fenna voice; null when speech is off or unavailable. */
+  /** Base64 audio of the reply; null when speech is off or unavailable. */
   audio: string | null
+  /** Its type: audio/wav (Gemini voices) or audio/mpeg (Azure / Edge). */
+  audioType: string | null
   /** Whether Jarvis changed anything (a task, an appointment, the plan). */
   changed: boolean
 }

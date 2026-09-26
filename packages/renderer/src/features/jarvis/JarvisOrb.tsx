@@ -25,19 +25,23 @@ interface Tuning {
   spin: number
   /** Violet mixed in. */
   violet: number
+  /** The swarm of particles spiralling in while thinking. */
+  particles: number
+  /** Size of the orb itself: it draws in a little while thinking. */
+  scale: number
 }
 
 const TUNING: Record<OrbState, Tuning> = {
-  idle: { wobble: 0.025, gain: 0.0, spin: 0.12, violet: 0 },
-  listening: { wobble: 0.04, gain: 0.22, spin: 0.25, violet: 0 },
-  thinking: { wobble: 0.05, gain: 0.0, spin: 1.1, violet: 1 },
-  speaking: { wobble: 0.06, gain: 0.3, spin: 0.45, violet: 0.25 }
+  idle: { wobble: 0.025, gain: 0.0, spin: 0.12, violet: 0, particles: 0, scale: 1 },
+  listening: { wobble: 0.04, gain: 0.22, spin: 0.25, violet: 0, particles: 0, scale: 1 },
+  thinking: { wobble: 0.07, gain: 0.0, spin: 2.2, violet: 1, particles: 1, scale: 0.86 },
+  speaking: { wobble: 0.06, gain: 0.3, spin: 0.45, violet: 0.25, particles: 0, scale: 1 }
 }
 
 const LAYERS = [
   { color: [62, 207, 115], alpha: 0.55, phase: 0, scale: 1 },
   { color: [95, 208, 197], alpha: 0.45, phase: 2.1, scale: 0.9 },
-  { color: [155, 140, 255], alpha: 0.0, phase: 4.2, scale: 0.8 }
+  { color: [155, 140, 255], alpha: 0.0, phase: 4.2, scale: 0.95 }
 ] as const
 
 const lerp = (from: number, to: number, amount: number): number => from + (to - from) * amount
@@ -73,6 +77,15 @@ export function JarvisOrb({
     let angle = 0
     let frame = 0
     const rings: Array<{ radius: number; alpha: number }> = []
+    // The thinking swarm: each particle circles at its own distance and spirals inward,
+    // then starts again at the outside.
+    const swarm = Array.from({ length: 46 }, () => ({
+      angle: Math.random() * Math.PI * 2,
+      distance: 1.25 + Math.random() * 0.75,
+      speed: 0.6 + Math.random() * 1.2,
+      size: 0.8 + Math.random() * 1.8,
+      violet: Math.random() < 0.6
+    }))
     let lastRing = 0
     const start = performance.now()
 
@@ -83,13 +96,16 @@ export function JarvisOrb({
       current.gain = lerp(current.gain, goal.gain, 0.08)
       current.spin = lerp(current.spin, goal.spin, 0.04)
       current.violet = lerp(current.violet, goal.violet, 0.04)
+      current.particles = lerp(current.particles, goal.particles, 0.05)
+      current.scale = lerp(current.scale, goal.scale, 0.05)
       // Fast up, slow down: speech reads as punchy, silence as calm.
       const raw = Math.max(0, Math.min(1, level.current))
       smoothLevel = lerp(smoothLevel, raw, raw > smoothLevel ? 0.35 : 0.08)
       angle += current.spin * 0.016
 
       const center = size / 2
-      const breathe = 1 + Math.sin(t * 1.4) * 0.02
+      // Thinking breathes faster and deeper, drawn in a little.
+      const breathe = (1 + Math.sin(t * (1.4 + current.particles * 3.2)) * (0.02 + current.particles * 0.025)) * current.scale
       const base = size * 0.3 * breathe * (1 + current.gain * smoothLevel)
 
       context.clearRect(0, 0, size, size)
@@ -121,9 +137,43 @@ export function JarvisOrb({
       context.arc(center, center, glowRadius, 0, Math.PI * 2)
       context.fill()
 
+      // The swarm, drawn behind the layers so it seems to pour into the orb.
+      if (current.particles > 0.02) {
+        context.globalCompositeOperation = 'lighter'
+        for (const particle of swarm) {
+          particle.angle += 0.016 * particle.speed * (1 + current.spin * 0.4)
+          particle.distance -= 0.0045 * particle.speed
+          if (particle.distance < 0.75) {
+            particle.distance = 1.6 + Math.random() * 0.5
+            particle.angle = Math.random() * Math.PI * 2
+          }
+          const fade = Math.min(1, (particle.distance - 0.75) / 0.35) * current.particles
+          const orbit = base * particle.distance
+          const x = center + Math.cos(particle.angle) * orbit
+          const y = center + Math.sin(particle.angle) * orbit * 0.92
+          const [r, g, b] = particle.violet ? [175, 160, 255] : [120, 225, 210]
+          const dot = context.createRadialGradient(x, y, 0, x, y, particle.size * 4)
+          dot.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.9 * fade})`)
+          dot.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`)
+          context.fillStyle = dot
+          context.beginPath()
+          context.arc(x, y, particle.size * 4, 0, Math.PI * 2)
+          context.fill()
+        }
+        // A bright arc sweeping round the orb.
+        const sweep = angle * 1.6
+        context.beginPath()
+        context.arc(center, center, base * 1.18, sweep, sweep + Math.PI * 0.55)
+        context.strokeStyle = `rgba(175, 160, 255, ${0.55 * current.particles})`
+        context.lineWidth = 2.5
+        context.lineCap = 'round'
+        context.stroke()
+        context.globalCompositeOperation = 'source-over'
+      }
+
       context.globalCompositeOperation = 'lighter'
       for (const [index, layer] of LAYERS.entries()) {
-        const alpha = index === 2 ? 0.5 * current.violet : layer.alpha
+        const alpha = index === 2 ? 0.75 * current.violet : layer.alpha * (1 - current.particles * 0.35)
         if (alpha < 0.01) continue
         const radius = base * layer.scale
         const turn = angle * (index % 2 === 0 ? 1 : -1.3) + layer.phase

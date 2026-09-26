@@ -2,49 +2,21 @@
 # Ships packages/server to the VPS and (re)starts it. Run from the repo root:
 #   bash packages/server/deploy/deploy.sh [ubuntu@51.75.74.94]
 #
-# First run also creates the service user, the data directory and the Caddy block.
+# Since 26 Sep 2026 larger transfers from the home network to the VPS are reset on the way
+# (scp, a piped script, even SSH's post-quantum key exchange). So the bundle goes up to the
+# server-latest GitHub release, and the VPS fetches and installs it itself: all this
+# machine sends is one short command. deploy/install.sh does the installing.
 # Data in /var/lib/uurwerk is never touched.
 set -euo pipefail
 
 TARGET="${1:-ubuntu@51.75.74.94}"
+URL=https://github.com/hiddepepijn-work/Uurwerk/releases/download/server-latest/uurwerk-server.tgz
 
 npm run build:server
-# The bundle travels through GitHub, not scp: since 26 Sep 2026 large uploads from the home
-# network to the VPS get reset on the way, while the VPS downloads from GitHub fine.
 tar -C packages/server -czf uurwerk-server.tgz --exclude=node_modules --exclude=data .
 gh release view server-latest >/dev/null 2>&1 ||
   gh release create server-latest --prerelease --title "Uurwerk server (laatste build)" --notes "Serverpakket voor de VPS."
 gh release upload server-latest uurwerk-server.tgz --clobber
 rm uurwerk-server.tgz
 
-ssh "$TARGET" 'bash -s' <<'REMOTE'
-set -euo pipefail
-id uurwerk >/dev/null 2>&1 || sudo useradd --system --home /var/lib/uurwerk --shell /usr/sbin/nologin uurwerk
-sudo mkdir -p /opt/uurwerk-server /var/lib/uurwerk
-sudo chown uurwerk:uurwerk /var/lib/uurwerk
-sudo chmod 700 /var/lib/uurwerk
-
-curl -fsSL -o /tmp/uurwerk-server.tgz https://github.com/hiddepepijn-work/Uurwerk/releases/download/server-latest/uurwerk-server.tgz
-sudo tar -C /opt/uurwerk-server -xzf /tmp/uurwerk-server.tgz
-rm /tmp/uurwerk-server.tgz
-cd /opt/uurwerk-server && sudo npm install --omit=dev --no-audit --no-fund --loglevel=error
-
-sudo cp deploy/uurwerk-server.service /etc/systemd/system/uurwerk-server.service
-sudo systemctl daemon-reload
-sudo systemctl enable --quiet uurwerk-server
-sudo systemctl restart uurwerk-server
-
-if ! sudo grep -q 'uurwerk.duckdns.org' /etc/caddy/Caddyfile; then
-  # Built and validated as a copy first: Reisbouwer shares this file, and a broken one on
-  # disk would take it down at the next Caddy restart.
-  sudo cat /etc/caddy/Caddyfile deploy/Caddyfile.uurwerk > /tmp/Caddyfile.nieuw
-  sudo caddy validate --config /tmp/Caddyfile.nieuw --adapter caddyfile
-  sudo cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.voor-uurwerk-$(date +%F)"
-  sudo cp /tmp/Caddyfile.nieuw /etc/caddy/Caddyfile
-  rm -f /tmp/Caddyfile.nieuw
-  sudo systemctl reload caddy
-fi
-
-sleep 2
-sudo systemctl is-active uurwerk-server
-REMOTE
+ssh "$TARGET" "rm -rf /tmp/uw && mkdir -p /tmp/uw && curl -fsSL $URL | tar -xz -C /tmp/uw && bash /tmp/uw/deploy/install.sh"

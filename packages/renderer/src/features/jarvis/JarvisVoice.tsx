@@ -56,7 +56,7 @@ export function JarvisVoice({
 
   // ------------------------------------------------------------ speaking
 
-  const speak = useCallback(async (audio: string | null, text: string): Promise<void> => {
+  const speak = useCallback(async (audio: string | null, text: string, type = 'audio/mpeg'): Promise<void> => {
     await window.audioFocus?.take().catch(() => undefined)
     const release = (): void => void window.audioFocus?.release().catch(() => undefined)
 
@@ -83,7 +83,7 @@ export function JarvisVoice({
 
     // Measure the voice as it plays: the orb moves with what you hear.
     await new Promise<void>((resolve) => {
-      const element = new Audio(`data:audio/mpeg;base64,${audio}`)
+      const element = new Audio(`data:${type};base64,${audio}`)
       const context = new AudioContext()
       const source = context.createMediaElementSource(element)
       const analyser = context.createAnalyser()
@@ -151,7 +151,7 @@ export function JarvisVoice({
         conversation.current = answer.conversationId
         setReply(answer.text)
         setPhase('speaking')
-        await speak(answer.audio, answer.text)
+        await speak(answer.audio, answer.text, answer.audioType ?? undefined)
         if (alive.current) void listen()
       } catch (error) {
         setProblem(error instanceof Error ? error.message : String(error))

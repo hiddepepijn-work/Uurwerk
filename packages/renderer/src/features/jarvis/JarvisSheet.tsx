@@ -37,11 +37,11 @@ interface SpeechRecognitionLike {
 
 const Recognition = typeof window !== 'undefined' ? (window.SpeechRecognition ?? window.webkitSpeechRecognition) : undefined
 
-async function play(audio: string | null, text: string): Promise<void> {
+async function play(audio: string | null, text: string, type = 'audio/mpeg'): Promise<void> {
   await window.audioFocus?.take().catch(() => undefined)
   const release = (): void => void window.audioFocus?.release().catch(() => undefined)
   if (audio) {
-    const player = new Audio(`data:audio/mpeg;base64,${audio}`)
+    const player = new Audio(`data:${type};base64,${audio}`)
     player.onended = release
     player.onerror = release
     await player.play().catch(release)
@@ -85,7 +85,7 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
       })
       conversation.current = reply.conversationId
       setLines((current) => [...current, { from: 'jarvis', text: reply.text }])
-      void play(reply.audio, reply.text)
+      void play(reply.audio, reply.text, reply.audioType ?? undefined)
     } catch (error) {
       setProblem(error instanceof Error ? error.message : String(error))
     } finally {

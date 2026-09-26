@@ -23,7 +23,7 @@ import { log } from '@backend/log.js'
 
 import brief from '../../../../docs/jarvis.md'
 import { claude, compatible, openai, type Conversation, type Provider } from './providers.js'
-import { speak, speakFree } from './speech.js'
+import { speak, speakFree, speakGemini } from './speech.js'
 import { runTool } from './tools.js'
 
 const IDLE_MS = 2 * 3_600_000
@@ -63,6 +63,9 @@ export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTra
   const model = process.env.JARVIS_MODEL?.trim() || 'claude-opus-5'
   const effort = (process.env.JARVIS_EFFORT as 'low' | 'medium' | 'high' | undefined) ?? 'medium'
   const region = process.env.AZURE_SPEECH_REGION?.trim() || 'westeurope'
+  /** Gemini voice (Kore, Charon, Orus, Aoede, …) and its model; used whenever there is a Gemini key. */
+  const voice = process.env.JARVIS_VOICE?.trim() || 'Orus'
+  const ttsModel = process.env.JARVIS_TTS_MODEL?.trim() || 'gemini-3.8-flash-tts'
   /** When the model is busy or out of free quota: the next ones, in order. */
   const fallbacks = (process.env.JARVIS_FALLBACK_MODELS ?? '').split(',').map((entry) => entry.trim()).filter(Boolean)
   const family = /^gemini/i.test(model)
@@ -129,18 +132,27 @@ export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTra
       const turn = await live.conversation.send(said, context(), (name, args) => runTool(api, name, args))
 
       let audio: string | null = null
-      const voiceKey = secrets.get('azureSpeechKey')
+      let audioType: string | null = null
       if (input.speak !== false) {
-        try {
-          const bytes = voiceKey ? await speak(turn.text, voiceKey, region) : await speakFree(turn.text)
-          audio = Buffer.from(bytes).toString('base64')
-        } catch (error) {
-          // A reply without a voice still answers the question.
-          log.warn('Jarvis could not speak.', error)
+        // Best voice first: Gemini (natural), then Azure, then the free Edge voice.
+        const geminiKey = secrets.get('geminiKey')
+        const azureKey = secrets.get('azureSpeechKey')
+        const attempts: Array<[string, () => Promise<Uint8Array>]> = []
+        if (geminiKey) attempts.push(['audio/wav', () => speakGemini(turn.text, geminiKey, voice, ttsModel)])
+        if (azureKey) attempts.push(['audio/mpeg', () => speak(turn.text, azureKey, region)])
+        attempts.push(['audio/mpeg', () => speakFree(turn.text)])
+        for (const [type, attempt] of attempts) {
+          try {
+            audio = Buffer.from(await attempt()).toString('base64')
+            audioType = type
+            break
+          } catch (error) {
+            log.warn('A voice failed; trying the next.', error)
+          }
         }
       }
 
-      return { conversationId: id!, text: turn.text, audio, changed: turn.changed }
+      return { conversationId: id!, text: turn.text, audio, audioType, changed: turn.changed }
     }
   }
 }

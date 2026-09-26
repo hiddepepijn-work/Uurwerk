@@ -61,3 +61,54 @@ export async function speakFree(text: string): Promise<Uint8Array> {
     tts.close()
   }
 }
+
+/**
+ * Gemini's own voices (gemini-3.8-flash-tts): natural Dutch with a tone the prompt can set,
+ * on the same free key as the model. The first choice when a Gemini key is there.
+ * Returns WAV.
+ */
+export async function speakGemini(text: string, key: string, voice: string, model: string): Promise<Uint8Array> {
+  const prompt = `Zeg in het Nederlands, direct en zakelijk met een klein beetje humor, als een assistent die je goed kent: ${text}`
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } }
+        }
+      }),
+      signal: AbortSignal.timeout(30_000)
+    }
+  )
+  if (!response.ok) throw new Error(`Gemini TTS ${response.status}: ${(await response.text()).slice(0, 200)}`)
+  const body = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType: string; data: string } }> } }>
+  }
+  const audio = body.candidates?.[0]?.content?.parts?.[0]?.inlineData
+  if (!audio) throw new Error('Gemini TTS gaf geen audio terug')
+  const bytes = new Uint8Array(Buffer.from(audio.data, 'base64'))
+  // Some models send raw 24 kHz PCM; a WAV header makes it playable everywhere.
+  return audio.mimeType.startsWith('audio/L16') ? wav(bytes, 24_000) : bytes
+}
+
+function wav(pcm: Uint8Array, rate: number): Uint8Array {
+  const header = Buffer.alloc(44)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(36 + pcm.length, 4)
+  header.write('WAVE', 8)
+  header.write('fmt ', 12)
+  header.writeUInt32LE(16, 16)
+  header.writeUInt16LE(1, 20)
+  header.writeUInt16LE(1, 22)
+  header.writeUInt32LE(rate, 24)
+  header.writeUInt32LE(rate * 2, 28)
+  header.writeUInt16LE(2, 32)
+  header.writeUInt16LE(16, 34)
+  header.write('data', 36)
+  header.writeUInt32LE(pcm.length, 40)
+  return new Uint8Array(Buffer.concat([header, Buffer.from(pcm)]))
+}

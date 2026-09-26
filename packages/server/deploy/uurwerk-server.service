@@ -28,6 +28,8 @@ Environment=JARVIS_MODEL=gemini-3.8-flash
 Environment=JARVIS_FALLBACK_MODELS=gemini-3.7-flash,gemini-3.6-flash,gemini-flash-latest
 # How much it thinks per turn: low | medium | high. Medium is Luna's own default.
 Environment=JARVIS_EFFORT=medium
+# His voice: a Gemini voice (Orus = firm, male). Without a Gemini key: Azure, then Edge.
+Environment=JARVIS_VOICE=Orus
 Environment=AZURE_SPEECH_REGION=westeurope
 # Optional: the old upload door. Put UURWERK_PUBLISH_TOKEN=… in
 # /etc/uurwerk.env (root, 0640) only if something still PUTs to /publish/.
