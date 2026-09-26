@@ -1,7 +1,7 @@
 /**
  * The language model behind Jarvis, behind one small interface so the choice is a setting:
  * `JARVIS_MODEL=claude-opus-5` (default), `claude-sonnet-5`, `claude-haiku-4-5`, or an
- * OpenAI model such as `gpt-5-mini`. Each provider keeps its own conversation history in
+ * OpenAI model such as `gpt-6-luna` or `gpt-5-mini`. Each provider keeps its own conversation history in
  * its own message format and runs the tool loop until the model has an answer.
  */
 
@@ -139,7 +139,13 @@ export function openai(apiKey: string, model: string): Provider {
           let changed = false
 
           for (let round = 0; round < MAX_ROUNDS; round++) {
-            const response = await client.chat.completions.create({ model, tools, messages: history })
+            // Chat Completions only calls functions with reasoning off on the GPT-6 family.
+            const response = await client.chat.completions.create({
+              model,
+              tools,
+              messages: history,
+              ...(/^gpt-6/.test(model) ? { reasoning_effort: 'none' as const } : {})
+            })
             const message = response.choices[0]?.message
             if (!message) return { text: 'Geen antwoord gekregen.', changed }
             history.push(message)

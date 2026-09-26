@@ -148,7 +148,8 @@ Regel: bij twijfel vraagt hij. Wat hij veranderd heeft, zegt hij hardop terug.
 - Server: `packages/server/app/jarvis/` — `tools.ts` (wat hij kan, over de gewone API),
   `providers.ts` (Claude of OpenAI), `speech.ts` (Azure, Fenna), `index.ts` (gesprekken).
   Deze brief is letterlijk zijn systeemprompt.
-- Model: `JARVIS_MODEL` in de service-unit. Standaard `claude-opus-5`; ook
+- Model: `JARVIS_MODEL` in de service-unit, nu **`gpt-6-luna`** ($0,10 / $0,50 per 1M tokens;
+  tools via Chat Completions met reasoning uit). Ook mogelijk: `claude-opus-5`,
   `claude-sonnet-5`, `claude-haiku-4-5`, `gpt-5-mini`. `JARVIS_EFFORT` (Claude): standaard medium.
 - Keys op de VPS: `uurwerk-secrets set anthropicKey|openaiKey|azureSpeechKey`
   (`AZURE_SPEECH_REGION`, standaard westeurope). Geen herstart nodig.

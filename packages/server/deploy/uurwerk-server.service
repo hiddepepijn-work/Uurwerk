@@ -20,6 +20,9 @@ Environment=UURWERK_PORT=8790
 Environment=UURWERK_TRUST_PROXY=1
 Environment=UURWERK_SESSION_HOURS=12
 Environment=UURWERK_TITLE=Uurwerk
+# Jarvis: the model (see docs/jarvis.md). gpt-6-luna needs openaiKey; claude-* needs anthropicKey.
+Environment=JARVIS_MODEL=gpt-6-luna
+Environment=AZURE_SPEECH_REGION=westeurope
 # Optional: the old upload door. Put UURWERK_PUBLISH_TOKEN=… in
 # /etc/uurwerk.env (root, 0640) only if something still PUTs to /publish/.
 EnvironmentFile=-/etc/uurwerk.env
