@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { JarvisStatus } from '@core/contract/api.js'
-import { api, events } from '../../api/client.js'
+import { api } from '../../api/client.js'
 import { CloseIcon, MicIcon, SendIcon } from '../../ui/icons.js'
 
 /**
@@ -92,16 +92,6 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
       setBusy(false)
     }
   }, [])
-
-  // A moment from a notification: a fresh conversation that Jarvis opens.
-  useEffect(() => {
-    return events.on('jarvis:open', ({ moment }) => {
-      if (!moment) return
-      conversation.current = null
-      setLines([])
-      void ask({ moment })
-    })
-  }, [ask])
 
   useEffect(() => {
     if (!open) return

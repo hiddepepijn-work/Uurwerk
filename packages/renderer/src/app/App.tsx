@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { IconRail, type Screen } from './IconRail.js'
 import { BottomBar } from './BottomBar.js'
 import { JarvisSheet } from '../features/jarvis/JarvisSheet.js'
+import { JarvisVoice } from '../features/jarvis/JarvisVoice.js'
 import { EventComposer } from '../features/calendar/EventComposer.js'
 import { useCompact } from '../hooks/useCompact.js'
 import { toIsoDate } from '@core/util/time.js'
@@ -34,8 +35,10 @@ export function App() {
   /** The evening question — "anything to add to the agenda?" — opens this. */
   const [composerOpen, setComposerOpen] = useState(false)
   const [jarvisOpen, setJarvisOpen] = useState(false)
+  /** Talking is the default way in; typing is one tap away from it. */
+  const [voiceOpen, setVoiceOpen] = useState(false)
 
-  useEffect(() => events.on('jarvis:open', () => setJarvisOpen(true)), [])
+  useEffect(() => events.on('jarvis:open', () => setVoiceOpen(true)), [])
   const compact = useCompact()
 
   const openSwitcher = useCallback(() => setSwitcherOpen(true), [])
@@ -91,7 +94,7 @@ export function App() {
       {!compact && <IconRail active={screen} onNavigate={setScreen} />}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {!compact && <TopBar running={tracking.running} onJarvis={() => setJarvisOpen(true)} />}
+        {!compact && <TopBar running={tracking.running} onJarvis={() => setVoiceOpen(true)} />}
 
         <main className="min-h-0 flex-1 overflow-y-auto">
           {screen === 'today' && (
@@ -113,8 +116,16 @@ export function App() {
         </main>
       </div>
 
-      {compact && <BottomBar active={screen} onNavigate={setScreen} onJarvis={() => setJarvisOpen(true)} />}
+      {compact && <BottomBar active={screen} onNavigate={setScreen} onJarvis={() => setVoiceOpen(true)} />}
 
+      <JarvisVoice
+        open={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        onKeyboard={() => {
+          setVoiceOpen(false)
+          setJarvisOpen(true)
+        }}
+      />
       <JarvisSheet open={jarvisOpen} onClose={() => setJarvisOpen(false)} />
 
       {composerOpen && (

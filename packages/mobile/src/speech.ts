@@ -16,8 +16,24 @@ export const AudioFocus = registerPlugin<{
   take(): Promise<void>
   release(): Promise<void>
   setWidgetData(options: { json: string }): Promise<void>
+  listenStart(options: { locale: string }): Promise<void>
+  listenStop(): Promise<void>
+  addListener(
+    event: 'speechPartial' | 'speechEnd' | 'speechLevel',
+    handler: (data: { text?: string; level?: number }) => void
+  ): Promise<{ remove: () => Promise<void> }>
 }>('AudioFocus', {
-  web: { take: async () => undefined, release: async () => undefined, setWidgetData: async () => undefined }
+  // In a browser (development) there is nothing to pause, share or listen with.
+  web: {
+    take: async () => undefined,
+    release: async () => undefined,
+    setWidgetData: async () => undefined,
+    listenStart: async () => {
+      throw new Error('Luisteren kan alleen in de iPhone-app.')
+    },
+    listenStop: async () => undefined,
+    addListener: async () => ({ remove: async () => undefined })
+  }
 })
 
 async function say(text: string): Promise<void> {

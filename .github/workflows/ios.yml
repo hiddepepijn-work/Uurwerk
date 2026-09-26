@@ -97,6 +97,9 @@ jobs:
             /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${{ github.run_number }}" "$PLIST"
           # Dark app: keep the status bar light.
           /usr/libexec/PlistBuddy -c "Add :UIUserInterfaceStyle string Dark" "$PLIST" || true
+          # Talking to Jarvis: iOS asks for both, with these sentences.
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Uurwerk luistert als je met Jarvis praat." "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Uurwerk zet wat je tegen Jarvis zegt om in tekst." "$PLIST" || true
           # uurwerk:// — what the widget buttons open.
           /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PLIST" || true
           /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PLIST"

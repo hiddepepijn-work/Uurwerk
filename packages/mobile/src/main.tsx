@@ -16,6 +16,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App as Capacitor } from '@capacitor/app'
 import { Preferences } from '@capacitor/preferences'
+import { Capacitor as Platform } from '@capacitor/core'
 
 import type { TimeTrackerAPI } from '@core/contract/api.js'
 import { CHANNELS } from '@core/contract/channels.js'
@@ -182,6 +183,18 @@ async function start(): Promise<void> {
   window.api = api as unknown as TimeTrackerAPI
   window.events = bus
   window.audioFocus = AudioFocus
+  // Talking to Jarvis: the phone's own speech recognition, through the native plugin.
+  const subscribe = (event: 'speechPartial' | 'speechEnd' | 'speechLevel', handler: (data: { text?: string; level?: number }) => void) => {
+    const pending = AudioFocus.addListener(event, handler)
+    return () => void pending.then((listener) => listener.remove())
+  }
+  if (Platform.isNativePlatform()) window.jarvisListen = {
+    start: () => AudioFocus.listenStart({ locale: 'nl-NL' }),
+    stop: () => AudioFocus.listenStop(),
+    onPartial: (handler) => subscribe('speechPartial', (data) => handler(data.text ?? '')),
+    onLevel: (handler) => subscribe('speechLevel', (data) => handler(data.level ?? 0)),
+    onEnd: (handler) => subscribe('speechEnd', (data) => handler(data.text ?? ''))
+  }
 
   const focus = new FocusGuard(
     backend,
