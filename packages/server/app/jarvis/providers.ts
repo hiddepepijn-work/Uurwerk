@@ -8,7 +8,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 
-import { TOOLS } from './tools.js'
+import { TOOLS } from '@core/services/jarvis-tools.js'
 
 export interface Turn {
   /** Jarvis's reply to read and speak. */

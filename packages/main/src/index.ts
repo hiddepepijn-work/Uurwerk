@@ -239,7 +239,9 @@ function setupHotkeys(): void {
 function applyContentSecurityPolicy(): void {
   const devServer = process.env['ELECTRON_RENDERER_URL']
   const scriptSrc = devServer ? `'self' 'unsafe-inline' ${devServer}` : `'self'`
-  const connectSrc = devServer ? `'self' ${devServer} ws://localhost:*` : `'self'`
+  // Jarvis live talks straight to Gemini Live over a WebSocket.
+  const gemini = 'wss://generativelanguage.googleapis.com https://generativelanguage.googleapis.com'
+  const connectSrc = devServer ? `'self' ${devServer} ws://localhost:* ${gemini}` : `'self' ${gemini}`
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
@@ -264,8 +266,13 @@ function applyContentSecurityPolicy(): void {
     })
   })
 
-  // Nothing in this app needs a camera, a microphone or your location.
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+  // Only the microphone, for talking to Jarvis. No camera, no location.
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+    const mediaTypes = 'mediaTypes' in details ? (details.mediaTypes ?? []) : []
+    if (permission === 'media' && mediaTypes.length > 0 && mediaTypes.every((type) => type === 'audio')) {
+      callback(true)
+      return
+    }
     log.warn(`Denied a permission request from the renderer: ${permission}`)
     callback(false)
   })

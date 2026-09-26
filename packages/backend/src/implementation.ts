@@ -21,6 +21,7 @@ import type {
 import type { DayPlan, IsoDate, IsoWeek, PublishAudience, Settings } from '@core/contract/types.js'
 import { newId } from '@core/db/connection.js'
 import type { Store } from '@core/db/index.js'
+import { runTool } from '@core/services/jarvis-tools.js'
 import { buildIndex } from '@core/services/publish.js'
 import { reasons, type DayProposal, type RangeProposal } from '@core/services/planner/index.js'
 import { buildReportDocument, packDocument, reportFileName } from '@core/report/docx.js'
@@ -77,7 +78,7 @@ export function buildImplementation(
     projectOverview
   } = backend
 
-  return {
+  const implementation: Implementation = {
     areas: {
       list: async (includeArchived) => store.areas.list(includeArchived ?? false),
       create: async (area) => store.areas.create(area),
@@ -785,7 +786,12 @@ export function buildImplementation(
 
     jarvis: {
       ask: async (input) => jarvisHost().ask(input),
-      status: async () => jarvisHost().status()
+      status: async () => jarvisHost().status(),
+      liveSession: async (input) => jarvisHost().liveSession(input),
+      liveUsage: async (input) => jarvisHost().liveUsage(input),
+      // The live conversation's tools run on this copy, not on the server: nearer, and they
+      // sync like anything else.
+      runTool: async (input) => runTool(implementation as TimeTrackerAPI, input.name, input.args)
     },
 
     sync: {
@@ -795,6 +801,7 @@ export function buildImplementation(
       unpair: async () => host().sync.unpair()
     }
   }
+  return implementation
 }
 
 /** Jarvis lives on the server; anywhere else these calls are forwarded before they get here. */

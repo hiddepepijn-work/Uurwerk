@@ -7,7 +7,7 @@ export const SERVER_ONLY: Record<string, readonly string[]> = {
   calendar: ['connectIcs', 'connectIcloud', 'pushPlan', 'disconnect', 'syncNow'],
   days: ['publish', 'unpublish'],
   publish: ['now'],
-  jarvis: ['ask', 'status']
+  jarvis: ['ask', 'status', 'liveSession', 'liveUsage']
 }
 
 export const isServerOnly = (domain: string, method: string): boolean =>

@@ -2,14 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, events } from '../../api/client.js'
 import { CloseIcon, SendIcon } from '../../ui/icons.js'
 import { JarvisOrb, type OrbState } from './JarvisOrb.js'
+import { LiveCall } from './live.js'
 
 /**
- * Talking to Jarvis, the way a phone call works: it opens listening, sends what you said
- * when you pause, speaks the answer, and listens again — until you close it. Tap the orb to
- * cut in: while he talks it stops him and listens; while you talk it sends right away.
+ * Talking to Jarvis, the way a phone call works. First choice is live (live.ts): the voice
+ * streams both ways and either side can cut in. When live is not there — no connection,
+ * budget spent — it falls back to turns: listen, send what you said when you pause, speak
+ * the answer, listen again. Tap the orb to cut in: while he talks it stops him.
  *
- * Listening is the phone's own speech recognition (window.jarvisListen, set by the phone
- * app). Without it — on the laptop — the same screen takes typed questions and still speaks.
+ * The turn-based listening is the phone's own speech recognition (window.jarvisListen, set
+ * by the phone app). Without it — on the laptop — that mode takes typed questions.
  */
 
 export interface ListenBridge {
@@ -52,6 +54,8 @@ export function JarvisVoice({
   const conversation = useRef<string | null>(null)
   const player = useRef<{ stop: () => void } | null>(null)
   const alive = useRef(false)
+  const live = useRef<LiveCall | null>(null)
+  const [isLive, setIsLive] = useState(false)
   const bridge = typeof window !== 'undefined' ? window.jarvisListen : undefined
 
   // ------------------------------------------------------------ speaking
@@ -189,7 +193,37 @@ export function JarvisVoice({
     []
   )
 
-  // Opening: straight into the conversation.
+  const startLive = useCallback(
+    async (moment: 'morning' | 'evening' | null): Promise<boolean> => {
+      try {
+        const call = await LiveCall.start(moment, level, {
+          onPhase: (next) => alive.current && setPhase(next),
+          onHeard: (text) => alive.current && setHeard(text),
+          onReply: (text) => alive.current && setReply(text),
+          onEnd: (trouble) => {
+            live.current = null
+            if (!alive.current) return
+            setIsLive(false)
+            setProblem(trouble)
+            setPhase('idle')
+          }
+        })
+        if (!alive.current) {
+          void call.end()
+          return true
+        }
+        live.current = call
+        setIsLive(true)
+        return true
+      } catch (error) {
+        if (alive.current) setProblem(`Live lukt niet (${error instanceof Error ? error.message : String(error)}), dus even op de oude manier.`)
+        return false
+      }
+    },
+    []
+  )
+
+  // Opening: straight into the conversation — live when it can.
   useEffect(() => {
     if (!open) return
     alive.current = true
@@ -199,10 +233,16 @@ export function JarvisVoice({
     setProblem(null)
     const moment = pendingMoment.current
     pendingMoment.current = null
-    if (moment) void ask({ moment })
-    else void listen()
+    void startLive(moment).then((ok) => {
+      if (ok || !alive.current) return
+      if (moment) void ask({ moment })
+      else void listen()
+    })
     return () => {
       alive.current = false
+      void live.current?.end()
+      live.current = null
+      setIsLive(false)
       player.current?.stop()
       void bridge?.stop().catch(() => undefined)
       level.current = 0
@@ -210,6 +250,18 @@ export function JarvisVoice({
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tapOrb = (): void => {
+    if (live.current) {
+      if (phase === 'speaking') live.current.interrupt()
+      return
+    }
+    if (isLive || phase === 'thinking') return
+    if (phase === 'idle') {
+      setProblem(null)
+      void startLive(null).then((ok) => {
+        if (!ok) void listen()
+      })
+      return
+    }
     if (phase === 'speaking') {
       player.current?.stop()
       return // the loop moves on to listening once the voice has stopped
@@ -218,7 +270,6 @@ export function JarvisVoice({
       void bridge?.stop()
       return
     }
-    if (phase === 'idle') void listen()
   }
 
   const sendTyped = (): void => {
@@ -226,7 +277,8 @@ export function JarvisVoice({
     if (!text || phase === 'thinking') return
     setDraft('')
     setHeard(text)
-    void ask({ text })
+    if (live.current) live.current.say(text)
+    else void ask({ text })
   }
 
   if (!open) return null

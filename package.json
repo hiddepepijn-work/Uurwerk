@@ -20,7 +20,7 @@
     "inspect": "tsx scripts/inspect-today.ts",
     "icons": "tsx scripts/make-icons.ts",
     "shortcut": "powershell -ExecutionPolicy Bypass -File scripts/install-shortcut.ps1",
-    "build:server": "esbuild packages/server/app/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=packages/server/dist/app.js --external:node-sqlite3-wasm --external:nodemailer --external:docx --external:msedge-tts --loader:.md=text --log-level=warning",
+    "build:server": "esbuild packages/server/app/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=packages/server/dist/app.js --external:node-sqlite3-wasm --external:nodemailer --external:docx --external:msedge-tts --loader:.md=text --log-level=warning --banner:js=\"import { createRequire as __uwRequire } from 'node:module'; const require = __uwRequire(import.meta.url);\"",
     "build:mobile": "vite build --config packages/mobile/vite.config.ts",
     "dev:mobile": "vite --config packages/mobile/vite.config.ts"
   },
@@ -32,6 +32,7 @@
     "@capacitor/ios": "^8.5.2",
     "@capacitor/local-notifications": "^8.3.1",
     "@capacitor/preferences": "^8.0.1",
+    "@google/genai": "^2.24.0",
     "docx": "^9.1.0",
     "msedge-tts": "^2.0.8",
     "node-sqlite3-wasm": "^0.8.30",

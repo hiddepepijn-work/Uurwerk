@@ -23,8 +23,9 @@ import { log } from '@backend/log.js'
 
 import brief from '../../../../docs/jarvis.md'
 import { claude, compatible, openai, type Conversation, type Provider } from './providers.js'
+import { addUsage, liveSession } from './live.js'
 import { speak, speakFree, speakGemini } from './speech.js'
-import { runTool } from './tools.js'
+import { runTool } from '@core/services/jarvis-tools.js'
 
 const IDLE_MS = 2 * 3_600_000
 
@@ -58,7 +59,12 @@ interface Live {
   lastUsed: number
 }
 
-export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTrackerAPI['jarvis'] {
+export function createJarvis(
+  api: TimeTrackerAPI,
+  secrets: SecretVault,
+  /** Where this month's live spend is kept. */
+  usagePath: string
+): TimeTrackerAPI['jarvis'] {
   const conversations = new Map<string, Live>()
   const model = process.env.JARVIS_MODEL?.trim() || 'claude-opus-5'
   const effort = (process.env.JARVIS_EFFORT as 'low' | 'medium' | 'high' | undefined) ?? 'medium'
@@ -153,6 +159,29 @@ export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTra
       }
 
       return { conversationId: id!, text: turn.text, audio, audioType, changed: turn.changed }
+    },
+
+    async liveSession(input) {
+      const key = secrets.get('geminiKey')
+      if (!key) throw new Error('Geen geminiKey op de server. Zet hem met: uurwerk-secrets set geminiKey')
+      return liveSession({
+        api,
+        key,
+        system: SYSTEM,
+        voice,
+        opening: input.moment ? MOMENT[input.moment] : null,
+        usagePath
+      })
+    },
+
+    async runTool(input) {
+      return runTool(api, input.name, input.args)
+    },
+
+    async liveUsage(input) {
+      const spend = addUsage(usagePath, input)
+      log.info('Jarvis live spend.', spend)
+      return spend
     }
   }
 }

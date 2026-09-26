@@ -5,7 +5,7 @@ import { createBackend } from '@backend/create.js'
 import { installHost, unavailable, type Host } from '@backend/host.js'
 import { buildImplementation } from '@backend/implementation.js'
 
-import { runTool } from './tools.js'
+import { runTool } from '@core/services/jarvis-tools.js'
 
 let api: TimeTrackerAPI
 

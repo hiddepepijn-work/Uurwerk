@@ -4,7 +4,7 @@ import { api } from '../../api/client.js'
 import { CloseIcon, MicIcon, SendIcon } from '../../ui/icons.js'
 
 /**
- * Talking to Jarvis: his replies as text and in Fenna's voice, yours typed or dictated.
+ * Talking to Jarvis: his replies as text and in his own voice, yours typed or dictated.
  *
  * Opened from the Jarvis tab or button, or by the 08:30 and 21:00 notifications — then with
  * a moment, and Jarvis speaks first. The conversation runs on the server; this is only the
@@ -144,7 +144,7 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
           <div className="flex min-w-0 flex-1 flex-col">
             <h2 className="text-[17px] font-semibold">Jarvis</h2>
             <span className="truncate text-[12px] text-text-dim">
-              {status ? (status.ready ? `${status.model}${status.voice ? ' · Fenna' : ' · zonder stem'}` : status.problem) : 'Verbinden…'}
+              {status ? (status.ready ? `${status.model}${status.voice ? ' · Orus' : ' · zonder stem'}` : status.problem) : 'Verbinden…'}
             </span>
           </div>
           <button

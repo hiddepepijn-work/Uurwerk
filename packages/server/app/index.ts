@@ -164,7 +164,7 @@ export async function startApp(options: AppOptions): Promise<App> {
     const built = buildImplementation(backend)
     implementation = callable(built)
     // Jarvis works through the same implementation the devices call, so what he does syncs.
-    serverHost.jarvis = createJarvis(built as unknown as TimeTrackerAPI, secrets)
+    serverHost.jarvis = createJarvis(built as unknown as TimeTrackerAPI, secrets, join(options.dataDir, 'jarvis-live.json'))
     backend.trackingService.onChange((segment, reason) => {
       for (const listener of listeners) {
         listener('tracking:segmentChanged', { segment, reason })

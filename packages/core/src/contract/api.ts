@@ -601,7 +601,42 @@ export interface TimeTrackerAPI {
     /** One turn: Hidde's words (or a moment that opens the conversation) in, Jarvis's reply out. */
     ask(input: JarvisAsk): Promise<JarvisReply>
     status(): Promise<JarvisStatus>
+    /**
+     * A live voice conversation: a short-lived token with which the device talks straight to
+     * the realtime voice model, the brief and today's day already inside. Refused once this
+     * month's spend reaches the cap.
+     */
+    liveSession(input: { moment?: 'morning' | 'evening' | null }): Promise<JarvisLiveSession>
+    /** What a live conversation used, reported when it ends; it counts towards the cap. */
+    liveUsage(input: JarvisLiveUsage): Promise<JarvisLiveSpend>
+    /** One of Jarvis's tools, run on this device's copy: what the live model asked for. */
+    runTool(input: { name: string; args: Record<string, unknown> }): Promise<unknown>
   }
+}
+
+export interface JarvisLiveSession {
+  /** Ephemeral token: use it as the API key for this one connection. */
+  token: string
+  apiVersion: string
+  model: string
+  /** The connection config, the same as locked into the token. */
+  config: Record<string, unknown>
+  /** For a moment: what to send first so Jarvis opens the conversation. */
+  opening: string | null
+  spend: JarvisLiveSpend
+}
+
+export interface JarvisLiveUsage {
+  promptTokens: number
+  responseTokens: number
+  thoughtsTokens: number
+}
+
+export interface JarvisLiveSpend {
+  /** YYYY-MM. */
+  month: string
+  usd: number
+  capUsd: number
 }
 
 export interface JarvisAsk {
