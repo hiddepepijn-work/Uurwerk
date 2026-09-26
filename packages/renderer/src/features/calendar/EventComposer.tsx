@@ -59,6 +59,7 @@ export function EventComposer({
   const [startMin, setStartMin] = useState(10 * 60)
   const [endMin, setEndMin] = useState(11 * 60)
   const [areaId, setAreaId] = useState<string | null>(null)
+  const [notes, setNotes] = useState('')
   const [travelMin, setTravelMin] = useState(0)
   const [travelBack, setTravelBack] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -83,6 +84,7 @@ export function EventComposer({
       const created = await api.calendar.createEvent({
         title: title.trim(),
         location: location.trim() || null,
+        description: notes.trim() || null,
         startsAt: at(date, startMin),
         endsAt: at(date, endMin),
         // Ours, not a provider's: this is what lets the classifier let you edit the times
@@ -193,6 +195,17 @@ export function EventComposer({
           <span className="text-[12px] text-text-faint">
             Used when guessing what this is, alongside the title.
           </span>
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="text-[13px] text-text-dim">Notes</span>
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={3}
+            placeholder="What to bring or prepare, who is there, particulars"
+            className={`${field} resize-y`}
+          />
         </label>
 
         <div className="flex flex-col gap-2">

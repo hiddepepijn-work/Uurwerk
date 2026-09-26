@@ -78,6 +78,7 @@ export function TaskEditor({
   const [due, setDue] = useState('')
   const [earliestStart, setEarliestStart] = useState('')
   const [mustDo, setMustDo] = useState('')
+  const [notes, setNotes] = useState('')
   const [edges, setEdges] = useState<DependencyEdit[]>([])
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -94,6 +95,7 @@ export function TaskEditor({
     setDue(task?.dueDate ?? '')
     setEarliestStart(task?.earliestStartDate ?? '')
     setMustDo(task?.mustDoDate ?? '')
+    setNotes(task?.notes ?? '')
     setEdges(
       dependencies.map((dependency) => ({
         dependsOnTaskId: dependency.dependsOnTaskId,
@@ -147,7 +149,8 @@ export function TaskEditor({
         estimateMin: estimate ? Math.round(Number(estimate) * 60) : null,
         dueDate: due || null,
         earliestStartDate: earliestStart || null,
-        mustDoDate: mustDo || null
+        mustDoDate: mustDo || null,
+        notes: notes.trim() || null
       }
 
       // The dependency write can be rejected for a cycle, so it goes last: a refused edge
@@ -353,6 +356,18 @@ export function TaskEditor({
             </span>
           </div>
         </div>
+
+        <label className="flex flex-col gap-2">
+          <span className="text-[13px] text-text-dim">Notes</span>
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={3}
+            placeholder="What counts as done, what you need, particulars"
+            className="w-full resize-y rounded-[10px] border border-border bg-bg px-3.5 py-2.5 text-[14px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+          />
+          <span className="text-[12px] text-text-faint">Jarvis reads these when it reminds you or asks how it went.</span>
+        </label>
 
         <div className="flex flex-col gap-2">
           <span className="text-[13px] text-text-dim">Waits for</span>

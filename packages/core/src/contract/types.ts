@@ -170,6 +170,8 @@ export interface Task {
   blockedReason: string | null
   /** The user pinned this task to a specific day as a must-do. */
   mustDoDate: IsoDate | null
+  /** What done means, what is needed, particulars — what Jarvis asked when it was made. */
+  notes: string | null
   sortOrder: number
   createdAt: number
   completedAt: number | null
@@ -186,6 +188,7 @@ export interface NewTask {
   estimateMin?: number | null
   dueDate?: IsoDate | null
   earliestStartDate?: IsoDate | null
+  notes?: string | null
 }
 
 export type TaskPatch = Partial<
@@ -202,6 +205,7 @@ export type TaskPatch = Partial<
     | 'workTypeId'
     | 'blockedReason'
     | 'mustDoDate'
+    | 'notes'
     | 'sortOrder'
   >
 >

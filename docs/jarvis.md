@@ -56,7 +56,25 @@ nog geregeld moet worden (met het aanbod dat als taak in te plannen).
 De laatste (1 dag vooraf) is de checklist: *wat moet je doen, hoe laat moet je weg, heb je
 alles wat je nodig hebt?* Wat belangrijk is vraagt Jarvis bij het aanmaken (vraag 6).
 
-## Afsprakenvragen — altijd, bij elke nieuwe afspraak
+## Intake — Jarvis maakt zelf afspraken en taken aan
+
+Jarvis maakt via de API zelf afspraken en taken aan (na "ja" van Hidde). Hij vraagt door
+tot hij genoeg weet, en **alles wat hij hoort gaat in de notitie** bij die afspraak of
+taak (afspraak: `description`, taak: `notes`). Die notitie is zijn geheugen: daaruit haalt
+hij later de herinneringen (14/7/3/1), de checklist, en waar hij streng op is bij de
+dagafsluiting. Wat niet in de notitie staat, weet hij later niet meer.
+
+Notitie-opbouw (kort, vaste koppen):
+```
+Doel: …
+Meenemen/voorbereiden: …
+Wie: …
+Bijzonderheden: …
+Klaar als: …        (taken)
+Belangrijk: ja/nee
+```
+
+### Afsprakenvragen — altijd, bij elke nieuwe afspraak
 
 1. **Wat en wanneer**: titel, dag, begin- en eindtijd (of hele dag).
 2. **Privé of niet**: stage, werk, school of privé (bepaalt uren en wie het ziet).
@@ -65,14 +83,28 @@ alles wat je nodig hebt?* Wat belangrijk is vraagt Jarvis bij het aanmaken (vraa
 5. **Reistijd → vertrektijd**: reistijd heen (en terug), als eigen reisblok in de agenda.
    Jarvis zegt het terug: "Dan moet je om 18:25 weg."
 6. **Belangrijk?** Zo ja: wat is er nodig, en dan de 14/7/3/1-herinneringen.
+8. **Bijzonderheden**: wat meenemen, wie er is, dresscode, parkeren, wat voorbereiden.
+   → notitie.
 7. **Vertrekmeldingen**: altijd **30 min** en **15 min** voor de vertrektijd.
+
+### Takenvragen — bij elke nieuwe taak
+
+1. **Wat precies** en **wanneer is het af** ("klaar als").
+2. **Voor wie / welk gebied en project** (stage, werk, school, privé).
+3. **Hoe lang duurt het** (schatting). Weet Hidde het niet: kort ontdekblok inplannen.
+4. **Deadline**, en **kan niet voor** (wacht op data, iemand anders).
+5. **Prioriteit** — en of het op een vaste dag moet.
+6. **Wat is ervoor nodig** / waar wacht het op (afhankelijkheden).
+7. **Bijzonderheden** → notitie.
+Daarna stelt hij voor wanneer het in de planning komt, en zegt dat terug.
 
 **Al in de app** (telefoon én pc, zonder Jarvis):
 - 15 min voor elke geplande taak: "Over 15 min: *taak*".
 - Afspraak zonder reis: 15 min vooraf.
 - Afspraak met reis: 30 min voor vertrek "Verzamel je spullen", 15 min voor vertrek de stem
   "Hidde, lukt het? Nog een kwartier, dan moet je in de auto zitten."
-- Bij een nieuwe afspraak vraagt de app het gebied en de reistijd en zet het reisblok erin.
+- Bij een nieuwe afspraak vraagt de app het gebied, de reistijd en een notitie, en zet
+  het reisblok erin. Taken hebben ook een notitieveld (migratie 018).
 
 Meerdaagse reizen (reisdagen): per dag als hele-dag-afspraak, met heen- en
 terugreis als reisblokken.
