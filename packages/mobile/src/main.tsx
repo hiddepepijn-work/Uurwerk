@@ -147,7 +147,7 @@ async function start(): Promise<void> {
   let widgetProblemShown = false
   const refreshWidgets = (): void => {
     try {
-      void AudioFocus.setWidgetData({ json: widgetData(backend) }).catch((error: unknown) => {
+      void AudioFocus.setWidgetData({ json: widgetData(backend, focus.label()) }).catch((error: unknown) => {
         // Said once per start: an empty widget with no reason given is impossible to fix.
         if (widgetProblemShown) return
         widgetProblemShown = true
@@ -183,7 +183,12 @@ async function start(): Promise<void> {
   window.events = bus
   window.audioFocus = AudioFocus
 
-  const focus = new FocusGuard(backend, (message) => emit('notify', { level: 'info', message }))
+  const focus = new FocusGuard(
+    backend,
+    (message) => emit('notify', { level: 'info', message }),
+    () => refreshWidgets()
+  )
+  await focus.load()
   backend.trackingService.onChange((segment, reason) => {
     if (reason === 'start' || reason === 'switch') void focus.onTaskStarted(segment?.taskId ?? null)
     emit('tracking:segmentChanged', { segment, reason })
@@ -241,6 +246,7 @@ async function start(): Promise<void> {
   void Capacitor.addListener('appUrlOpen', ({ url }) => {
     const action = url.replace('uurwerk://', '').split(/[/?#]/)[0]
     if (action === 'jarvis') emit('jarvis:open', { moment: null })
+    else if (action === 'focus') void focus.toggle()
     else if (action === 'task') emit('ui:open', { target: 'tasks' })
     else if (action === 'appointment') emit('ui:open', { target: 'addEvent' })
     else if (action === 'agenda') emit('ui:open', { target: 'agenda' })

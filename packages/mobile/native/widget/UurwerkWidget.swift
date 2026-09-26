@@ -78,6 +78,7 @@ struct WidgetData: Codable {
     let days: [WidgetDay]
     let overdue: [String]
     let running: String?
+    let focus: String?
 }
 
 enum Store {
@@ -343,56 +344,71 @@ struct AgendaWidget: Widget {
 struct QuickEntry: TimelineEntry {
     let date: Date
     let running: String?
+    /// The task focus is held for, "Handmatig", or nil when focus is off.
+    let focus: String?
 }
 
 struct QuickProvider: TimelineProvider {
-    func placeholder(in context: Context) -> QuickEntry { QuickEntry(date: Date(), running: nil) }
-    func getSnapshot(in context: Context, completion: @escaping (QuickEntry) -> Void) {
-        completion(QuickEntry(date: Date(), running: Store.load()?.running))
+    private func current() -> QuickEntry {
+        let data = Store.load()
+        return QuickEntry(date: Date(), running: data?.running, focus: data?.focus)
     }
+    func placeholder(in context: Context) -> QuickEntry { QuickEntry(date: Date(), running: nil, focus: nil) }
+    func getSnapshot(in context: Context, completion: @escaping (QuickEntry) -> Void) { completion(current()) }
     func getTimeline(in context: Context, completion: @escaping (Timeline<QuickEntry>) -> Void) {
-        completion(Timeline(entries: [QuickEntry(date: Date(), running: Store.load()?.running)], policy: .never))
+        completion(Timeline(entries: [current()], policy: .never))
     }
 }
 
 struct QuickView: View {
     let entry: QuickEntry
 
+    private static let focusColor = Color(red: 0.608, green: 0.549, blue: 1.0)
+
     var body: some View {
-        Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-            GridRow {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
                 tile(
                     url: "uurwerk://timer",
                     icon: entry.running == nil ? "play.fill" : "stop.fill",
                     title: entry.running == nil ? "Start timer" : "Stop timer",
                     subtitle: entry.running,
-                    primary: true
+                    fill: Palette.accent,
+                    ink: Color(red: 0.047, green: 0.122, blue: 0.075)
                 )
-                tile(url: "uurwerk://jarvis", icon: "mic.fill", title: "Jarvis", subtitle: "Praat of plan", primary: false)
+                tile(url: "uurwerk://jarvis", icon: "mic.fill", title: "Jarvis", subtitle: "Praat of plan")
             }
-            GridRow {
-                tile(url: "uurwerk://task", icon: "plus", title: "Taak", subtitle: nil, primary: false)
-                tile(url: "uurwerk://appointment", icon: "calendar.badge.plus", title: "Afspraak", subtitle: nil, primary: false)
+            HStack(spacing: 8) {
+                tile(
+                    url: "uurwerk://focus",
+                    icon: entry.focus == nil ? "moon" : "moon.fill",
+                    title: entry.focus == nil ? "Focus" : "Focus aan",
+                    subtitle: entry.focus,
+                    fill: entry.focus == nil ? nil : Self.focusColor,
+                    ink: entry.focus == nil ? nil : Color(red: 0.102, green: 0.071, blue: 0.2)
+                )
+                tile(url: "uurwerk://task", icon: "plus", title: "Taak", subtitle: nil)
+                tile(url: "uurwerk://appointment", icon: "calendar.badge.plus", title: "Afspraak", subtitle: nil)
             }
         }
     }
 
-    private func tile(url: String, icon: String, title: String, subtitle: String?, primary: Bool) -> some View {
+    private func tile(url: String, icon: String, title: String, subtitle: String?, fill: Color? = nil, ink: Color? = nil) -> some View {
         Link(destination: URL(string: url)!) {
-            HStack(spacing: 8) {
-                Image(systemName: icon).font(.system(size: 15, weight: .semibold))
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 14, weight: .semibold))
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(title).font(.system(size: 13, weight: .bold))
+                    Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
                     if let subtitle {
                         Text(subtitle).font(.system(size: 10)).opacity(0.75).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 9)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .foregroundColor(primary ? Color(red: 0.047, green: 0.122, blue: 0.075) : Palette.text)
-            .background(primary ? Palette.accent : Palette.card, in: RoundedRectangle(cornerRadius: 14))
+            .foregroundColor(ink ?? Palette.text)
+            .background(fill ?? Palette.card, in: RoundedRectangle(cornerRadius: 14))
         }
     }
 }
@@ -404,7 +420,7 @@ struct QuickWidget: Widget {
                 .containerBackground(Palette.background, for: .widget)
         }
         .configurationDisplayName("Snel")
-        .description("Timer, Jarvis, taak of afspraak met één tik.")
+        .description("Timer, Jarvis, focus, taak of afspraak met één tik.")
         .supportedFamilies([.systemMedium])
     }
 }

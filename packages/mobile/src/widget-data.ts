@@ -10,7 +10,7 @@ import type { Backend } from '@backend/create.js'
 import { toIsoDate } from '@core/util/time.js'
 import { agendaFor } from '@renderer/features/agenda/agenda-model.js'
 
-export function widgetData(backend: Backend): string {
+export function widgetData(backend: Backend, focus: string | null = null): string {
   const now = Date.now()
   const today = toIsoDate(now)
   const days = [today, toIsoDate(now + 86_400_000)].map((date) => {
@@ -45,5 +45,5 @@ export function widgetData(backend: Backend): string {
     ? (segment.taskId ? backend.store.tasks.get(segment.taskId)?.title : null) ?? 'Timer loopt'
     : null
 
-  return JSON.stringify({ generatedAt: now, days, overdue, running })
+  return JSON.stringify({ generatedAt: now, days, overdue, running, focus })
 }
