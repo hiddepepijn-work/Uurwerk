@@ -1,4 +1,4 @@
-import { GoogleGenAI, type LiveServerMessage, type Session } from '@google/genai'
+import { GoogleGenAI, type LiveServerMessage, type ModalityTokenCount, type Session } from '@google/genai'
 import type { MutableRefObject } from 'react'
 
 import type { JarvisLiveUsage } from '@core/contract/api.js'
@@ -56,6 +56,24 @@ class Capture extends AudioWorkletProcessor {
 registerProcessor('uurwerk-capture', Capture)
 `
 
+const EMPTY: JarvisLiveUsage = { textIn: 0, audioIn: 0, textOut: 0, audioOut: 0, thoughts: 0 }
+
+/** Splits a total by modality; without details, all of it counts as the dearer audio. */
+function split(total: number | undefined, details: ModalityTokenCount[] | undefined): { text: number; audio: number } {
+  if (!details?.length) return { text: 0, audio: total ?? 0 }
+  let text = 0
+  let audio = 0
+  for (const entry of details) {
+    if (String(entry.modality) === 'TEXT') text += entry.tokenCount ?? 0
+    else audio += entry.tokenCount ?? 0
+  }
+  return { text, audio }
+}
+
+const add = (into: JarvisLiveUsage, more: JarvisLiveUsage): void => {
+  for (const kind of Object.keys(into) as Array<keyof JarvisLiveUsage>) into[kind] += more[kind]
+}
+
 const toBase64 = (bytes: ArrayBuffer): string => {
   let binary = ''
   const view = new Uint8Array(bytes)
@@ -89,7 +107,7 @@ export class LiveCall {
   private replyDone = true
   /** Tapped away: drop the rest of this answer. */
   private muted = false
-  private usage: JarvisLiveUsage = { promptTokens: 0, responseTokens: 0, thoughtsTokens: 0 }
+  private usage: JarvisLiveUsage = { ...EMPTY }
   private turnUsage: JarvisLiveUsage | null = null
   private frame = 0
   private closed = false
@@ -239,21 +257,22 @@ export class LiveCall {
       this.handlers.onReply(this.reply.trim())
     }
     if (message.usageMetadata) {
+      const meta = message.usageMetadata
+      const input = split(meta.promptTokenCount, meta.promptTokensDetails)
+      const output = split(meta.responseTokenCount, meta.responseTokensDetails)
       this.turnUsage = {
-        promptTokens: message.usageMetadata.promptTokenCount ?? 0,
-        responseTokens: message.usageMetadata.responseTokenCount ?? 0,
-        thoughtsTokens: message.usageMetadata.thoughtsTokenCount ?? 0
+        textIn: input.text,
+        audioIn: input.audio,
+        textOut: output.text,
+        audioOut: output.audio,
+        thoughts: meta.thoughtsTokenCount ?? 0
       }
     }
     if (content?.turnComplete) {
       this.replyDone = true
       this.muted = false
-      if (this.turnUsage) {
-        this.usage.promptTokens += this.turnUsage.promptTokens
-        this.usage.responseTokens += this.turnUsage.responseTokens
-        this.usage.thoughtsTokens += this.turnUsage.thoughtsTokens
-        this.turnUsage = null
-      }
+      if (this.turnUsage) add(this.usage, this.turnUsage)
+      this.turnUsage = null
     }
 
     if (message.toolCall?.functionCalls?.length) {
@@ -367,13 +386,9 @@ export class LiveCall {
     for (const track of this.stream?.getTracks() ?? []) track.stop()
     await Promise.all([this.micContext?.close(), this.voiceContext?.close()].map((done) => done?.catch(() => undefined)))
     // A turn cut off by closing still counts.
-    if (this.turnUsage) {
-      this.usage.promptTokens += this.turnUsage.promptTokens
-      this.usage.responseTokens += this.turnUsage.responseTokens
-      this.usage.thoughtsTokens += this.turnUsage.thoughtsTokens
-      this.turnUsage = null
-    }
-    const used = this.usage.promptTokens + this.usage.responseTokens + this.usage.thoughtsTokens
+    if (this.turnUsage) add(this.usage, this.turnUsage)
+    this.turnUsage = null
+    const used = Object.values(this.usage).reduce((sum, value) => sum + value, 0)
     if (used > 0) await api.jarvis.liveUsage(this.usage).catch(() => undefined)
   }
 }

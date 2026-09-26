@@ -20,9 +20,8 @@ import { GoogleGenAI, type LiveConnectConfig } from '@google/genai'
 import type { JarvisLiveSession, JarvisLiveSpend, JarvisLiveUsage, TimeTrackerAPI } from '@core/contract/api.js'
 import { runTool, TOOLS } from '@core/services/jarvis-tools.js'
 
-/** Gemini Live prices per million tokens; thinking is billed as output. */
-const PRICE_IN = 3 / 1_000_000
-const PRICE_OUT = 12 / 1_000_000
+/** Gemini 3.8 Live prices per million tokens; thinking counts as text output. */
+const PRICE = { textIn: 0.75, audioIn: 3, textOut: 4.5, audioOut: 12, thoughts: 4.5 } as const
 
 const API_VERSION = 'v1alpha'
 
@@ -59,7 +58,10 @@ export function readSpend(usagePath: string): JarvisLiveSpend {
 export function addUsage(usagePath: string, usage: JarvisLiveUsage): JarvisLiveSpend {
   const spend = readSpend(usagePath)
   const clean = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 0)
-  const usd = clean(usage.promptTokens) * PRICE_IN + (clean(usage.responseTokens) + clean(usage.thoughtsTokens)) * PRICE_OUT
+  const usd = (Object.keys(PRICE) as Array<keyof typeof PRICE>).reduce(
+    (sum, kind) => sum + (clean(usage[kind]) * PRICE[kind]) / 1_000_000,
+    0
+  )
   const next = { month: spend.month, usd: Math.round((spend.usd + usd) * 10_000) / 10_000 }
   writeFileSync(usagePath, JSON.stringify(next), { mode: 0o600 })
   return { ...next, capUsd: spend.capUsd }

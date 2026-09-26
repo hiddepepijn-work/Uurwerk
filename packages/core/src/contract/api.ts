@@ -626,10 +626,14 @@ export interface JarvisLiveSession {
   spend: JarvisLiveSpend
 }
 
+/** Tokens a live conversation used, by kind: audio costs about four times text. */
 export interface JarvisLiveUsage {
-  promptTokens: number
-  responseTokens: number
-  thoughtsTokens: number
+  textIn: number
+  audioIn: number
+  textOut: number
+  audioOut: number
+  /** Thinking, billed as text output. */
+  thoughts: number
 }
 
 export interface JarvisLiveSpend {

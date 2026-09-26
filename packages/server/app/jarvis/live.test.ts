@@ -26,15 +26,15 @@ describe('live spend', () => {
     expect(spend.capUsd).toBe(10)
   })
 
-  it('adds input at $3 and output plus thinking at $12 per million tokens', () => {
-    addUsage(path, { promptTokens: 1_000_000, responseTokens: 0, thoughtsTokens: 0 })
-    const spend = addUsage(path, { promptTokens: 0, responseTokens: 500_000, thoughtsTokens: 500_000 })
-    expect(spend.usd).toBeCloseTo(15)
-    expect(readSpend(path).usd).toBeCloseTo(15)
+  it('prices text and audio apart, thinking as text output', () => {
+    addUsage(path, { textIn: 1_000_000, audioIn: 1_000_000, textOut: 0, audioOut: 0, thoughts: 0 })
+    const spend = addUsage(path, { textIn: 0, audioIn: 0, textOut: 1_000_000, audioOut: 1_000_000, thoughts: 1_000_000 })
+    expect(spend.usd).toBeCloseTo(0.75 + 3 + 4.5 + 12 + 4.5)
+    expect(readSpend(path).usd).toBeCloseTo(24.75)
   })
 
   it('ignores nonsense counts', () => {
-    const spend = addUsage(path, { promptTokens: -5, responseTokens: Number.NaN, thoughtsTokens: 0 })
+    const spend = addUsage(path, { textIn: -5, audioIn: Number.NaN, textOut: 0, audioOut: 0, thoughts: 0 })
     expect(spend.usd).toBe(0)
   })
 
