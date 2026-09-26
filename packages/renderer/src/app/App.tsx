@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { IconRail, type Screen } from './IconRail.js'
 import { BottomBar } from './BottomBar.js'
+import { JarvisSheet } from '../features/jarvis/JarvisSheet.js'
 import { EventComposer } from '../features/calendar/EventComposer.js'
 import { useCompact } from '../hooks/useCompact.js'
 import { toIsoDate } from '@core/util/time.js'
@@ -32,6 +33,9 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null)
   /** The evening question — "anything to add to the agenda?" — opens this. */
   const [composerOpen, setComposerOpen] = useState(false)
+  const [jarvisOpen, setJarvisOpen] = useState(false)
+
+  useEffect(() => events.on('jarvis:open', () => setJarvisOpen(true)), [])
   const compact = useCompact()
 
   const openSwitcher = useCallback(() => setSwitcherOpen(true), [])
@@ -86,7 +90,7 @@ export function App() {
       {!compact && <IconRail active={screen} onNavigate={setScreen} />}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {!compact && <TopBar running={tracking.running} />}
+        {!compact && <TopBar running={tracking.running} onJarvis={() => setJarvisOpen(true)} />}
 
         <main className="min-h-0 flex-1 overflow-y-auto">
           {screen === 'today' && (
@@ -108,7 +112,9 @@ export function App() {
         </main>
       </div>
 
-      {compact && <BottomBar active={screen} onNavigate={setScreen} />}
+      {compact && <BottomBar active={screen} onNavigate={setScreen} onJarvis={() => setJarvisOpen(true)} />}
+
+      <JarvisSheet open={jarvisOpen} onClose={() => setJarvisOpen(false)} />
 
       {composerOpen && (
         <EventComposer

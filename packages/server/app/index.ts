@@ -35,6 +35,9 @@ import { buildImplementation } from '@backend/implementation.js'
 import { installHost, unavailable, type SecretKey } from '@backend/host.js'
 import { log, setLogFile } from '@backend/log.js'
 import { syncAllAccounts } from '@backend/calendar/index.js'
+import type { TimeTrackerAPI } from '@core/contract/api.js'
+import type { Host } from '@backend/host.js'
+import { createJarvis } from './jarvis/index.js'
 
 /** What server.js hands over: the published-files store it already has. */
 export interface PublishedStore {
@@ -106,7 +109,7 @@ export async function startApp(options: AppOptions): Promise<App> {
     }
   }
 
-  installHost({
+  const serverHost: Host = {
     emit<K extends AppEventName>(event: K, payload: AppEvents[K]) {
       for (const listener of listeners) listener(event, payload)
     },
@@ -146,7 +149,8 @@ export async function startApp(options: AppOptions): Promise<App> {
         options.published.invalidate()
       }
     }
-  })
+  }
+  installHost(serverHost)
 
   // ---------------------------------------------------------------- backend
   // No database until the first device uploads one: an empty server that invented its own
@@ -157,7 +161,10 @@ export async function startApp(options: AppOptions): Promise<App> {
 
   const open = (): void => {
     backend = createBackend(dbPath)
-    implementation = callable(buildImplementation(backend))
+    const built = buildImplementation(backend)
+    implementation = callable(built)
+    // Jarvis works through the same implementation the devices call, so what he does syncs.
+    serverHost.jarvis = createJarvis(built as unknown as TimeTrackerAPI, secrets)
     backend.trackingService.onChange((segment, reason) => {
       for (const listener of listeners) {
         listener('tracking:segmentChanged', { segment, reason })

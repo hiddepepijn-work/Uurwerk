@@ -34,7 +34,7 @@ import './styles.css'
 
 import { openPhoneDatabase } from './database.js'
 import { onQuestionTapped, scheduleNotifications } from './notifications.js'
-import { speakEvening, speakMorning } from './speech.js'
+import { AudioFocus, speakEvening, speakMorning } from './speech.js'
 import { PhoneSync } from './sync.js'
 
 // ------------------------------------------------------------------ events
@@ -161,6 +161,7 @@ async function start(): Promise<void> {
   }
   window.api = api as unknown as TimeTrackerAPI
   window.events = bus
+  window.audioFocus = AudioFocus
 
   backend.trackingService.onChange((segment, reason) => {
     emit('tracking:segmentChanged', { segment, reason })
@@ -186,9 +187,19 @@ async function start(): Promise<void> {
   await sync.start()
 
   onQuestionTapped((target, moment) => {
-    emit('ui:open', { target })
-    if (moment === 'morning') void speakMorning(window.api!)
-    else void speakEvening(window.api!)
+    // Jarvis takes the moment when he can; the plain planner and read-out are the fallback
+    // for when the server or its keys are not there.
+    void window.api!.jarvis
+      .status()
+      .then((status) => {
+        if (!status.ready) throw new Error(status.problem ?? 'not ready')
+        emit('jarvis:open', { moment })
+      })
+      .catch(() => {
+        emit('ui:open', { target })
+        if (moment === 'morning') void speakMorning(window.api!)
+        else void speakEvening(window.api!)
+      })
   })
   void scheduleNotifications(reminders).catch(() => undefined)
 

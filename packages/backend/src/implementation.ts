@@ -783,6 +783,11 @@ export function buildImplementation(
       quit: async () => host().window.quit()
     },
 
+    jarvis: {
+      ask: async (input) => jarvisHost().ask(input),
+      status: async () => jarvisHost().status()
+    },
+
     sync: {
       status: async () => host().sync.status(),
       pair: async (serverUrl, token, mode) => host().sync.pair(serverUrl, token, mode),
@@ -790,6 +795,13 @@ export function buildImplementation(
       unpair: async () => host().sync.unpair()
     }
   }
+}
+
+/** Jarvis lives on the server; anywhere else these calls are forwarded before they get here. */
+function jarvisHost(): TimeTrackerAPI['jarvis'] {
+  const jarvis = host().jarvis
+  if (!jarvis) throw new Error('Jarvis runs on the server. Link this device under Settings → Server first.')
+  return jarvis
 }
 
 /**

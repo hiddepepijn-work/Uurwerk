@@ -20,11 +20,12 @@
     "inspect": "tsx scripts/inspect-today.ts",
     "icons": "tsx scripts/make-icons.ts",
     "shortcut": "powershell -ExecutionPolicy Bypass -File scripts/install-shortcut.ps1",
-    "build:server": "esbuild packages/server/app/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=packages/server/dist/app.js --external:node-sqlite3-wasm --external:nodemailer --external:docx --log-level=warning",
+    "build:server": "esbuild packages/server/app/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=packages/server/dist/app.js --external:node-sqlite3-wasm --external:nodemailer --external:docx --loader:.md=text --log-level=warning",
     "build:mobile": "vite build --config packages/mobile/vite.config.ts",
     "dev:mobile": "vite --config packages/mobile/vite.config.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.2",
     "@capacitor/filesystem": "^8.1.3",
@@ -34,6 +35,7 @@
     "docx": "^9.1.0",
     "node-sqlite3-wasm": "^0.8.30",
     "nodemailer": "^6.9.16",
+    "openai": "^7.23.0",
     "sql.js": "^1.14.2",
     "uurwerk-audio-focus": "file:packages/capacitor-audio-focus"
   },

@@ -9,12 +9,14 @@
   },
   "bin": {
     "uurwerk-users": "./bin/uurwerk-users.js",
-    "uurwerk-devices": "./bin/uurwerk-devices.js"
+    "uurwerk-devices": "./bin/uurwerk-devices.js",
+    "uurwerk-secrets": "./bin/uurwerk-secrets.js"
   },
   "scripts": {
     "start": "node src/server.js",
     "users": "node bin/uurwerk-users.js",
-    "devices": "node bin/uurwerk-devices.js"
+    "devices": "node bin/uurwerk-devices.js",
+    "secrets": "node bin/uurwerk-secrets.js"
   },
   "dependencies": {
     "docx": "^9.1.0",

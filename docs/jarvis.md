@@ -143,9 +143,15 @@ Regel: bij twijfel vraagt hij. Wat hij veranderd heeft, zegt hij hardop terug.
 - Hidde: **alles mag** — ook privé-afspraken. (Screenshots stuurt hij toch niet mee;
   daar heeft hij niets aan.)
 
-## Techniek (voor later)
+## Techniek
 
-- Op de VPS: `POST /jarvis` met device-token; Claude Sonnet 5 met tool use; tools roepen
-  de bestaande `TimeTrackerAPI` aan, dus alles wat Jarvis doet synct als gewone wijzigingen.
-- Vertrektijd: reistijd via een route-API. ❓ Welke (Google, OV9292, OSRM)? Kosten.
-- Kosten schatting: € 2–5 per maand bij 3–5 gesprekken per dag.
+- Server: `packages/server/app/jarvis/` — `tools.ts` (wat hij kan, over de gewone API),
+  `providers.ts` (Claude of OpenAI), `speech.ts` (Azure, Fenna), `index.ts` (gesprekken).
+  Deze brief is letterlijk zijn systeemprompt.
+- Model: `JARVIS_MODEL` in de service-unit. Standaard `claude-opus-5`; ook
+  `claude-sonnet-5`, `claude-haiku-4-5`, `gpt-5-mini`. `JARVIS_EFFORT` (Claude): standaard medium.
+- Keys op de VPS: `uurwerk-secrets set anthropicKey|openaiKey|azureSpeechKey`
+  (`AZURE_SPEECH_REGION`, standaard westeurope). Geen herstart nodig.
+- App: Jarvis-tab (telefoon), Jarvis-knop bovenin (pc). 08:30 en 21:00 openen Jarvis met
+  het moment; zonder keys valt de app terug op planner + voorlezen.
+- ❓ Route-API voor reistijd (nu vraagt hij de reistijd gewoon).

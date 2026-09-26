@@ -25,6 +25,10 @@ export type SecretKey =
   | 'publishToken'
   // The token this device syncs with. Made on the server, shown once, kept here.
   | 'deviceToken'
+  // Jarvis, on the server only: the language model and the voice.
+  | 'anthropicKey'
+  | 'openaiKey'
+  | 'azureSpeechKey'
   | `ics:${string}`
   | `icloud:${string}`
 
@@ -61,6 +65,8 @@ export interface Host {
    * Where published files go when this machine *is* the publishing server. Without one,
    * publishing uploads over HTTP to the configured publish URL, as before.
    */
+  /** The assistant; only the server has one. */
+  jarvis?: TimeTrackerAPI['jarvis']
   publishSink?: {
     put(name: string, bytes: Uint8Array): Promise<void>
     remove(name: string): Promise<void>

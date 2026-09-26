@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { MicIcon } from '../ui/icons.js'
 import { ITEMS, type Screen } from './IconRail.js'
 
 /** The four a phone needs within reach of a thumb; the rest sit behind "More". */
@@ -10,10 +11,12 @@ const PRIMARY: Screen[] = ['today', 'week', 'tasks']
  */
 export function BottomBar({
   active,
-  onNavigate
+  onNavigate,
+  onJarvis
 }: {
   active: Screen
   onNavigate: (screen: Screen) => void
+  onJarvis: () => void
 }) {
   const [moreOpen, setMoreOpen] = useState(false)
   const primary = ITEMS.filter((item) => PRIMARY.includes(item.id))
@@ -55,6 +58,9 @@ export function BottomBar({
             <Icon size={22} />
           </Tab>
         ))}
+        <Tab label="Jarvis" active={false} onClick={onJarvis}>
+          <MicIcon size={22} />
+        </Tab>
         <Tab label="More" active={moreOpen || inRest} onClick={() => setMoreOpen((open) => !open)}>
           <span className="text-[20px] leading-[22px]">⋯</span>
         </Tab>

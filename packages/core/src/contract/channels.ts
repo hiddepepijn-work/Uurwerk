@@ -125,7 +125,9 @@ export const CHANNELS = {
   // `quit` is the real exit: closing the window only hides it when close-to-tray is on.
   window: ['minimizeToTray', 'closeQuickAdd', 'quit'],
   // This copy and the VPS. Offline first: everything above works without it.
-  sync: ['status', 'pair', 'now', 'unpair']
+  sync: ['status', 'pair', 'now', 'unpair'],
+  // The assistant. Lives on the server; devices forward.
+  jarvis: ['ask', 'status']
 } as const
 
 export type ChannelDomain = keyof typeof CHANNELS

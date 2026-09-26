@@ -12,7 +12,7 @@ import type { TimeTrackerAPI } from '@core/contract/api.js'
  * Native, in packages/capacitor-audio-focus: pauses Spotify or Apple Music while the app
  * speaks, and lets it resume afterwards. In a browser there is nothing to pause.
  */
-const AudioFocus = registerPlugin<{ take(): Promise<void>; release(): Promise<void> }>('AudioFocus', {
+export const AudioFocus = registerPlugin<{ take(): Promise<void>; release(): Promise<void> }>('AudioFocus', {
   web: { take: async () => undefined, release: async () => undefined }
 })
 

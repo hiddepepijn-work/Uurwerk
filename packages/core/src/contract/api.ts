@@ -592,6 +592,43 @@ export interface TimeTrackerAPI {
     now(): Promise<SyncStatus>
     unpair(): Promise<SyncStatus>
   }
+
+  /**
+   * The spoken assistant. Runs on the server (it holds the model and voice keys); a device
+   * forwards these calls there.
+   */
+  jarvis: {
+    /** One turn: Hidde's words (or a moment that opens the conversation) in, Jarvis's reply out. */
+    ask(input: JarvisAsk): Promise<JarvisReply>
+    status(): Promise<JarvisStatus>
+  }
+}
+
+export interface JarvisAsk {
+  /** Omit to start a new conversation. */
+  conversationId?: string | null
+  text?: string
+  /** A scheduled moment that opens the conversation without Hidde saying anything first. */
+  moment?: 'morning' | 'evening' | null
+  /** Return the reply as speech too. */
+  speak?: boolean
+}
+
+export interface JarvisReply {
+  conversationId: string
+  text: string
+  /** MP3, base64, in the Fenna voice; null when speech is off or unavailable. */
+  audio: string | null
+  /** Whether Jarvis changed anything (a task, an appointment, the plan). */
+  changed: boolean
+}
+
+export interface JarvisStatus {
+  ready: boolean
+  provider: string
+  model: string
+  voice: boolean
+  problem: string | null
 }
 
 export interface SyncStatus {
