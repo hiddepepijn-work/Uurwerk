@@ -111,19 +111,19 @@ export function JarvisOrb({
 
       context.clearRect(0, 0, size, size)
 
-      // Rings outward on loud moments: green while listening, teal and quicker while speaking.
+      // Rings outward on loud moments: green while listening, faint teal on the stresses while speaking.
       const speaking = goal.gain > 0.4
-      if (goal.gain > 0 && smoothLevel > (speaking ? 0.45 : 0.55) && t - lastRing > (speaking ? 0.22 : 0.35)) {
-        rings.push({ radius: base, alpha: speaking ? 0.5 : 0.35, teal: speaking })
+      if (goal.gain > 0 && smoothLevel > (speaking ? 0.6 : 0.55) && t - lastRing > (speaking ? 0.45 : 0.35)) {
+        rings.push({ radius: base, alpha: speaking ? 0.25 : 0.35, teal: speaking })
         lastRing = t
       }
       for (const ring of rings) {
-        ring.radius += ring.teal ? 2.4 : 1.6
+        ring.radius += ring.teal ? 1.8 : 1.6
         ring.alpha *= ring.teal ? 0.94 : 0.955
         context.beginPath()
         context.arc(center, center, ring.radius, 0, Math.PI * 2)
         context.strokeStyle = ring.teal ? `rgba(95, 208, 197, ${ring.alpha})` : `rgba(62, 207, 115, ${ring.alpha})`
-        context.lineWidth = ring.teal ? 3 : 2
+        context.lineWidth = ring.teal ? 1.5 : 2
         context.stroke()
       }
       while (rings.length > 0 && rings[0]!.alpha < 0.02) rings.shift()
