@@ -3,7 +3,7 @@ import type { IsoDate } from '@core/contract/types.js'
 import { fromIsoDate, toIsoDate, toIsoWeek, weekRange } from '@core/util/time.js'
 import { useLiveQuery } from '../../hooks/useLiveQuery.js'
 import { EventComposer } from '../calendar/EventComposer.js'
-import { agendaFor, colorFor, hhmm, type AgendaItem, type AllDayItem } from './agenda-model.js'
+import { agendaFor, colorFor, hhmm, OVERLAY_MIN, type AgendaItem, type AllDayItem } from './agenda-model.js'
 
 /**
  * The phone's Agenda tab, in the widget's look: a day timeline as the main view and a
@@ -283,9 +283,14 @@ function HourLines({
 
 function Block({ item, hourPx, detailed = false }: { item: AgendaItem; hourPx: number; detailed?: boolean }) {
   const top = (item.startMin / 60) * hourPx + 1
-  const height = Math.max(((item.endMin - item.startMin) / 60) * hourPx - 3, detailed ? 12 : 6)
+  // A quarter of an hour is 15 px at day scale: too small to read. Short items get a floor
+  // and a single line; they may overhang the next slot, which beats being illegible.
+  const minutes = item.overlay ? Math.max(item.endMin - item.startMin, OVERLAY_MIN) : item.endMin - item.startMin
+  const height = Math.max((minutes / 60) * hourPx - 3, detailed ? 30 : 8)
   const width = 100 / item.lanes
-  const position = { top, height, left: `${item.lane * width}%`, width: `calc(${width}% - ${detailed ? 4 : 2}px)` }
+  // A clear gap between side-by-side items, so a split reads as a split.
+  const gap = item.lanes > 1 ? (detailed ? 8 : 3) : detailed ? 4 : 2
+  const position = { top, height, left: `${item.lane * width}%`, width: `calc(${width}% - ${gap}px)` }
   const color = colorFor(item.areaId)
 
   if (item.kind === 'break') {
@@ -303,16 +308,23 @@ function Block({ item, hourPx, detailed = false }: { item: AgendaItem; hourPx: n
   // calendar reads differently from what the planner suggested.
   const planned = item.kind === 'task' || item.kind === 'meeting'
   const travel = item.kind === 'travel'
-  const tall = height >= 40
+  const coveredPx = item.coveredMin > 0 ? (item.coveredMin / 60) * hourPx + 2 : 0
+  // Room for a second line is what is left below any overlay, not the whole block.
+  const tall = height - coveredPx >= 44
 
   return (
     <div
-      className={`absolute overflow-hidden text-left ${detailed ? 'rounded-[10px] px-2.5 py-1.5' : 'rounded-[5px] px-1 py-0.5'} ${
-        travel ? 'border border-dashed' : planned ? '' : 'border-[1.5px]'
-      }`}
+      className={`absolute overflow-hidden text-left ${
+        detailed ? (tall ? 'rounded-[10px] px-2.5 py-1.5' : 'flex items-center rounded-[9px] px-2.5') : 'rounded-[5px] px-1 py-0.5'
+      } ${travel ? 'border border-dashed' : planned ? '' : 'border-[1.5px]'}`}
       style={{
         ...position,
-        background: planned ? color.fill : `${color.fill}26`,
+        // Appointments sit above planned work, with a ring of background so the edge shows.
+        zIndex: item.overlay ? 3 : planned ? 1 : 2,
+        paddingTop: coveredPx || undefined,
+        boxShadow: '0 0 0 2px var(--color-bg, #0b0d0f)',
+        // Appointments are tinted over solid background, so an overlay hides what it covers.
+        background: planned ? color.fill : `linear-gradient(${color.fill}26, ${color.fill}26), var(--color-bg, #0b0d0f)`,
         borderColor: color.fill,
         color: planned ? color.ink : 'var(--color-text, #f4f3f0)'
       }}
@@ -321,6 +333,9 @@ function Block({ item, hourPx, detailed = false }: { item: AgendaItem; hourPx: n
         className={`truncate font-semibold ${detailed ? 'text-[13px] leading-tight' : 'text-[9px] leading-[11px]'}`}
       >
         {item.title}
+        {detailed && !tall && (
+          <span className="ml-1.5 font-normal opacity-75">{hhmm(item.startMin)}–{hhmm(item.endMin)}</span>
+        )}
       </div>
       {detailed && tall && <div className="mt-0.5 truncate text-[11px] opacity-80">{item.meta}</div>}
     </div>

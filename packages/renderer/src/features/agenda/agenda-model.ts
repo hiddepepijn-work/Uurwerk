@@ -22,7 +22,17 @@ export interface AgendaItem {
   /** Side-by-side placement when items overlap: lane index and lane count. */
   lane: number
   lanes: number
+  /**
+   * A short appointment (half an hour or less): drawn full width on top of whatever it
+   * overlaps, bigger than its duration, instead of squeezed into half a column.
+   */
+  overlay: boolean
+  /** Minutes at the top of this block hidden under an overlay; its text starts below them. */
+  coveredMin: number
 }
+
+/** How many minutes an overlay is drawn as, at least: readable, whatever its length. */
+export const OVERLAY_MIN = 30
 
 export interface AllDayItem {
   id: string
@@ -52,7 +62,7 @@ export function agendaFor(
   events: CalendarEvent[]
 ): { items: AgendaItem[]; allDay: AllDayItem[] } {
   const midnight = fromIsoDate(date).getTime()
-  const items: Omit<AgendaItem, 'lane' | 'lanes'>[] = []
+  const items: Omit<AgendaItem, 'lane' | 'lanes' | 'overlay' | 'coveredMin'>[] = []
   const allDay: AllDayItem[] = []
 
   for (const block of blocks) {
@@ -111,7 +121,7 @@ export function agendaFor(
  * Greedy lanes within each cluster of overlapping items. Breaks never take a lane of their
  * own: a pause under an appointment is not worth halving the appointment's width for.
  */
-function placeInLanes(items: Omit<AgendaItem, 'lane' | 'lanes'>[]): AgendaItem[] {
+function placeInLanes(items: Omit<AgendaItem, 'lane' | 'lanes' | 'overlay' | 'coveredMin'>[]): AgendaItem[] {
   const sorted = [...items].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin)
   const placed: AgendaItem[] = []
   let cluster: AgendaItem[] = []
@@ -120,15 +130,18 @@ function placeInLanes(items: Omit<AgendaItem, 'lane' | 'lanes'>[]): AgendaItem[]
 
   const close = (): void => {
     const lanes = Math.max(1, laneEnds.length)
-    for (const item of cluster) item.lanes = item.kind === 'break' ? 1 : lanes
+    for (const item of cluster) item.lanes = item.kind === 'break' || item.overlay ? 1 : lanes
     cluster = []
     laneEnds = []
   }
 
   for (const raw of sorted) {
     if (raw.startMin >= clusterEnd) close()
-    const item: AgendaItem = { ...raw, lane: 0, lanes: 1 }
-    if (item.kind !== 'break') {
+    const overlay =
+      (raw.kind === 'appointment' || raw.kind === 'travel') && raw.endMin - raw.startMin <= OVERLAY_MIN
+    const item: AgendaItem = { ...raw, lane: 0, lanes: 1, overlay, coveredMin: 0 }
+    // Breaks and overlays never take a lane: they sit on top, full width.
+    if (item.kind !== 'break' && !overlay) {
       let lane = laneEnds.findIndex((end) => end <= item.startMin)
       if (lane === -1) {
         lane = laneEnds.length
@@ -141,5 +154,14 @@ function placeInLanes(items: Omit<AgendaItem, 'lane' | 'lanes'>[]): AgendaItem[]
     clusterEnd = Math.max(clusterEnd, item.endMin)
   }
   close()
+
+  // A block whose top is under an overlay moves its own text down, so both stay readable.
+  for (const item of placed) {
+    if (item.overlay || item.kind === 'break') continue
+    for (const over of placed) {
+      if (!over.overlay || over.startMin < item.startMin || over.startMin >= item.startMin + OVERLAY_MIN) continue
+      item.coveredMin = Math.max(item.coveredMin, over.startMin - item.startMin + OVERLAY_MIN)
+    }
+  }
   return placed
 }

@@ -26,7 +26,11 @@ export function widgetData(backend: Backend): string {
         title: item.title,
         kind: item.kind,
         area: item.areaId,
-        meta: item.meta
+        meta: item.meta,
+        lane: item.lane,
+        lanes: item.lanes,
+        overlay: item.overlay,
+        coveredMin: item.coveredMin
       }))
     }
   })

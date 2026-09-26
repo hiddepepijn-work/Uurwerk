@@ -59,6 +59,13 @@ struct WidgetItem: Codable, Hashable {
     let kind: String
     let area: String?
     let meta: String?
+    /// Side by side when items overlap (from the app's agenda model).
+    let lane: Int?
+    let lanes: Int?
+    /// A short appointment drawn full width on top, bigger than its duration.
+    let overlay: Bool?
+    /// Minutes at the top of this block that sit under an overlay.
+    let coveredMin: Int?
 }
 
 struct WidgetDay: Codable {
@@ -257,9 +264,15 @@ struct AgendaView: View {
                 }
                 .offset(y: CGFloat(hour * 60) * perMinute - 5)
             }
-            ForEach(items, id: \.self) { item in
-                block(item, perMinute: perMinute, width: width - gutter)
-                    .offset(x: gutter, y: CGFloat(max(item.start, windowStart) - windowStart) * perMinute + 1)
+            // Overlays last, so they draw on top of the block they cover.
+            ForEach(items.sorted { ($0.overlay ?? false ? 1 : 0) < ($1.overlay ?? false ? 1 : 0) }, id: \.self) { item in
+                let lanes = CGFloat(max(item.lanes ?? 1, 1))
+                let laneWidth = (width - gutter) / lanes
+                block(item, perMinute: perMinute, width: laneWidth - (lanes > 1 ? 6 : 0))
+                    .offset(
+                        x: gutter + CGFloat(item.lane ?? 0) * laneWidth,
+                        y: CGFloat(max(item.start, windowStart) - windowStart) * perMinute + 1
+                    )
             }
             if nowMinute >= windowStart && nowMinute <= windowEnd {
                 HStack(spacing: 0) {
@@ -274,7 +287,9 @@ struct AgendaView: View {
     @ViewBuilder
     private func block(_ item: WidgetItem, perMinute: CGFloat, width: CGFloat) -> some View {
         let visible = min(item.end, windowEnd) - max(item.start, windowStart)
-        let height = max(CGFloat(visible) * perMinute - 3, 8)
+        let isOverlay = item.overlay ?? false
+        let height = max(CGFloat(isOverlay ? max(visible, 30) : visible) * perMinute - 3, isOverlay ? 22 : 8)
+        let covered = CGFloat(item.coveredMin ?? 0) * perMinute
         if item.kind == "break" {
             Text(height >= 12 ? "Pauze" : "")
                 .font(.system(size: 9))
@@ -292,11 +307,16 @@ struct AgendaView: View {
                 }
             }
             .padding(.horizontal, 8)
-            .frame(width: width, height: height, alignment: .leading)
+            .padding(.top, covered > 0 ? covered + 2 : 0)
+            .frame(width: width, height: height, alignment: covered > 0 ? .topLeading : .leading)
             .foregroundColor(planned ? Palette.ink(item.area) : Palette.text)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(planned ? Palette.fill(item.area) : Palette.fill(item.area).opacity(0.18))
+                ZStack {
+                    // Opaque first: an overlay must hide what it covers, not mix with it.
+                    RoundedRectangle(cornerRadius: 8).fill(Palette.background)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(planned ? Palette.fill(item.area) : Palette.fill(item.area).opacity(0.22))
+                }
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
