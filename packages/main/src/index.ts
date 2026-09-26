@@ -23,6 +23,7 @@ import { createMainWindow, createQuickAddWindow } from './windows.js'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys.js'
 import { createTray, destroyTray, update as updateTray } from './tray.js'
 import { startMorningCheck, stopMorningCheck } from './morning.js'
+import { startReminders, stopReminders } from './reminders.js'
 import { startScreenTime, stopScreenTime } from './screen-time.js'
 import { syncAllAccounts } from '@backend/calendar/index.js'
 import { applyAutoLaunch, launchedAtLogin } from './startup.js'
@@ -93,6 +94,7 @@ function start(): void {
   // Asks once, in the morning, only when the day has no accepted plan. It opens nothing by
   // itself — clicking the notification is what brings the planner up.
   startMorningCheck(backend, () => openInWindow('planDay'))
+  startReminders(backend, () => openInWindow('today'))
   // Counts wall-clock minutes while the machine is awake — independent of the timer, and
   // the only figure here that says anything when you are not tracking.
   startScreenTime(backend)
@@ -397,6 +399,7 @@ app.on('before-quit', () => {
   if (calendarHandle) clearInterval(calendarHandle)
   syncClient?.stop()
   stopMorningCheck()
+  stopReminders()
   stopScreenTime()
   stopCapture()
   // A half-encoded timelapse holds a hidden window open, which would keep the app alive.

@@ -25,6 +25,8 @@ Button, en "Hé Siri, Jarvis".
   donderdag thuis (geen reis). ❓ Precies adres in Nieuwendijk (voor de route)?
 - **Werk**: **FedEx in Duiven**, en daarnaast betaald werk voor Maasarend.
 - Vervoer: **altijd de auto** naar stage en FedEx, tenzij Hidde iets anders zegt.
+- **Tessie**: afspraken met Tessie zijn altijd **streng op tijd**. Jarvis vraagt meteen de
+  reistijd, en is scherp als Hidde te laat dreigt te komen.
 - ❓ Andere vaste weekafspraken (sport, collegedagen)?
 
 ## De vaste momenten
@@ -64,6 +66,13 @@ alles wat je nodig hebt?* Wat belangrijk is vraagt Jarvis bij het aanmaken (vraa
    Jarvis zegt het terug: "Dan moet je om 18:25 weg."
 6. **Belangrijk?** Zo ja: wat is er nodig, en dan de 14/7/3/1-herinneringen.
 7. **Vertrekmeldingen**: altijd **30 min** en **15 min** voor de vertrektijd.
+
+**Al in de app** (telefoon én pc, zonder Jarvis):
+- 15 min voor elke geplande taak: "Over 15 min: *taak*".
+- Afspraak zonder reis: 15 min vooraf.
+- Afspraak met reis: 30 min voor vertrek "Verzamel je spullen", 15 min voor vertrek de stem
+  "Hidde, lukt het? Nog een kwartier, dan moet je in de auto zitten."
+- Bij een nieuwe afspraak vraagt de app het gebied en de reistijd en zet het reisblok erin.
 
 Meerdaagse reizen (reisdagen): per dag als hele-dag-afspraak, met heen- en
 terugreis als reisblokken.

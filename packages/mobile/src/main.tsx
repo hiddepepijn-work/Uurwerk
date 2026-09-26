@@ -26,12 +26,14 @@ import { createBackendFrom } from '@backend/create.js'
 import { installHost, unavailable, type SecretKey } from '@backend/host.js'
 import { buildImplementation } from '@backend/implementation.js'
 import { isServerOnly } from '@backend/server-only.js'
+import { upcomingReminders } from '@core/services/reminders.js'
+import { toIsoDate } from '@core/util/time.js'
 
 import { App } from '@renderer/app/App.js'
 import './styles.css'
 
 import { openPhoneDatabase } from './database.js'
-import { onQuestionTapped, scheduleDailyQuestions } from './notifications.js'
+import { onQuestionTapped, scheduleNotifications } from './notifications.js'
 import { speakEvening, speakMorning } from './speech.js'
 import { PhoneSync } from './sync.js'
 
@@ -121,6 +123,25 @@ async function start(): Promise<void> {
     fileFor: (artifact) => artifact.path
   })
 
+  /** The reminders for a window, read straight from this copy of the database. */
+  const reminders = (fromMs: number, toMs: number) => {
+    const blocks = []
+    for (let day = fromMs; day < toMs + 86_400_000; day += 86_400_000) {
+      const plan = backend.store.plans.accepted('day', toIsoDate(day))
+      if (plan) blocks.push(...backend.store.plans.blocks(plan.id))
+    }
+    return upcomingReminders(blocks, backend.calendar.eventsInRange(fromMs, toMs + 86_400_000), fromMs, toMs)
+  }
+  // A changed plan moves its reminders; batched, because a replan is many writes.
+  let rescheduleTimer: ReturnType<typeof setTimeout> | null = null
+  const reschedule = (): void => {
+    if (rescheduleTimer) clearTimeout(rescheduleTimer)
+    rescheduleTimer = setTimeout(() => void scheduleNotifications(reminders).catch(() => undefined), 5_000)
+  }
+  bus.on('data:invalidated', ({ domain }) => {
+    if (domain === 'planning' || domain === 'tasks') reschedule()
+  })
+
   // Deliberately no repairOnStartup(): an open segment here may be the laptop's timer,
   // running right now, and closing it would stop the clock on the other machine.
 
@@ -169,7 +190,7 @@ async function start(): Promise<void> {
     if (moment === 'morning') void speakMorning(window.api!)
     else void speakEvening(window.api!)
   })
-  void scheduleDailyQuestions().catch(() => undefined)
+  void scheduleNotifications(reminders).catch(() => undefined)
 
   // Background: save the copy and hand the changes over while the app still may.
   void Capacitor.addListener('pause', () => {
@@ -178,7 +199,7 @@ async function start(): Promise<void> {
   })
   void Capacitor.addListener('resume', () => {
     void sync.round()
-    void scheduleDailyQuestions().catch(() => undefined)
+    void scheduleNotifications(reminders).catch(() => undefined)
   })
 }
 

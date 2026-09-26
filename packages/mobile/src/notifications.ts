@@ -15,6 +15,8 @@ import { Directory, Filesystem } from '@capacitor/filesystem'
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications'
 import { Preferences } from '@capacitor/preferences'
 
+import type { Reminder } from '@core/services/reminders.js'
+
 import { toBase64 } from './database.js'
 
 type Target = 'planDay' | 'endOfDay'
@@ -51,7 +53,28 @@ const MOMENTS: Moment[] = [
   }
 ]
 
-const DAYS_AHEAD = 7
+// Three days of questions (18) leaves room under iOS's 64 pending for two days of reminders.
+const DAYS_AHEAD = 3
+const REMINDER_HOURS = 48
+const MAX_PENDING = 64
+
+/** Every reminder sound; the questions bring their own. */
+const SOUNDS = ['ochtend.caf', 'avond.caf', 'herinnering.caf', 'vertrek.caf']
+
+const REMINDER_SOUND: Record<Reminder['kind'], string | undefined> = {
+  task: undefined,
+  appointment: undefined,
+  gather: 'herinnering.caf',
+  // The spoken one: "Hidde, lukt het? Nog een kwartier, dan moet je in de auto zitten."
+  leave: 'vertrek.caf'
+}
+
+/** A reminder's key as a notification id: stable, positive, clear of the questions' ids. */
+const reminderId = (key: string): number => {
+  let hash = 7
+  for (let index = 0; index < key.length; index++) hash = (hash * 31 + key.charCodeAt(index)) | 0
+  return 1_000_000_000 + (Math.abs(hash) % 1_000_000_000)
+}
 
 /** yyyymmdd * 100 + moment * 10 + repeat — stable, so rescheduling replaces rather than stacks. */
 const idFor = (date: Date, moment: number, repeat: number): number =>
@@ -65,20 +88,22 @@ const idFor = (date: Date, moment: number, repeat: number): number =>
 const dayKey = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
+let soundsInstalled = false
+
 /**
  * Notification sounds must be in the app bundle or in Library/Sounds. The bundle's web
  * folder is neither, so the clips are copied across.
  */
 async function installSounds(): Promise<void> {
-  for (const moment of MOMENTS) {
+  for (const sound of SOUNDS) {
     // Written at every start, not once: a clip that was re-recorded has to replace the
     // copy iOS already has, or the old voice keeps playing.
     try {
-      const response = await fetch(`/sounds/${moment.sound}`)
+      const response = await fetch(`/sounds/${sound}`)
       if (!response.ok) continue
       const bytes = new Uint8Array(await response.arrayBuffer())
       await Filesystem.writeFile({
-        path: `Sounds/${moment.sound}`,
+        path: `Sounds/${sound}`,
         directory: Directory.Library,
         data: toBase64(bytes),
         recursive: true
@@ -89,11 +114,20 @@ async function installSounds(): Promise<void> {
   }
 }
 
-/** Asks once, then schedules the coming week. Safe to call at every start. */
-export async function scheduleDailyQuestions(): Promise<void> {
+/**
+ * Everything the phone says by itself: the two daily questions and the reminders before
+ * tasks and departures. Rebuilt whole each time — at start, on returning to the app and
+ * after the plan changes — so a moved block never leaves its old reminder behind.
+ */
+export async function scheduleNotifications(
+  reminders: (fromMs: number, toMs: number) => Reminder[]
+): Promise<void> {
   const permission = await LocalNotifications.requestPermissions()
   if (permission.display !== 'granted') return
-  await installSounds()
+  if (!soundsInstalled) {
+    await installSounds()
+    soundsInstalled = true
+  }
 
   const pending = await LocalNotifications.getPending()
   if (pending.notifications.length > 0) {
@@ -127,7 +161,18 @@ export async function scheduleDailyQuestions(): Promise<void> {
     }
   }
 
-  // iOS keeps at most 64 pending; a week of both moments is 42.
+  for (const reminder of reminders(now, now + REMINDER_HOURS * 3_600_000)) {
+    if (notifications.length >= MAX_PENDING) break
+    notifications.push({
+      id: reminderId(reminder.key),
+      title: reminder.title,
+      body: reminder.body,
+      schedule: { at: new Date(reminder.at), allowWhileIdle: true },
+      sound: REMINDER_SOUND[reminder.kind],
+      extra: { reminder: reminder.kind }
+    })
+  }
+
   if (notifications.length > 0) await LocalNotifications.schedule({ notifications })
 }
 
