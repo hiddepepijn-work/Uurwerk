@@ -9,8 +9,13 @@ set -euo pipefail
 TARGET="${1:-ubuntu@51.75.74.94}"
 
 npm run build:server
-tar -C packages/server -czf /tmp/uurwerk-server.tgz --exclude=node_modules --exclude=data .
-scp -q /tmp/uurwerk-server.tgz "$TARGET:/tmp/uurwerk-server.tgz"
+# The bundle travels through GitHub, not scp: since 26 Sep 2026 large uploads from the home
+# network to the VPS get reset on the way, while the VPS downloads from GitHub fine.
+tar -C packages/server -czf uurwerk-server.tgz --exclude=node_modules --exclude=data .
+gh release view server-latest >/dev/null 2>&1 ||
+  gh release create server-latest --prerelease --title "Uurwerk server (laatste build)" --notes "Serverpakket voor de VPS."
+gh release upload server-latest uurwerk-server.tgz --clobber
+rm uurwerk-server.tgz
 
 ssh "$TARGET" 'bash -s' <<'REMOTE'
 set -euo pipefail
@@ -19,6 +24,7 @@ sudo mkdir -p /opt/uurwerk-server /var/lib/uurwerk
 sudo chown uurwerk:uurwerk /var/lib/uurwerk
 sudo chmod 700 /var/lib/uurwerk
 
+curl -fsSL -o /tmp/uurwerk-server.tgz https://github.com/hiddepepijn-work/Uurwerk/releases/download/server-latest/uurwerk-server.tgz
 sudo tar -C /opt/uurwerk-server -xzf /tmp/uurwerk-server.tgz
 rm /tmp/uurwerk-server.tgz
 cd /opt/uurwerk-server && sudo npm install --omit=dev --no-audit --no-fund --loglevel=error
