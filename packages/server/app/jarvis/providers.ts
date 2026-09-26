@@ -120,51 +120,66 @@ export function claude(apiKey: string, model: string, effort: 'low' | 'medium' |
 
 // --------------------------------------------------------------- OpenAI
 
-export function openai(apiKey: string, model: string): Provider {
+/**
+ * OpenAI through the Responses API: the model thinks (reasoning effort, medium by default)
+ * and calls tools in the same turn — Chat Completions only allows tools with reasoning off
+ * on the GPT-6 family. The conversation is chained with previous_response_id, so OpenAI
+ * keeps the model's own reasoning between turns and nothing has to be sent back by hand.
+ */
+export function openai(apiKey: string, model: string, effort: 'low' | 'medium' | 'high'): Provider {
   const client = new OpenAI({ apiKey })
-  const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = TOOLS.map((tool) => ({
+  const tools: OpenAI.Responses.FunctionTool[] = TOOLS.map((tool) => ({
     type: 'function',
-    function: { name: tool.name, description: tool.description, parameters: tool.parameters }
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+    strict: false
   }))
 
   return {
     name: 'openai',
     model,
     start(system) {
-      const history: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [{ role: 'system', content: system }]
+      let previous: string | null = null
 
       return {
         async send(userText, context, runTool) {
-          history.push({ role: 'user', content: `${context}\n\n${userText}` })
           let changed = false
+          let input: OpenAI.Responses.ResponseInput = [{ role: 'user', content: `${context}
+
+${userText}` }]
 
           for (let round = 0; round < MAX_ROUNDS; round++) {
-            // Chat Completions only calls functions with reasoning off on the GPT-6 family.
-            const response = await client.chat.completions.create({
+            const response = await client.responses.create({
               model,
+              // Instructions are not carried over by previous_response_id; they go every time.
+              instructions: system,
+              input,
               tools,
-              messages: history,
-              ...(/^gpt-6/.test(model) ? { reasoning_effort: 'none' as const } : {})
+              reasoning: { effort },
+              previous_response_id: previous
             })
-            const message = response.choices[0]?.message
-            if (!message) return { text: 'Geen antwoord gekregen.', changed }
-            history.push(message)
+            previous = response.id
 
-            const calls = (message.tool_calls ?? []).filter((call) => call.type === 'function')
-            if (calls.length === 0) return { text: message.content?.trim() || 'Oké.', changed }
+            const calls = response.output.filter(
+              (item): item is OpenAI.Responses.ResponseFunctionToolCall => item.type === 'function_call'
+            )
+            if (calls.length === 0) return { text: response.output_text.trim() || 'Oké.', changed }
 
+            const outputs: OpenAI.Responses.ResponseInput = []
             for (const call of calls) {
-              let input: unknown = {}
+              let args: unknown = {}
               try {
-                input = JSON.parse(call.function.arguments || '{}')
+                args = JSON.parse(call.arguments || '{}')
               } catch {
-                history.push({ role: 'tool', tool_call_id: call.id, content: 'Ongeldige JSON in de argumenten.' })
+                outputs.push({ type: 'function_call_output', call_id: call.call_id, output: 'Ongeldige JSON in de argumenten.' })
                 continue
               }
-              const outcome = await callTool(runTool, call.function.name, input)
+              const outcome = await callTool(runTool, call.name, args)
               changed ||= outcome.wrote
-              history.push({ role: 'tool', tool_call_id: call.id, content: outcome.content })
+              outputs.push({ type: 'function_call_output', call_id: call.call_id, output: outcome.content })
             }
+            input = outputs
           }
           return { text: 'Ik kom er niet uit binnen een redelijk aantal stappen. Zeg het korter?', changed }
         }

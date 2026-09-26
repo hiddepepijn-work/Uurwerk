@@ -5,7 +5,7 @@
  * the model and the voice are settings on the server:
  *
  *   JARVIS_MODEL     claude-opus-5 (default) | claude-sonnet-5 | claude-haiku-4-5 | gpt-5-mini | …
- *   JARVIS_EFFORT    low | medium (default) | high   — Claude only
+ *   JARVIS_EFFORT    low | medium (default) | high   — how much the model thinks per turn
  *   AZURE_SPEECH_REGION  westeurope (default)
  *   secrets.json     anthropicKey / openaiKey, azureSpeechKey   (bin/uurwerk-secrets.js)
  *
@@ -67,7 +67,7 @@ export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTra
     if (isOpenAI) {
       const key = secrets.get('openaiKey')
       if (!key) throw new Error('Geen OpenAI-key op de server. Zet hem met: uurwerk-secrets set openaiKey')
-      return openai(key, model)
+      return openai(key, model, effort)
     }
     const key = secrets.get('anthropicKey')
     if (!key) throw new Error('Geen Anthropic-key op de server. Zet hem met: uurwerk-secrets set anthropicKey')
