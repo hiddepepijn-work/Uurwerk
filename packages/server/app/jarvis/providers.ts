@@ -204,8 +204,12 @@ export function compatible(
   /** Tried in order when the model is overloaded (503) or out of quota (429). */
   fallbackModels: string[] = []
 ): Provider {
-  const client = new OpenAI({ apiKey, baseURL, maxRetries: 1 })
+  // No retries inside the SDK: on a 429 it would first sit out the retry-after (up to a
+  // minute) on a model whose quota is gone. The next model in the chain answers right away.
+  const client = new OpenAI({ apiKey, baseURL, maxRetries: 0, timeout: 60_000 })
   const chain = [model, ...fallbackModels.filter((entry) => entry && entry !== model)]
+  /** Models out of quota, and until when to leave them alone. */
+  const resting = new Map<string, number>()
 
   /** One completion, moving down the chain while models are busy or out of quota. */
   const complete = async (
@@ -213,7 +217,8 @@ export function compatible(
     tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[]
   ): Promise<OpenAI.Chat.Completions.ChatCompletion> => {
     let lastError: unknown = null
-    for (const candidate of chain) {
+    const awake = chain.filter((candidate) => (resting.get(candidate) ?? 0) < Date.now())
+    for (const candidate of awake.length > 0 ? awake : chain) {
       try {
         return await client.chat.completions.create({
           model: candidate,
@@ -223,6 +228,8 @@ export function compatible(
         })
       } catch (error) {
         if (error instanceof OpenAI.APIError && (error.status === 503 || error.status === 429)) {
+          // Out of free quota: skip it for a while. Busy (503): only this once.
+          if (error.status === 429) resting.set(candidate, Date.now() + 15 * 60_000)
           lastError = error
           continue
         }

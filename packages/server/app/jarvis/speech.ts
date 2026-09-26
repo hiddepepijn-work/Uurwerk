@@ -63,12 +63,13 @@ export async function speakFree(text: string): Promise<Uint8Array> {
 }
 
 /**
- * Gemini's own voices (gemini-3.8-flash-tts): natural Dutch with a tone the prompt can set,
+ * Gemini's own voices (gemini-3.8-flash-tts): natural Dutch,
  * on the same free key as the model. The first choice when a Gemini key is there.
  * Returns WAV.
  */
 export async function speakGemini(text: string, key: string, voice: string, model: string): Promise<Uint8Array> {
-  const prompt = `Zeg in het Nederlands, direct en zakelijk met een klein beetje humor, als een assistent die je goed kent: ${text}`
+  // Only the words themselves: a style instruction in front was sometimes read out loud.
+  const prompt = text
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
