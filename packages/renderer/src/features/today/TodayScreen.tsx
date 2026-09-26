@@ -81,6 +81,15 @@ export function TodayScreen({
     ['planning'],
     [today]
   )
+  // Appointments share the agenda card with the plan: one timeline, like the phone.
+  const { data: todaysEvents } = useLiveQuery(
+    (client) => {
+      const start = new Date(`${today}T00:00:00`).getTime()
+      return client.calendar.eventsInRange(start, start + 86_400_000)
+    },
+    ['planning'],
+    [today]
+  )
   const { data: totals } = useLiveQuery(
     (client) => client.tracking.totals(week),
     ['sessions'],
@@ -215,7 +224,12 @@ export function TodayScreen({
             onSelect={(task) => void startTask(task)}
             onSeeAll={() => onNavigate('tasks')}
           />
-          <AgendaList blocks={agenda} onPlanDay={() => setPlannerOpen(true)} />
+          <AgendaList
+            date={today}
+            blocks={agenda}
+            events={todaysEvents ?? []}
+            onPlanDay={() => setPlannerOpen(true)}
+          />
         </aside>
       </div>
 

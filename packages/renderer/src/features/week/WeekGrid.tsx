@@ -180,8 +180,7 @@ export function WeekGrid({
                   <div className="text-[11px] text-text-dim">
                     {weekday.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                   </div>
-                  {/* Hours per day are left to the laptop; on the phone this is only a calendar. */}
-                  <div className="mt-1 hidden font-mono text-[11px] tabular-nums wide:block">
+                  <div className="mt-1 font-mono text-[11px] tabular-nums">
                     {showPlan && <span className="text-text-dim">{formatDuration(plannedMin)}</span>}
                     {showPlan && showActual && <span className="text-text-faint"> / </span>}
                     {showActual && <span className="text-accent">{formatDuration(actualMin)}</span>}

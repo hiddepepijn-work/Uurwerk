@@ -11,6 +11,7 @@ import { ProjectsScreen } from '../features/projects/ProjectsScreen.js'
 import { TaskSwitcher } from '../features/switcher/TaskSwitcher.js'
 import { SettingsScreen } from '../features/settings/SettingsScreen.js'
 import { WeekScreen } from '../features/week/WeekScreen.js'
+import { PhoneAgenda } from '../features/agenda/PhoneAgenda.js'
 import { ReportsScreen } from '../features/reports/ReportsScreen.js'
 import { StatisticsScreen } from '../features/statistics/StatisticsScreen.js'
 import { useTracking } from '../hooks/useTracking.js'
@@ -100,7 +101,8 @@ export function App() {
           {screen === 'tasks' && <TasksScreen tracking={tracking} />}
           {screen === 'projects' && <ProjectsScreen />}
           {screen === 'settings' && <SettingsScreen />}
-          {screen === 'week' && <WeekScreen />}
+          {/* The phone gets its own agenda in the widget's look; the desktop keeps the planner grid. */}
+          {screen === 'week' && (compact ? <PhoneAgenda /> : <WeekScreen />)}
           {screen === 'reports' && <ReportsScreen />}
           {screen === 'statistics' && <StatisticsScreen />}
         </main>
