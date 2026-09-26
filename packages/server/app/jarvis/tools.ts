@@ -370,7 +370,7 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
         leaveAt: leave,
         reminders: leave
           ? `Meldingen om ${hm(minuteOf(leave) - 30)} (spullen) en ${hm(minuteOf(leave) - 15)} (vertrekken)`
-          : `Melding om ${hm(minuteOf(String(input.start)) - 15)}`
+          : `Meldingen om ${hm(minuteOf(String(input.start)) - 30)} en ${hm(minuteOf(String(input.start)) - 15)}`
       }
     }
 

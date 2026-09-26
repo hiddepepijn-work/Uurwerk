@@ -4,7 +4,7 @@
  * the same moment.
  *
  *   planned task             15 min before   "Over 15 min: <task>"
- *   appointment, no travel   15 min before   "Over 15 min: <appointment>"
+ *   appointment, no travel   30 and 15 min before   "Over 30 min" / "Over 15 min: <appointment>"
  *   appointment with travel  30 min before leaving   "Verzamel je spullen"
  *                            15 min before leaving   "Hidde, lukt het?" — spoken
  *
@@ -64,13 +64,16 @@ export function upcomingReminders(
     const where = event.location ? ` · ${event.location}` : ''
 
     if (!travel) {
-      out.push({
-        key: `appointment:${event.id}:${event.startsAt}`,
-        kind: 'appointment',
-        at: event.startsAt - 15 * MIN,
-        title: `Over 15 min: ${event.title}`,
-        body: `${clock(event.startsAt)}${where}`
-      })
+      // Two warnings, like a departure: one to wrap up, one to go.
+      for (const minutes of [30, 15]) {
+        out.push({
+          key: `appointment:${event.id}:${event.startsAt}:${minutes}`,
+          kind: 'appointment',
+          at: event.startsAt - minutes * MIN,
+          title: `Over ${minutes} min: ${event.title}`,
+          body: `${clock(event.startsAt)}${where}`
+        })
+      }
       continue
     }
 

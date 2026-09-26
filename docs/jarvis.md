@@ -100,7 +100,7 @@ Daarna stelt hij voor wanneer het in de planning komt, en zegt dat terug.
 
 **Al in de app** (telefoon én pc, zonder Jarvis):
 - 15 min voor elke geplande taak: "Over 15 min: *taak*".
-- Afspraak zonder reis: 15 min vooraf.
+- Afspraak zonder reis: 30 en 15 min vooraf.
 - Afspraak met reis: 30 min voor vertrek "Verzamel je spullen", 15 min voor vertrek de stem
   "Hidde, lukt het? Nog een kwartier, dan moet je in de auto zitten."
 - Bij een nieuwe afspraak vraagt de app het gebied, de reistijd en een notitie, en zet

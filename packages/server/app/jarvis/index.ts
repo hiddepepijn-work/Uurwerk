@@ -63,6 +63,8 @@ export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTra
   const model = process.env.JARVIS_MODEL?.trim() || 'claude-opus-5'
   const effort = (process.env.JARVIS_EFFORT as 'low' | 'medium' | 'high' | undefined) ?? 'medium'
   const region = process.env.AZURE_SPEECH_REGION?.trim() || 'westeurope'
+  /** When the model is busy or out of free quota: the next ones, in order. */
+  const fallbacks = (process.env.JARVIS_FALLBACK_MODELS ?? '').split(',').map((entry) => entry.trim()).filter(Boolean)
   const family = /^gemini/i.test(model)
     ? 'gemini'
     : /^(mistral|magistral|ministral)/i.test(model)
@@ -79,7 +81,7 @@ export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTra
     if (!key) throw new Error(`Geen ${keyName} op de server. Zet hem met: uurwerk-secrets set ${keyName}`)
     switch (family) {
       case 'gemini':
-        return compatible('gemini', 'https://generativelanguage.googleapis.com/v1beta/openai/', key, model, effort)
+        return compatible('gemini', 'https://generativelanguage.googleapis.com/v1beta/openai/', key, model, effort, fallbacks)
       case 'mistral':
         return compatible('mistral', 'https://api.mistral.ai/v1', key, model, null)
       case 'openai':

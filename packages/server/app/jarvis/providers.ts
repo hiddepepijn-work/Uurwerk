@@ -200,9 +200,37 @@ export function compatible(
   baseURL: string,
   apiKey: string,
   model: string,
-  effort: 'low' | 'medium' | 'high' | null
+  effort: 'low' | 'medium' | 'high' | null,
+  /** Tried in order when the model is overloaded (503) or out of quota (429). */
+  fallbackModels: string[] = []
 ): Provider {
-  const client = new OpenAI({ apiKey, baseURL })
+  const client = new OpenAI({ apiKey, baseURL, maxRetries: 1 })
+  const chain = [model, ...fallbackModels.filter((entry) => entry && entry !== model)]
+
+  /** One completion, moving down the chain while models are busy or out of quota. */
+  const complete = async (
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[]
+  ): Promise<OpenAI.Chat.Completions.ChatCompletion> => {
+    let lastError: unknown = null
+    for (const candidate of chain) {
+      try {
+        return await client.chat.completions.create({
+          model: candidate,
+          tools,
+          messages,
+          ...(effort ? { reasoning_effort: effort } : {})
+        })
+      } catch (error) {
+        if (error instanceof OpenAI.APIError && (error.status === 503 || error.status === 429)) {
+          lastError = error
+          continue
+        }
+        throw error
+      }
+    }
+    throw lastError
+  }
   const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = TOOLS.map((tool) => ({
     type: 'function',
     function: { name: tool.name, description: tool.description, parameters: tool.parameters }
@@ -220,12 +248,7 @@ export function compatible(
           let changed = false
 
           for (let round = 0; round < MAX_ROUNDS; round++) {
-            const response = await client.chat.completions.create({
-              model,
-              tools,
-              messages: history,
-              ...(effort ? { reasoning_effort: effort } : {})
-            })
+            const response = await complete(history, tools)
             const message = response.choices[0]?.message
             if (!message) return { text: 'Geen antwoord gekregen.', changed }
             history.push(message)

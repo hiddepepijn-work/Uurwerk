@@ -73,10 +73,12 @@ describe('reminders', () => {
     expect(reminders[1]!.title).toBe('Hidde, lukt het?')
   })
 
-  it('warns 15 minutes before an appointment without travel', () => {
-    const [reminder] = all([], [event({ location: null })])
-    expect(reminder!.kind).toBe('appointment')
-    expect(reminder!.at).toBe(at(18, 45))
+  it('warns 30 and 15 minutes before an appointment without travel', () => {
+    const reminders = all([], [event({ location: null })])
+    expect(reminders.map((r) => [r.kind, r.at, r.title])).toEqual([
+      ['appointment', at(18, 30), 'Over 30 min: Etentje met Tessie'],
+      ['appointment', at(18, 45), 'Over 15 min: Etentje met Tessie']
+    ])
   })
 
   it('leaves out cancelled and all-day events, and anything outside the window', () => {
