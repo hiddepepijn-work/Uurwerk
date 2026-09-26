@@ -333,7 +333,8 @@ function Block({ item, hourPx, detailed = false }: { item: AgendaItem; hourPx: n
         className={`truncate font-semibold ${detailed ? 'text-[13px] leading-tight' : 'text-[9px] leading-[11px]'}`}
       >
         {item.title}
-        {detailed && !tall && (
+        {/* The time beside the title only when there is room; half a column needs it for the title. */}
+        {detailed && !tall && item.lanes === 1 && (
           <span className="ml-1.5 font-normal opacity-75">{hhmm(item.startMin)}–{hhmm(item.endMin)}</span>
         )}
       </div>

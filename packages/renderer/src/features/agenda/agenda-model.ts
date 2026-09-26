@@ -23,11 +23,11 @@ export interface AgendaItem {
   lane: number
   lanes: number
   /**
-   * A short appointment (half an hour or less): drawn full width on top of whatever it
-   * overlaps, bigger than its duration, instead of squeezed into half a column.
+   * A short appointment (half an hour or less): drawn at least half an hour tall so it can
+   * be read, beside whatever it overlaps.
    */
   overlay: boolean
-  /** Minutes at the top of this block hidden under an overlay; its text starts below them. */
+  /** Kept for the widget's data shape; side-by-side layout never covers anything. */
   coveredMin: number
 }
 
@@ -130,7 +130,7 @@ function placeInLanes(items: Omit<AgendaItem, 'lane' | 'lanes' | 'overlay' | 'co
 
   const close = (): void => {
     const lanes = Math.max(1, laneEnds.length)
-    for (const item of cluster) item.lanes = item.kind === 'break' || item.overlay ? 1 : lanes
+    for (const item of cluster) item.lanes = item.kind === 'break' ? 1 : lanes
     cluster = []
     laneEnds = []
   }
@@ -140,28 +140,25 @@ function placeInLanes(items: Omit<AgendaItem, 'lane' | 'lanes' | 'overlay' | 'co
     const overlay =
       (raw.kind === 'appointment' || raw.kind === 'travel') && raw.endMin - raw.startMin <= OVERLAY_MIN
     const item: AgendaItem = { ...raw, lane: 0, lanes: 1, overlay, coveredMin: 0 }
-    // Breaks and overlays never take a lane: they sit on top, full width.
-    if (item.kind !== 'break' && !overlay) {
+    // Breaks never take a lane. A short appointment does, and reserves the height it is
+    // drawn at, so nothing is placed under its enlarged box.
+    if (item.kind !== 'break') {
+      const drawnEnd = overlay ? Math.max(item.endMin, item.startMin + OVERLAY_MIN) : item.endMin
       let lane = laneEnds.findIndex((end) => end <= item.startMin)
       if (lane === -1) {
         lane = laneEnds.length
-        laneEnds.push(item.endMin)
-      } else laneEnds[lane] = item.endMin
+        laneEnds.push(drawnEnd)
+      } else laneEnds[lane] = drawnEnd
       item.lane = lane
     }
     cluster.push(item)
     placed.push(item)
-    clusterEnd = Math.max(clusterEnd, item.endMin)
+    clusterEnd = Math.max(
+      clusterEnd,
+      item.overlay ? Math.max(item.endMin, item.startMin + OVERLAY_MIN) : item.endMin
+    )
   }
   close()
 
-  // A block whose top is under an overlay moves its own text down, so both stay readable.
-  for (const item of placed) {
-    if (item.overlay || item.kind === 'break') continue
-    for (const over of placed) {
-      if (!over.overlay || over.startMin < item.startMin || over.startMin >= item.startMin + OVERLAY_MIN) continue
-      item.coveredMin = Math.max(item.coveredMin, over.startMin - item.startMin + OVERLAY_MIN)
-    }
-  }
   return placed
 }
