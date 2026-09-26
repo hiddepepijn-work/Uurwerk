@@ -103,11 +103,16 @@ export async function liveSession(options: LiveOptions): Promise<JarvisLiveSessi
   const model = process.env.JARVIS_LIVE_MODEL?.trim() || 'gemini-3.8-live-extended-thinking'
   const thinking = (process.env.JARVIS_LIVE_THINKING?.trim() || 'medium').toUpperCase()
 
-  const instruction = `${options.system}
+  // Native audio models pick their language themselves; only the instruction can pin it.
+  const instruction = `TAAL: je spreekt uitsluitend Nederlands. Nooit Engels, ook niet als je iets niet goed
+verstaat of als een tool Engelse tekst teruggeeft.
+
+${options.system}
 
 --- LIVE ---
-Dit is een live spraakgesprek: Hidde hoort je direct. Antwoord kort en snel, praat Nederlands,
-en laat hem gerust onderbreken. De stand van vandaag staat hieronder; haal alleen iets op met
+Dit is een live spraakgesprek: Hidde hoort je direct. Antwoord kort en snel, altijd in het
+Nederlands, en laat hem gerust onderbreken. Als je een tool gebruikt, wacht je op het resultaat
+en geef je dan meteen antwoord; zeg nooit dat je later terugkomt. De stand van vandaag staat hieronder; haal alleen iets op met
 een tool als het over een andere dag gaat of als er iets veranderd kan zijn.
 
 --- VANDAAG ---
@@ -123,7 +128,10 @@ ${await today(options.api)}`
         functionDeclarations: TOOLS.map((tool) => ({
           name: tool.name,
           description: tool.description,
-          parameters: toSchema(tool.parameters) as never
+          parameters: toSchema(tool.parameters) as never,
+          // The default on 3.8 Live is to call tools in the background and carry on talking
+          // ("I'll let you know"). The tools here answer in milliseconds: wait for them.
+          behavior: 'BLOCKING' as never
         }))
       }
     ],

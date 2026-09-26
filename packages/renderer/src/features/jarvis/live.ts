@@ -262,7 +262,8 @@ export class LiveCall {
         message.toolCall.functionCalls.map(async (call) => {
           try {
             const result = await api.jarvis.runTool({ name: call.name ?? '', args: (call.args ?? {}) as Record<string, unknown> })
-            return { id: call.id, name: call.name, response: { result } }
+            // Speak about the result as soon as it is in, rather than keeping it for later.
+            return { id: call.id, name: call.name, response: { result }, scheduling: 'WHEN_IDLE' as never }
           } catch (error) {
             return { id: call.id, name: call.name, response: { error: error instanceof Error ? error.message : String(error) } }
           }
