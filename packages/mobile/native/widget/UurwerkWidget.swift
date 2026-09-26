@@ -1,0 +1,362 @@
+// Uurwerk's home-screen widgets.
+//
+//   Agenda (large)   the next four hours in the app's agenda look; ▲ ▼ shift the window by
+//                    four hours, "nu" jumps back. Widgets cannot scroll — these buttons are
+//                    what iOS allows instead (App Intents, iOS 17).
+//   Snel (medium)    Timer, Jarvis, Taak, Afspraak: each opens the app on that action.
+//
+// The app writes widget.json into the shared App Group container after every change; the
+// widget only reads it. No network, no token: it shows what the phone already knows.
+
+import AppIntents
+import SwiftUI
+import WidgetKit
+
+let appGroup = "group.nl.hiddepepijn.uurwerk"
+
+// MARK: - Data (written by the app, see packages/mobile/src/widget-data.ts)
+
+struct WidgetItem: Codable, Hashable {
+    let start: Int
+    let end: Int
+    let title: String
+    let kind: String
+    let area: String?
+    let meta: String?
+}
+
+struct WidgetDay: Codable {
+    let date: String
+    let items: [WidgetItem]
+}
+
+struct WidgetData: Codable {
+    let generatedAt: Double
+    let days: [WidgetDay]
+    let overdue: [String]
+    let running: String?
+}
+
+enum Store {
+    static func load() -> WidgetData? {
+        guard
+            let folder = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup),
+            let data = try? Data(contentsOf: folder.appendingPathComponent("widget.json"))
+        else { return nil }
+        return try? JSONDecoder().decode(WidgetData.self, from: data)
+    }
+
+    static var offsetHours: Int {
+        get { UserDefaults(suiteName: appGroup)?.integer(forKey: "offsetHours") ?? 0 }
+        set { UserDefaults(suiteName: appGroup)?.set(newValue, forKey: "offsetHours") }
+    }
+}
+
+// MARK: - The ▲ ▼ buttons
+
+struct ShiftWindowIntent: AppIntent {
+    static var title: LocalizedStringResource = "Agenda verschuiven"
+
+    @Parameter(title: "Uren")
+    var hours: Int
+
+    init() { hours = 0 }
+    init(hours: Int) { self.hours = hours }
+
+    func perform() async throws -> some IntentResult {
+        Store.offsetHours = hours == 0 ? 0 : max(-12, min(20, Store.offsetHours + hours))
+        return .result()
+    }
+}
+
+// MARK: - Timeline
+
+struct AgendaEntry: TimelineEntry {
+    let date: Date
+    let data: WidgetData?
+    let offset: Int
+}
+
+struct AgendaProvider: TimelineProvider {
+    func placeholder(in context: Context) -> AgendaEntry {
+        AgendaEntry(date: Date(), data: nil, offset: 0)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (AgendaEntry) -> Void) {
+        completion(AgendaEntry(date: Date(), data: Store.load(), offset: Store.offsetHours))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<AgendaEntry>) -> Void) {
+        let data = Store.load()
+        let offset = Store.offsetHours
+        let now = Date()
+        // One entry every 15 minutes for two hours, so the "now" line keeps moving.
+        let entries = (0..<8).map { step in
+            AgendaEntry(date: now.addingTimeInterval(Double(step) * 900), data: data, offset: offset)
+        }
+        completion(Timeline(entries: entries, policy: .atEnd))
+    }
+}
+
+// MARK: - Look
+
+enum Palette {
+    static let background = Color(red: 0.067, green: 0.063, blue: 0.078)
+    static let card = Color(red: 0.137, green: 0.129, blue: 0.157)
+    static let line = Color(red: 0.149, green: 0.141, blue: 0.169)
+    static let faint = Color(red: 0.553, green: 0.541, blue: 0.580)
+    static let text = Color(red: 0.957, green: 0.953, blue: 0.941)
+    static let accent = Color(red: 0.243, green: 0.812, blue: 0.451)
+    static let now = Color(red: 1.0, green: 0.42, blue: 0.353)
+
+    static func fill(_ area: String?) -> Color {
+        switch area {
+        case "stage": return accent
+        case "school": return Color(red: 0.416, green: 0.655, blue: 1.0)
+        case "personal": return Color(red: 0.941, green: 0.631, blue: 0.294)
+        case "work": return Color(red: 0.788, green: 0.635, blue: 1.0)
+        default: return faint
+        }
+    }
+
+    static func ink(_ area: String?) -> Color {
+        switch area {
+        case "school": return Color(red: 0.043, green: 0.102, blue: 0.2)
+        case "personal": return Color(red: 0.169, green: 0.09, blue: 0.02)
+        case "work": return Color(red: 0.118, green: 0.063, blue: 0.2)
+        default: return Color(red: 0.047, green: 0.122, blue: 0.075)
+        }
+    }
+}
+
+func hhmm(_ minute: Int) -> String {
+    let m = ((minute % 1440) + 1440) % 1440
+    return String(format: "%02d:%02d", m / 60, m % 60)
+}
+
+// MARK: - Agenda widget
+
+struct AgendaView: View {
+    let entry: AgendaEntry
+
+    private var calendar: Calendar { Calendar.current }
+    private var nowMinute: Int {
+        calendar.component(.hour, from: entry.date) * 60 + calendar.component(.minute, from: entry.date)
+    }
+    private var windowStart: Int {
+        max(0, min(20, calendar.component(.hour, from: entry.date) + entry.offset)) * 60
+    }
+    private var windowEnd: Int { windowStart + 240 }
+    private var items: [WidgetItem] {
+        (entry.data?.days.first?.items ?? []).filter { $0.end > windowStart && $0.start < windowEnd }
+    }
+    private var dayLabel: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "nl_NL")
+        formatter.dateFormat = "EEEE d MMM"
+        return formatter.string(from: entry.date).uppercased()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            header
+            GeometryReader { geo in
+                timeline(height: geo.size.height, width: geo.size.width)
+            }
+            if let overdue = entry.data?.overdue, !overdue.isEmpty {
+                Text("Te laat: " + overdue.prefix(2).joined(separator: " · "))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color(red: 0.945, green: 0.702, blue: 0.659))
+                    .lineLimit(1)
+            }
+        }
+        .widgetURL(URL(string: "uurwerk://agenda"))
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(dayLabel)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(Palette.accent)
+                Text("\(hhmm(windowStart)) – \(hhmm(windowEnd))")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(Palette.text)
+            }
+            Spacer()
+            if entry.offset != 0 {
+                Button(intent: ShiftWindowIntent(hours: 0)) {
+                    Text("nu").font(.system(size: 12, weight: .semibold)).frame(width: 34, height: 30)
+                }
+                .buttonStyle(.plain)
+                .background(Palette.card, in: Capsule())
+                .foregroundColor(Palette.text)
+            }
+            Button(intent: ShiftWindowIntent(hours: -4)) {
+                Image(systemName: "chevron.up").font(.system(size: 13, weight: .bold)).frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .background(Palette.card, in: Circle())
+            .foregroundColor(Palette.text)
+            Button(intent: ShiftWindowIntent(hours: 4)) {
+                Image(systemName: "chevron.down").font(.system(size: 13, weight: .bold)).frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .background(Palette.card, in: Circle())
+            .foregroundColor(Palette.text)
+        }
+    }
+
+    private func timeline(height: CGFloat, width: CGFloat) -> some View {
+        let perMinute = height / 240
+        let gutter: CGFloat = 36
+        return ZStack(alignment: .topLeading) {
+            ForEach(0..<5, id: \.self) { hour in
+                HStack(spacing: 6) {
+                    Text(hhmm(windowStart + hour * 60))
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(Palette.faint)
+                        .frame(width: gutter - 6, alignment: .leading)
+                    Rectangle().fill(Palette.line).frame(height: 1)
+                }
+                .offset(y: CGFloat(hour * 60) * perMinute - 5)
+            }
+            ForEach(items, id: \.self) { item in
+                block(item, perMinute: perMinute, width: width - gutter)
+                    .offset(x: gutter, y: CGFloat(max(item.start, windowStart) - windowStart) * perMinute + 1)
+            }
+            if nowMinute >= windowStart && nowMinute <= windowEnd {
+                HStack(spacing: 0) {
+                    Circle().fill(Palette.now).frame(width: 7, height: 7)
+                    Rectangle().fill(Palette.now).frame(height: 2)
+                }
+                .offset(x: gutter - 4, y: CGFloat(nowMinute - windowStart) * perMinute - 3)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func block(_ item: WidgetItem, perMinute: CGFloat, width: CGFloat) -> some View {
+        let visible = min(item.end, windowEnd) - max(item.start, windowStart)
+        let height = max(CGFloat(visible) * perMinute - 3, 8)
+        if item.kind == "break" {
+            Text(height >= 12 ? "Pauze" : "")
+                .font(.system(size: 9))
+                .foregroundColor(Palette.faint)
+                .frame(width: width, height: height, alignment: .leading)
+                .padding(.leading, 8)
+        } else {
+            let planned = item.kind == "task" || item.kind == "meeting"
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                if height >= 36, let meta = item.meta {
+                    Text(meta).font(.system(size: 10)).opacity(0.8).lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(width: width, height: height, alignment: .leading)
+            .foregroundColor(planned ? Palette.ink(item.area) : Palette.text)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(planned ? Palette.fill(item.area) : Palette.fill(item.area).opacity(0.18))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(planned ? Color.clear : Palette.fill(item.area), style: StrokeStyle(lineWidth: 1.5, dash: item.kind == "travel" ? [4, 3] : []))
+            )
+        }
+    }
+}
+
+struct AgendaWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "UurwerkAgenda", provider: AgendaProvider()) { entry in
+            AgendaView(entry: entry)
+                .containerBackground(Palette.background, for: .widget)
+        }
+        .configurationDisplayName("Agenda")
+        .description("De komende vier uur, met knoppen om te bladeren.")
+        .supportedFamilies([.systemLarge])
+    }
+}
+
+// MARK: - Quick actions widget
+
+struct QuickEntry: TimelineEntry {
+    let date: Date
+    let running: String?
+}
+
+struct QuickProvider: TimelineProvider {
+    func placeholder(in context: Context) -> QuickEntry { QuickEntry(date: Date(), running: nil) }
+    func getSnapshot(in context: Context, completion: @escaping (QuickEntry) -> Void) {
+        completion(QuickEntry(date: Date(), running: Store.load()?.running))
+    }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<QuickEntry>) -> Void) {
+        completion(Timeline(entries: [QuickEntry(date: Date(), running: Store.load()?.running)], policy: .never))
+    }
+}
+
+struct QuickView: View {
+    let entry: QuickEntry
+
+    var body: some View {
+        Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+            GridRow {
+                tile(
+                    url: "uurwerk://timer",
+                    icon: entry.running == nil ? "play.fill" : "stop.fill",
+                    title: entry.running == nil ? "Start timer" : "Stop timer",
+                    subtitle: entry.running,
+                    primary: true
+                )
+                tile(url: "uurwerk://jarvis", icon: "mic.fill", title: "Jarvis", subtitle: "Praat of plan", primary: false)
+            }
+            GridRow {
+                tile(url: "uurwerk://task", icon: "plus", title: "Taak", subtitle: nil, primary: false)
+                tile(url: "uurwerk://appointment", icon: "calendar.badge.plus", title: "Afspraak", subtitle: nil, primary: false)
+            }
+        }
+    }
+
+    private func tile(url: String, icon: String, title: String, subtitle: String?, primary: Bool) -> some View {
+        Link(destination: URL(string: url)!) {
+            HStack(spacing: 8) {
+                Image(systemName: icon).font(.system(size: 15, weight: .semibold))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).font(.system(size: 13, weight: .bold))
+                    if let subtitle {
+                        Text(subtitle).font(.system(size: 10)).opacity(0.75).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .foregroundColor(primary ? Color(red: 0.047, green: 0.122, blue: 0.075) : Palette.text)
+            .background(primary ? Palette.accent : Palette.card, in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+}
+
+struct QuickWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "UurwerkSnel", provider: QuickProvider()) { entry in
+            QuickView(entry: entry)
+                .containerBackground(Palette.background, for: .widget)
+        }
+        .configurationDisplayName("Snel")
+        .description("Timer, Jarvis, taak of afspraak met één tik.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+@main
+struct UurwerkWidgets: WidgetBundle {
+    var body: some Widget {
+        AgendaWidget()
+        QuickWidget()
+    }
+}

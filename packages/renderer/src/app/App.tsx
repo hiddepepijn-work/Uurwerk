@@ -63,6 +63,7 @@ export function App() {
         setPlanDayRequest(Date.now())
       } else if (target === 'today') setScreen('today')
       else if (target === 'tasks') setScreen('tasks')
+      else if (target === 'agenda') setScreen('week')
       else if (target === 'addEvent') {
         setScreen('week')
         setComposerOpen(true)

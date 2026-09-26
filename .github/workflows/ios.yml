@@ -66,6 +66,17 @@ jobs:
           npx cap add ios
           npx cap sync ios
 
+      # The home-screen widgets: a WidgetKit extension added to the freshly generated
+      # project, sharing an App Group with the app (see packages/mobile/native).
+      - name: Widget extension
+        run: |
+          set -e
+          mkdir -p packages/mobile/ios/App/UurwerkWidget
+          cp packages/mobile/native/widget/* packages/mobile/ios/App/UurwerkWidget/
+          cp packages/mobile/native/App.entitlements packages/mobile/ios/App/App/App.entitlements
+          gem list -i xcodeproj >/dev/null || sudo gem install xcodeproj --no-document
+          ruby packages/mobile/native/add-widget.rb packages/mobile/ios/App/App.xcodeproj
+
       - name: App icon
         run: |
           set -e
@@ -86,6 +97,16 @@ jobs:
             /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${{ github.run_number }}" "$PLIST"
           # Dark app: keep the status bar light.
           /usr/libexec/PlistBuddy -c "Add :UIUserInterfaceStyle string Dark" "$PLIST" || true
+          # uurwerk:// — what the widget buttons open.
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string nl.hiddepepijn.uurwerk" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string uurwerk" "$PLIST"
+          # The widget must carry the same version as the app it ships in.
+          WIDGET=packages/mobile/ios/App/UurwerkWidget/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.1.${{ github.run_number }}" "$WIDGET"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$WIDGET"
 
       - name: Compile (unsigned)
         working-directory: packages/mobile/ios/App
@@ -102,6 +123,13 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          # Ad-hoc signatures that carry the App Group entitlement: SideStore reads the
+          # entitlements from the binaries when it re-signs with your Apple ID, and without
+          # them app and widget would not share their container.
+          NATIVE=../../native
+          codesign --force --sign - --entitlements "$NATIVE/widget/UurwerkWidget.entitlements" Payload/App.app/PlugIns/UurwerkWidget.appex
+          codesign --force --sign - --entitlements "$NATIVE/App.entitlements" Payload/App.app
+          codesign -d --entitlements - Payload/App.app/PlugIns/UurwerkWidget.appex | tail -5
           zip -qry ../../Uurwerk.ipa Payload
           ls -la ../../Uurwerk.ipa
 

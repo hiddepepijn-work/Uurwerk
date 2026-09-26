@@ -37,7 +37,7 @@ export interface AppEvents {
    */
   /** Open Jarvis; a moment makes him start the conversation himself. */
   'jarvis:open': { moment: 'morning' | 'evening' | null }
-  'ui:open': { target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay' | 'addEvent' }
+  'ui:open': { target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay' | 'addEvent' | 'agenda' }
 }
 
 export type AppEventName = keyof AppEvents

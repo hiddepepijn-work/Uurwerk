@@ -36,6 +36,7 @@ import { openPhoneDatabase } from './database.js'
 import { onQuestionTapped, scheduleNotifications } from './notifications.js'
 import { AudioFocus, speakEvening, speakMorning } from './speech.js'
 import { PhoneSync } from './sync.js'
+import { widgetData } from './widget-data.js'
 
 // ------------------------------------------------------------------ events
 
@@ -136,10 +137,21 @@ async function start(): Promise<void> {
   let rescheduleTimer: ReturnType<typeof setTimeout> | null = null
   const reschedule = (): void => {
     if (rescheduleTimer) clearTimeout(rescheduleTimer)
-    rescheduleTimer = setTimeout(() => void scheduleNotifications(reminders).catch(() => undefined), 5_000)
+    rescheduleTimer = setTimeout(() => {
+      void scheduleNotifications(reminders).catch(() => undefined)
+      refreshWidgets()
+    }, 5_000)
+  }
+  /** The home-screen widgets read what this writes; a failure only means stale widgets. */
+  const refreshWidgets = (): void => {
+    try {
+      void AudioFocus.setWidgetData({ json: widgetData(backend) }).catch(() => undefined)
+    } catch {
+      // Nothing to show is better than a crash at start.
+    }
   }
   bus.on('data:invalidated', ({ domain }) => {
-    if (domain === 'planning' || domain === 'tasks') reschedule()
+    if (domain === 'planning' || domain === 'tasks' || domain === 'sessions') reschedule()
   })
 
   // Deliberately no repairOnStartup(): an open segment here may be the laptop's timer,
@@ -211,6 +223,24 @@ async function start(): Promise<void> {
   void Capacitor.addListener('resume', () => {
     void sync.round()
     void scheduleNotifications(reminders).catch(() => undefined)
+    refreshWidgets()
+  })
+  refreshWidgets()
+
+  // The widget buttons: uurwerk://timer, jarvis, task, appointment, agenda.
+  void Capacitor.addListener('appUrlOpen', ({ url }) => {
+    const action = url.replace('uurwerk://', '').split(/[/?#]/)[0]
+    if (action === 'jarvis') emit('jarvis:open', { moment: null })
+    else if (action === 'task') emit('ui:open', { target: 'tasks' })
+    else if (action === 'appointment') emit('ui:open', { target: 'addEvent' })
+    else if (action === 'agenda') emit('ui:open', { target: 'agenda' })
+    else if (action === 'timer') {
+      const running = backend.trackingService.isRunning()
+      void (running ? window.api!.tracking.stopRun() : window.api!.tracking.startRun(null)).then(() => {
+        emit('ui:open', { target: 'today' })
+        refreshWidgets()
+      })
+    }
   })
 }
 
