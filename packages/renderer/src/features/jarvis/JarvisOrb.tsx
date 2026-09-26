@@ -7,7 +7,8 @@ import { useEffect, useRef, type MutableRefObject } from 'react'
  *   idle       breathes slowly
  *   listening  swells with Hidde's voice; loud moments send a ring outward
  *   thinking   the layers turn around each other and a violet sheen passes through
- *   speaking   the edge dances on the loudness of Jarvis's own voice
+ *   speaking   swells and ripples hard on the loudness of Jarvis's own voice; stressed
+ *              syllables send teal rings outward and flash the core
  *
  * The loudness comes in through `level` (0…1), a ref the caller writes every frame or so —
  * a ref, not a prop, so the orb never re-renders React to move. Everything eases: the state
@@ -35,7 +36,7 @@ const TUNING: Record<OrbState, Tuning> = {
   idle: { wobble: 0.025, gain: 0.0, spin: 0.12, violet: 0, particles: 0, scale: 1 },
   listening: { wobble: 0.04, gain: 0.22, spin: 0.25, violet: 0, particles: 0, scale: 1 },
   thinking: { wobble: 0.07, gain: 0.0, spin: 2.2, violet: 1, particles: 1, scale: 0.86 },
-  speaking: { wobble: 0.06, gain: 0.3, spin: 0.45, violet: 0.25, particles: 0, scale: 1 }
+  speaking: { wobble: 0.09, gain: 0.55, spin: 0.7, violet: 0.25, particles: 0, scale: 1 }
 }
 
 const LAYERS = [
@@ -76,7 +77,7 @@ export function JarvisOrb({
     let smoothLevel = 0
     let angle = 0
     let frame = 0
-    const rings: Array<{ radius: number; alpha: number }> = []
+    const rings: Array<{ radius: number; alpha: number; teal: boolean }> = []
     // The thinking swarm: each particle circles at its own distance and spirals inward,
     // then starts again at the outside.
     const swarm = Array.from({ length: 46 }, () => ({
@@ -110,18 +111,19 @@ export function JarvisOrb({
 
       context.clearRect(0, 0, size, size)
 
-      // Rings outward on loud moments while listening.
-      if (goal.gain > 0 && goal.violet === 0 && smoothLevel > 0.55 && t - lastRing > 0.35) {
-        rings.push({ radius: base, alpha: 0.35 })
+      // Rings outward on loud moments: green while listening, teal and quicker while speaking.
+      const speaking = goal.gain > 0.4
+      if (goal.gain > 0 && smoothLevel > (speaking ? 0.45 : 0.55) && t - lastRing > (speaking ? 0.22 : 0.35)) {
+        rings.push({ radius: base, alpha: speaking ? 0.5 : 0.35, teal: speaking })
         lastRing = t
       }
       for (const ring of rings) {
-        ring.radius += 1.6
-        ring.alpha *= 0.955
+        ring.radius += ring.teal ? 2.4 : 1.6
+        ring.alpha *= ring.teal ? 0.94 : 0.955
         context.beginPath()
         context.arc(center, center, ring.radius, 0, Math.PI * 2)
-        context.strokeStyle = `rgba(62, 207, 115, ${ring.alpha})`
-        context.lineWidth = 2
+        context.strokeStyle = ring.teal ? `rgba(95, 208, 197, ${ring.alpha})` : `rgba(62, 207, 115, ${ring.alpha})`
+        context.lineWidth = ring.teal ? 3 : 2
         context.stroke()
       }
       while (rings.length > 0 && rings[0]!.alpha < 0.02) rings.shift()
@@ -177,7 +179,8 @@ export function JarvisOrb({
         if (alpha < 0.01) continue
         const radius = base * layer.scale
         const turn = angle * (index % 2 === 0 ? 1 : -1.3) + layer.phase
-        const wobble = current.wobble + smoothLevel * current.gain * 0.35
+        // Loud syllables throw the edge out further, most of all while speaking.
+        const wobble = current.wobble + smoothLevel * current.gain * 0.6
 
         context.beginPath()
         const points = 96
@@ -216,7 +219,7 @@ export function JarvisOrb({
 
       // A small bright core, the part that reads as "alive" at a glance.
       const core = context.createRadialGradient(center, center, 0, center, center, base * 0.55)
-      core.addColorStop(0, `rgba(235, 255, 244, ${0.35 + smoothLevel * 0.3})`)
+      core.addColorStop(0, `rgba(235, 255, 244, ${Math.min(0.95, 0.35 + smoothLevel * (0.3 + current.gain * 0.6))})`)
       core.addColorStop(1, 'rgba(235, 255, 244, 0)')
       context.fillStyle = core
       context.beginPath()
