@@ -21,6 +21,7 @@
   "dependencies": {
     "docx": "^9.1.0",
     "node-sqlite3-wasm": "^0.8.30",
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^6.9.16",
+    "msedge-tts": "^2.0.8"
   }
 }

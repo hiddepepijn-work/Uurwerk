@@ -28,6 +28,8 @@ export type SecretKey =
   // Jarvis, on the server only: the language model and the voice.
   | 'anthropicKey'
   | 'openaiKey'
+  | 'geminiKey'
+  | 'mistralKey'
   | 'azureSpeechKey'
   | `ics:${string}`
   | `icloud:${string}`

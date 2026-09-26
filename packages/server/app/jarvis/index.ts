@@ -4,10 +4,12 @@
  * The brief in docs/jarvis.md is his standing instruction; the tools are the app's own API;
  * the model and the voice are settings on the server:
  *
- *   JARVIS_MODEL     claude-opus-5 (default) | claude-sonnet-5 | claude-haiku-4-5 | gpt-5-mini | …
+ *   JARVIS_MODEL     gemini-3.8-flash | mistral-medium-latest | gpt-6-luna | claude-opus-5 | …
+ *                    — the prefix picks the provider and the key it needs
  *   JARVIS_EFFORT    low | medium (default) | high   — how much the model thinks per turn
  *   AZURE_SPEECH_REGION  westeurope (default)
- *   secrets.json     anthropicKey / openaiKey, azureSpeechKey   (bin/uurwerk-secrets.js)
+ *   secrets.json     geminiKey / mistralKey / openaiKey / anthropicKey, azureSpeechKey
+ *                    (bin/uurwerk-secrets.js). Without an Azure key: the free Edge voice.
  *
  * Conversations live in memory for two hours: long enough for the morning's back-and-forth,
  * short enough that tomorrow starts fresh.
@@ -20,8 +22,8 @@ import type { SecretVault } from '@backend/host.js'
 import { log } from '@backend/log.js'
 
 import brief from '../../../../docs/jarvis.md'
-import { claude, openai, type Conversation, type Provider } from './providers.js'
-import { speak } from './speech.js'
+import { claude, compatible, openai, type Conversation, type Provider } from './providers.js'
+import { speak, speakFree } from './speech.js'
 import { runTool } from './tools.js'
 
 const IDLE_MS = 2 * 3_600_000
@@ -61,17 +63,30 @@ export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTra
   const model = process.env.JARVIS_MODEL?.trim() || 'claude-opus-5'
   const effort = (process.env.JARVIS_EFFORT as 'low' | 'medium' | 'high' | undefined) ?? 'medium'
   const region = process.env.AZURE_SPEECH_REGION?.trim() || 'westeurope'
-  const isOpenAI = /^(gpt|o\d)/i.test(model)
+  const family = /^gemini/i.test(model)
+    ? 'gemini'
+    : /^(mistral|magistral|ministral)/i.test(model)
+      ? 'mistral'
+      : /^(gpt|o\d)/i.test(model)
+        ? 'openai'
+        : 'anthropic'
+  const keyName = ({ gemini: 'geminiKey', mistral: 'mistralKey', openai: 'openaiKey', anthropic: 'anthropicKey' } as const)[
+    family
+  ]
 
   const provider = (): Provider => {
-    if (isOpenAI) {
-      const key = secrets.get('openaiKey')
-      if (!key) throw new Error('Geen OpenAI-key op de server. Zet hem met: uurwerk-secrets set openaiKey')
-      return openai(key, model, effort)
+    const key = secrets.get(keyName)
+    if (!key) throw new Error(`Geen ${keyName} op de server. Zet hem met: uurwerk-secrets set ${keyName}`)
+    switch (family) {
+      case 'gemini':
+        return compatible('gemini', 'https://generativelanguage.googleapis.com/v1beta/openai/', key, model, effort)
+      case 'mistral':
+        return compatible('mistral', 'https://api.mistral.ai/v1', key, model, null)
+      case 'openai':
+        return openai(key, model, effort)
+      default:
+        return claude(key, model, effort)
     }
-    const key = secrets.get('anthropicKey')
-    if (!key) throw new Error('Geen Anthropic-key op de server. Zet hem met: uurwerk-secrets set anthropicKey')
-    return claude(key, model, effort)
   }
 
   const context = (): string => {
@@ -81,13 +96,14 @@ export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTra
 
   return {
     async status(): Promise<JarvisStatus> {
-      const keyPresent = isOpenAI ? secrets.has('openaiKey') : secrets.has('anthropicKey')
+      const keyPresent = secrets.has(keyName)
       return {
         ready: keyPresent,
-        provider: isOpenAI ? 'openai' : 'anthropic',
+        provider: family,
         model,
-        voice: secrets.has('azureSpeechKey'),
-        problem: keyPresent ? null : `De key voor ${isOpenAI ? 'OpenAI' : 'Anthropic'} staat nog niet op de server.`
+        // Always a voice: Azure with a key, the free Edge voice without.
+        voice: true,
+        problem: keyPresent ? null : `${keyName} staat nog niet op de server.`
       }
     },
 
@@ -112,9 +128,10 @@ export function createJarvis(api: TimeTrackerAPI, secrets: SecretVault): TimeTra
 
       let audio: string | null = null
       const voiceKey = secrets.get('azureSpeechKey')
-      if (input.speak !== false && voiceKey) {
+      if (input.speak !== false) {
         try {
-          audio = Buffer.from(await speak(turn.text, voiceKey, region)).toString('base64')
+          const bytes = voiceKey ? await speak(turn.text, voiceKey, region) : await speakFree(turn.text)
+          audio = Buffer.from(bytes).toString('base64')
         } catch (error) {
           // A reply without a voice still answers the question.
           log.warn('Jarvis could not speak.', error)

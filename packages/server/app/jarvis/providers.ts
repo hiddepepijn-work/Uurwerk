@@ -187,3 +187,68 @@ ${userText}` }]
     }
   }
 }
+
+// ------------------------------------------------- OpenAI-compatible (Gemini, Mistral)
+
+/**
+ * Providers that speak OpenAI's Chat Completions on their own endpoint: Google Gemini and
+ * Mistral. Both have a free tier that needs no payment card, which is why they are here.
+ * Thinking goes through `reasoning_effort` where the provider supports it (Gemini).
+ */
+export function compatible(
+  name: string,
+  baseURL: string,
+  apiKey: string,
+  model: string,
+  effort: 'low' | 'medium' | 'high' | null
+): Provider {
+  const client = new OpenAI({ apiKey, baseURL })
+  const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = TOOLS.map((tool) => ({
+    type: 'function',
+    function: { name: tool.name, description: tool.description, parameters: tool.parameters }
+  }))
+
+  return {
+    name,
+    model,
+    start(system) {
+      const history: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [{ role: 'system', content: system }]
+
+      return {
+        async send(userText, context, runTool) {
+          history.push({ role: 'user', content: `${context}\n\n${userText}` })
+          let changed = false
+
+          for (let round = 0; round < MAX_ROUNDS; round++) {
+            const response = await client.chat.completions.create({
+              model,
+              tools,
+              messages: history,
+              ...(effort ? { reasoning_effort: effort } : {})
+            })
+            const message = response.choices[0]?.message
+            if (!message) return { text: 'Geen antwoord gekregen.', changed }
+            history.push(message)
+
+            const calls = (message.tool_calls ?? []).filter((call) => call.type === 'function')
+            if (calls.length === 0) return { text: message.content?.trim() || 'Oké.', changed }
+
+            for (const call of calls) {
+              let args: unknown = {}
+              try {
+                args = JSON.parse(call.function.arguments || '{}')
+              } catch {
+                history.push({ role: 'tool', tool_call_id: call.id, content: 'Ongeldige JSON in de argumenten.' })
+                continue
+              }
+              const outcome = await callTool(runTool, call.function.name, args)
+              changed ||= outcome.wrote
+              history.push({ role: 'tool', tool_call_id: call.id, content: outcome.content })
+            }
+          }
+          return { text: 'Ik kom er niet uit binnen een redelijk aantal stappen. Zeg het korter?', changed }
+        }
+      }
+    }
+  }
+}

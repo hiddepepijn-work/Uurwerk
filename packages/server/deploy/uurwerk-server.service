@@ -20,8 +20,8 @@ Environment=UURWERK_PORT=8790
 Environment=UURWERK_TRUST_PROXY=1
 Environment=UURWERK_SESSION_HOURS=12
 Environment=UURWERK_TITLE=Uurwerk
-# Jarvis: the model (see docs/jarvis.md). gpt-6-luna needs openaiKey; claude-* needs anthropicKey.
-Environment=JARVIS_MODEL=gpt-6-luna
+# Jarvis: the model (see docs/jarvis.md). gemini-* needs geminiKey, gpt-* openaiKey, claude-* anthropicKey.
+Environment=JARVIS_MODEL=gemini-3.8-flash
 # How much it thinks per turn: low | medium | high. Medium is Luna's own default.
 Environment=JARVIS_EFFORT=medium
 Environment=AZURE_SPEECH_REGION=westeurope
