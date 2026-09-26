@@ -58,6 +58,50 @@ export async function speakMorning(api: TimeTrackerAPI): Promise<void> {
   await say(parts.join(''))
 }
 
-export async function speakEvening(): Promise<void> {
-  await say('Hé Hidde. Zijn er nog afspraken die in de agenda moeten? Zet ze er meteen in.')
+const AREA_NAMES: Record<string, string> = { stage: 'stage', work: 'werk', school: 'school', personal: 'privé' }
+
+const hours = (minutes: number): string => {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return h === 0 ? `${m} minuten` : m === 0 ? `${h} uur` : `${h} uur ${m}`
+}
+
+/**
+ * The evening review, read out: what got done of today's plan and what did not (said
+ * plainly — not done is not done), where the hours went, and the agenda question.
+ */
+export async function speakEvening(api: TimeTrackerAPI): Promise<void> {
+  const now = new Date()
+  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+  const [plan, open, breakdown] = await Promise.all([
+    api.plans.day(date),
+    api.tasks.list({ status: 'active' }),
+    api.breakdown.day(date)
+  ])
+
+  const openIds = new Set(open.map((task) => task.id))
+  const planned = new Map<string, string>()
+  for (const block of plan.blocks) {
+    if (block.kind === 'task' && block.taskId) planned.set(block.taskId, block.taskTitle ?? 'een taak')
+  }
+  const notDone = [...planned].filter(([id]) => openIds.has(id)).map(([, title]) => title)
+  const done = planned.size - notDone.length
+
+  const parts: string[] = ['Hé Hidde, dagafsluiting.']
+  if (planned.size === 0) parts.push('Er stond vandaag niets gepland.')
+  else if (notDone.length === 0) parts.push(`Alle ${planned.size} geplande taken zijn af. Goed zo.`)
+  else {
+    parts.push(`${done} van de ${planned.size} geplande taken zijn af.`)
+    parts.push(`Niet gedaan: ${notDone.slice(0, 3).join(', ')}. Dat is niet goed. Zet meteen neer wanneer het wel gebeurt.`)
+  }
+
+  const worked = Object.entries(breakdown.byArea)
+    .filter(([, minutes]) => minutes >= 5)
+    .sort((a, b) => b[1] - a[1])
+    .map(([area, minutes]) => `${hours(minutes)} ${AREA_NAMES[area] ?? 'zonder gebied'}`)
+  parts.push(worked.length > 0 ? `Gewerkt: ${worked.join(', ')}.` : 'Er zijn vandaag geen uren bijgehouden.')
+  parts.push('Verdeel je uren, en zijn er nog afspraken die in de agenda moeten?')
+
+  await say(parts.join(' '))
 }

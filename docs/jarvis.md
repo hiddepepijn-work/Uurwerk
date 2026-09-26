@@ -35,10 +35,18 @@ Button, en "Hé Siri, Jarvis".
 3. Zet de gekozen taken in het dagplan (via de planner, binnen het stage-venster).
 4. Leest het plan terug en vraagt of het klopt. Pas na "ja" wordt het geaccepteerd.
 
-**21:00 — de avond**
-1. Vraagt of er afspraken bij moeten.
-2. Bij elke nieuwe afspraak de **afsprakenvragen** (hieronder).
-3. Vraagt eventueel hoe de dag ging / wat morgen belangrijk is. ❓ Wil je dat?
+**21:00 — de dagafsluiting**
+1. **Is het gelukt?** Loopt het dagplan langs: wat is af, wat niet. Niet af = niet goed;
+   hij vraagt waarom en legt meteen vast wanneer het wél gebeurt (geen smoesjes).
+2. **Hoe ver ben je?** Voor lopende taken: hoeveel van de schatting is op, ligt de
+   deadline nog haalbaar?
+3. **Waar heb je aan gewerkt?** De uren van vandaag per gebied — stage, werk, privé,
+   school — en wat er nog taakloos is: dat verdelen (de End-of-day-wizard).
+4. **Extra afspraken?** Moet er nog iets in de agenda; zo ja de **afsprakenvragen**.
+5. Kort vooruit: wat staat er morgen vast, en hoe laat moet je weg.
+
+In de app nu al: de melding van 21:00 heet *Dagafsluiting*, opent de End-of-day-wizard
+en zegt hardop hoeveel geplande taken af zijn, welke niet, en de uren per gebied.
 
 **"Weet je nog"** — voor elke **belangrijke** afspraak of deadline herinnert Jarvis op
 vaste momenten: **14, 7, 3 en 1 dag** van tevoren. Elke keer: wat er aankomt en wat er

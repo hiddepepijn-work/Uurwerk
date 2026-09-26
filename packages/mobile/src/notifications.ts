@@ -2,7 +2,8 @@
  * The two daily questions, as local notifications with a spoken sound.
  *
  *   08:30  "Hoi Hidde! Goedemorgen. Hoe ziet je ochtend eruit?"  → opens the day planner
- *   21:00  "Hé Hidde. Zijn er nog afspraken die in de agenda moeten?" → opens a new event
+ *   21:00  "Hé Hidde. Dagafsluiting." → opens the end-of-day review: what got done, where
+ *          the hours went, and whether anything has to go in the agenda
  *
  * iOS lets any notification be swiped away, so the morning one comes back: 08:35, 08:40 and
  * 08:45 are scheduled too, and tapping any of them cancels the rest of that day's series.
@@ -16,7 +17,7 @@ import { Preferences } from '@capacitor/preferences'
 
 import { toBase64 } from './database.js'
 
-type Target = 'planDay' | 'addEvent'
+type Target = 'planDay' | 'endOfDay'
 
 interface Moment {
   key: 'morning' | 'evening'
@@ -44,9 +45,9 @@ const MOMENTS: Moment[] = [
     hour: 21,
     minutes: [0, 10],
     sound: 'avond.caf',
-    title: 'Nog iets voor de agenda?',
-    body: 'Zijn er afspraken die je moet toevoegen? Tik om er een te maken.',
-    target: 'addEvent'
+    title: 'Dagafsluiting',
+    body: 'Is alles gelukt? Waar heb je aan gewerkt, en moet er nog iets in de agenda?',
+    target: 'endOfDay'
   }
 ]
 
@@ -66,16 +67,12 @@ const dayKey = (date: Date): string =>
 
 /**
  * Notification sounds must be in the app bundle or in Library/Sounds. The bundle's web
- * folder is neither, so the clips are copied across once.
+ * folder is neither, so the clips are copied across.
  */
 async function installSounds(): Promise<void> {
   for (const moment of MOMENTS) {
-    try {
-      await Filesystem.stat({ path: `Sounds/${moment.sound}`, directory: Directory.Library })
-      continue
-    } catch {
-      // Not there yet.
-    }
+    // Written at every start, not once: a clip that was re-recorded has to replace the
+    // copy iOS already has, or the old voice keeps playing.
     try {
       const response = await fetch(`/sounds/${moment.sound}`)
       if (!response.ok) continue

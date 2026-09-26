@@ -9,7 +9,7 @@
  *   backend       packages/backend, unchanged, behind a phone host (below)
  *   window.api    the one seam the screens use, exactly as the Electron preload provides it
  *
- * Plus what only a phone does: the 08:30 and 21:00 questions with a spoken sound.
+ * Plus what only a phone does: the 08:30 plan and the 21:00 review with a spoken sound.
  */
 
 import { StrictMode } from 'react'
@@ -167,7 +167,7 @@ async function start(): Promise<void> {
   onQuestionTapped((target, moment) => {
     emit('ui:open', { target })
     if (moment === 'morning') void speakMorning(window.api!)
-    else void speakEvening()
+    else void speakEvening(window.api!)
   })
   void scheduleDailyQuestions().catch(() => undefined)
 
