@@ -29,7 +29,7 @@ import { runTool } from '@core/services/jarvis-tools.js'
 
 const IDLE_MS = 2 * 3_600_000
 
-const SYSTEM = `Je bent Jarvis, de assistent van Hidde in de app Uurwerk. Hieronder staat je brief: wie
+export const SYSTEM = `Je bent Jarvis, de assistent van Hidde in de app Uurwerk. Hieronder staat je brief: wie
 Hidde is, wat je doet op welke momenten, wat je altijd vraagt en wat je wel en niet mag.
 Volg die precies.
 
@@ -47,7 +47,7 @@ Regels voor elk antwoord:
 --- BRIEF ---
 ${brief}`
 
-const MOMENT: Record<'morning' | 'evening', string> = {
+export const MOMENT: Record<'morning' | 'evening', string> = {
   morning:
     '(Ochtendmoment, 08:30. Hidde heeft op de melding getikt. Begin het ochtendgesprek zoals in de brief: haal agenda en taken van vandaag op, noem wat vastligt, wat te laat is en hoe laat hij weg moet, en vraag wat hij vandaag gaat doen.)',
   evening:

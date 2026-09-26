@@ -31,8 +31,12 @@ const VOICE_RATE = 24_000
 const CHUNK = 640
 /** Audio kept from before the gate opened, so the first syllable is not lost. */
 const PREROLL_CHUNKS = 8
-/** The gate stays open this long after the voice drops, so pauses mid-sentence pass. */
-const HANGOVER_MS = 900
+/**
+ * The gate stays open this long after the voice drops. The model only ends Hidde's turn
+ * after it has heard about 0.7 s of real silence — "microphone paused" alone does not
+ * end it — so the silence has to be sent, with room to spare.
+ */
+const HANGOVER_MS = 1500
 
 /** Runs off the main thread: 16 kHz mono float in, 40 ms of 16-bit PCM plus its loudness out. */
 const WORKLET = `
@@ -105,6 +109,8 @@ export class LiveCall {
   private heard = ''
   private reply = ''
   private replyDone = true
+  /** Jarvis said "even kijken" and is still working on the answer. */
+  private working = false
   /** Tapped away: drop the rest of this answer. */
   private muted = false
   private usage: JarvisLiveUsage = { ...EMPTY }
@@ -269,6 +275,7 @@ export class LiveCall {
       }
     }
     if (content?.turnComplete) {
+      this.working = String(content.interactionStatus) === 'IN_PROGRESS'
       this.replyDone = true
       this.muted = false
       if (this.turnUsage) add(this.usage, this.turnUsage)
@@ -281,8 +288,8 @@ export class LiveCall {
         message.toolCall.functionCalls.map(async (call) => {
           try {
             const result = await api.jarvis.runTool({ name: call.name ?? '', args: (call.args ?? {}) as Record<string, unknown> })
-            // Speak about the result straight away, cutting any "even kijken" short.
-            return { id: call.id, name: call.name, response: { result }, scheduling: 'INTERRUPT' as never }
+            // No scheduling: 3.8 Live refuses it (and closes), and answers on its own.
+            return { id: call.id, name: call.name, response: { result } }
           } catch (error) {
             return { id: call.id, name: call.name, response: { error: error instanceof Error ? error.message : String(error) } }
           }
@@ -339,7 +346,7 @@ export class LiveCall {
         this.level.current = Math.min(1, Math.sqrt(sum / samples.length) * 4)
       } else {
         this.level.current = Math.min(1, this.micLevel * 8)
-        if (this.phase === 'speaking' && this.replyDone) this.setPhase('listening')
+        if (this.phase === 'speaking' && this.replyDone) this.setPhase(this.working ? 'thinking' : 'listening')
       }
       this.frame = requestAnimationFrame(tick)
     }

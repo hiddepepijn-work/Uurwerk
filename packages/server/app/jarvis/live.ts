@@ -115,8 +115,12 @@ ${options.system}
 Dit is een live spraakgesprek: Hidde hoort je direct. Antwoord kort en snel, altijd in het
 Nederlands, en laat hem gerust onderbreken. Gebruik je een tool, zeg dan hooguit "even kijken"
 en geef het antwoord zodra het resultaat binnen is (dat duurt een fractie van een seconde).
-Zeg nooit dat je later terugkomt. De stand van vandaag staat hieronder; haal alleen iets op met
-een tool als het over een andere dag gaat of als er iets veranderd kan zijn.
+Zeg nooit dat je later terugkomt.
+
+De tijd, de agenda van vandaag en de open taken staan hieronder al. Gebruik daarvoor dus GEEN
+get_now, get_agenda voor vandaag of list_tasks, ook niet bij het ochtend- of avondmoment: dat
+kost tijd en geld. Een tool alleen voor andere dagen, of nadat er in dit gesprek iets is
+veranderd.
 
 --- VANDAAG ---
 ${await today(options.api)}`
@@ -131,8 +135,8 @@ ${await today(options.api)}`
         functionDeclarations: TOOLS.map((tool) => ({
           name: tool.name,
           description: tool.description,
-          // 3.8 Live only calls tools in the background (BLOCKING is refused); the device
-          // answers with scheduling INTERRUPT so the result is spoken straight away.
+          // 3.8 Live only calls tools in the background: BLOCKING declarations and
+          // scheduling on the responses are both refused. It answers once results are in.
           parameters: toSchema(tool.parameters) as never
         }))
       }

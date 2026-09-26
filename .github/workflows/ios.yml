@@ -151,3 +151,14 @@ jobs:
               --notes "Ongetekende .ipa. Installeer met SideStore of AltStore; die ondertekenen hem met je eigen Apple ID." \
               --target "${{ github.sha }}"
           gh release upload ios-latest packages/mobile/Uurwerk.ipa --clobber
+
+      # A SideStore source: add its URL once in SideStore (Sources → +), and every build
+      # after that shows up as an Update there, no more downloading the .ipa by hand.
+      - name: Publish the SideStore source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          node packages/mobile/native/sidestore-source.mjs packages/mobile/Uurwerk.ipa
+          gh release upload ios-latest source.json --clobber
