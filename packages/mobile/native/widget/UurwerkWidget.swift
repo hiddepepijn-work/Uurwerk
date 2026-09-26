@@ -12,7 +12,43 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-let appGroup = "group.nl.hiddepepijn.uurwerk"
+let appGroup = resolvedAppGroup() ?? "group.nl.hiddepepijn.uurwerk"
+
+/// The App Group this build may use. SideStore re-signs with your own Apple ID and renames
+/// identifiers to make them unique (nl.hiddepepijn.uurwerk.<team> and the group likewise),
+/// so the name in the source is only a starting point. The authoritative list is in the
+/// provisioning profile SideStore embedded; after that, what the bundle id suggests; last,
+/// the original name.
+func resolvedAppGroup() -> String? {
+    let base = "nl.hiddepepijn.uurwerk"
+    var candidates = profileAppGroups()
+    if let bundle = Bundle.main.bundleIdentifier, bundle.hasPrefix(base + ".") {
+        let rest = bundle.dropFirst(base.count + 1).split(separator: ".").map(String.init).filter { $0 != "widget" }
+        if let team = rest.first {
+            candidates.append("group.\(base).\(team)")
+            candidates.append("group.\(base)")
+        }
+    }
+    candidates.append("group.\(base)")
+    return candidates.first { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) != nil }
+}
+
+/// com.apple.security.application-groups from embedded.mobileprovision (a signed plist).
+func profileAppGroups() -> [String] {
+    guard
+        let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+        let data = try? Data(contentsOf: url),
+        let text = String(data: data, encoding: .isoLatin1),
+        let start = text.range(of: "<?xml"),
+        let end = text.range(of: "</plist>"),
+        let plist = try? PropertyListSerialization.propertyList(
+            from: Data(String(text[start.lowerBound..<end.upperBound]).utf8), format: nil
+        ) as? [String: Any],
+        let entitlements = plist["Entitlements"] as? [String: Any],
+        let groups = entitlements["com.apple.security.application-groups"] as? [String]
+    else { return [] }
+    return groups
+}
 
 // MARK: - Data (written by the app, see packages/mobile/src/widget-data.ts)
 

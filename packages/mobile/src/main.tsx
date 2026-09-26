@@ -143,9 +143,15 @@ async function start(): Promise<void> {
     }, 5_000)
   }
   /** The home-screen widgets read what this writes; a failure only means stale widgets. */
+  let widgetProblemShown = false
   const refreshWidgets = (): void => {
     try {
-      void AudioFocus.setWidgetData({ json: widgetData(backend) }).catch(() => undefined)
+      void AudioFocus.setWidgetData({ json: widgetData(backend) }).catch((error: unknown) => {
+        // Said once per start: an empty widget with no reason given is impossible to fix.
+        if (widgetProblemShown) return
+        widgetProblemShown = true
+        emit('notify', { level: 'warn', message: error instanceof Error ? error.message : String(error) })
+      })
     } catch {
       // Nothing to show is better than a crash at start.
     }
