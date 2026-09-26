@@ -113,8 +113,9 @@ ${options.system}
 
 --- LIVE ---
 Dit is een live spraakgesprek: Hidde hoort je direct. Antwoord kort en snel, altijd in het
-Nederlands, en laat hem gerust onderbreken. Als je een tool gebruikt, wacht je op het resultaat
-en geef je dan meteen antwoord; zeg nooit dat je later terugkomt. De stand van vandaag staat hieronder; haal alleen iets op met
+Nederlands, en laat hem gerust onderbreken. Gebruik je een tool, zeg dan hooguit "even kijken"
+en geef het antwoord zodra het resultaat binnen is (dat duurt een fractie van een seconde).
+Zeg nooit dat je later terugkomt. De stand van vandaag staat hieronder; haal alleen iets op met
 een tool als het over een andere dag gaat of als er iets veranderd kan zijn.
 
 --- VANDAAG ---
@@ -130,10 +131,9 @@ ${await today(options.api)}`
         functionDeclarations: TOOLS.map((tool) => ({
           name: tool.name,
           description: tool.description,
-          parameters: toSchema(tool.parameters) as never,
-          // The default on 3.8 Live is to call tools in the background and carry on talking
-          // ("I'll let you know"). The tools here answer in milliseconds: wait for them.
-          behavior: 'BLOCKING' as never
+          // 3.8 Live only calls tools in the background (BLOCKING is refused); the device
+          // answers with scheduling INTERRUPT so the result is spoken straight away.
+          parameters: toSchema(tool.parameters) as never
         }))
       }
     ],
