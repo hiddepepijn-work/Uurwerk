@@ -77,6 +77,8 @@ interface EventRow {
   reconciled_segment_id: string | null
   local_updated_at: number
   deleted_at: number | null
+  created_by: 'jarvis' | null
+  task_id: string | null
 }
 
 interface LinkRow {
@@ -160,7 +162,9 @@ const mapEvent = (row: EventRow): CalendarEvent => ({
   confirmedMin: row.confirmed_min,
   reconciledSegmentId: row.reconciled_segment_id,
   localUpdatedAt: row.local_updated_at,
-  deletedAt: row.deleted_at
+  deletedAt: row.deleted_at,
+  createdBy: row.created_by ?? null,
+  taskId: row.task_id ?? null
 })
 
 const mapLink = (row: LinkRow): CalendarEventLink => ({
@@ -434,6 +438,13 @@ export class CalendarRepo {
         now
       ]
     )
+    if (input.createdBy || input.taskId) {
+      this.db.run('UPDATE calendar_events SET created_by = ?, task_id = ? WHERE id = ?', [
+        input.createdBy ?? null,
+        input.taskId ?? null,
+        id
+      ])
+    }
     return this.event(id)!
   }
 

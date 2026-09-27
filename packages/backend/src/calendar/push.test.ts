@@ -28,6 +28,7 @@ const block = (overrides: Partial<PlanBlock> = {}): PlanBlock => ({
   fixed: false,
   locked: false,
   source: 'planner',
+  createdBy: null,
   originalBlockId: null,
   explanation: 'Due soonest.',
   score: 10,

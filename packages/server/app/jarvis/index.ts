@@ -17,8 +17,6 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 
 import type { JarvisAsk, JarvisJob, JarvisReply, JarvisStatus, TimeTrackerAPI } from '@core/contract/api.js'
 import type { SecretVault } from '@backend/host.js'
@@ -121,23 +119,19 @@ export function createJarvis(
   }
 
   // ------------------------------------------------------------ the day's opening
-  // The first contact of the day opens with the morning conversation. Which day last had
-  // one is kept on disk, so a restart of the server does not open the day twice.
-  const dayPath = join(dirname(usagePath), 'jarvis-day.json')
+  // The first contact of the day opens with the morning conversation. The day log in the
+  // database says whether that happened, on every copy.
   const today = (): string => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   }
-  const openedOn = (): string | null => {
-    try {
-      return existsSync(dayPath) ? ((JSON.parse(readFileSync(dayPath, 'utf8')) as { morning?: string }).morning ?? null) : null
-    } catch {
-      return null
-    }
+  const markMoment = async (moment: 'morning' | 'evening' | null | undefined): Promise<void> => {
+    if (moment === 'morning') await api.assistant.markDay(today(), { opening: true })
+    if (moment === 'evening') await api.assistant.markDay(today(), { closing: true })
   }
-  const markOpened = (): void => writeFileSync(dayPath, JSON.stringify({ morning: today() }))
   /** Before two in the afternoon; later than that a morning conversation is no use. */
-  const openingDue = (): boolean => new Date().getHours() < 14 && openedOn() !== today()
+  const openingDue = async (): Promise<boolean> =>
+    new Date().getHours() < 14 && (await api.assistant.dayLog(today())).openingDoneAt === null
 
   // --------------------------------------------------------------------- jobs
   // A turn can take half a minute when he replans. On a phone that is long enough for the
@@ -168,7 +162,7 @@ export function createJarvis(
     async status(): Promise<JarvisStatus> {
       const keyPresent = secrets.has(keyName)
       return {
-        openingDue: openingDue(),
+        openingDue: await openingDue(),
         ready: keyPresent,
         provider: family,
         model,
@@ -193,7 +187,7 @@ export function createJarvis(
       live.lastUsed = Date.now()
 
       const said = input.moment ? MOMENT[input.moment] : (input.text ?? '').trim()
-      if (input.moment === 'morning') markOpened()
+      await markMoment(input.moment)
       if (!said) throw new Error('Zeg iets tegen Jarvis.')
 
       const turn = await live.conversation.send(said, context(), (name, args) => runTool(api, name, args), {
@@ -228,7 +222,7 @@ export function createJarvis(
     async liveSession(input) {
       const key = secrets.get('geminiKey')
       if (!key) throw new Error('Geen geminiKey op de server. Zet hem met: uurwerk-secrets set geminiKey')
-      if (input.moment === 'morning') markOpened()
+      await markMoment(input.moment)
       return liveSession({
         api,
         key,

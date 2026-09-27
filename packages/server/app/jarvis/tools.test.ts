@@ -185,10 +185,42 @@ describe('Jarvis tools', () => {
     expect(kast).toHaveLength(1)
     expect(kast[0]).toMatchObject({ date: from, startMin: 840, source: 'manual' })
 
-    // Clearing takes the planner's blocks and leaves the one set by hand.
+    // Clearing takes the planner's blocks and what Jarvis placed (the Kast was his), so the
+    // stretch is empty of planning afterwards.
     const cleared = await proposeAndConfirm('clear_planning', { from, to })
     expect(cleared.failed).toEqual([])
-    expect((await api.plans.day(from)).blocks.find((block) => block.taskId === mine.id)).toBeTruthy()
+    expect((await api.plans.day(from)).blocks.filter((block) => block.kind === 'task')).toEqual([])
+  })
+
+  it('marks what Jarvis made, and clears only that and the planner, never what Hidde set', async () => {
+    const day = next(3)
+    const task = await api.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 60 })
+    const own = await api.tasks.create({ title: 'Zelf gezet', areaId: 'personal', estimateMin: 60 })
+    await proposeAndConfirm('schedule_task', { taskId: task.id, date: day, start: '20:00', end: '21:00' })
+    // Hidde's own block, placed in the app.
+    const draft = await api.plans.draft(day)
+    await api.plans.addBlock(draft.plan!.id, { taskId: own.id, date: day, startMin: 1320, endMin: 1380, source: 'manual', locked: true })
+    await api.plans.accept(draft.plan!.id)
+
+    const appointment = await proposeAndConfirm('create_appointment', {
+      title: 'Kapper',
+      date: day,
+      start: '10:00',
+      end: '10:30',
+      areaId: 'personal'
+    })
+    const [event] = await api.calendar.eventsInRange(new Date(`${day}T00:00:00`).getTime(), new Date(`${day}T23:59:00`).getTime())
+    expect(event).toMatchObject({ title: 'Kapper', createdBy: 'jarvis' })
+    expect(appointment.executed).toHaveLength(1)
+
+    expect((await api.plans.day(day)).blocks.find((block) => block.taskId === task.id)?.createdBy).toBe('jarvis')
+
+    const cleared = await proposeAndConfirm('clear_planning', { from: day, to: day })
+    expect(cleared.executed[0]!.result).toMatchObject({ removedBlocks: 1 })
+    const left = (await api.plans.day(day)).blocks
+    expect(left.map((block) => block.taskId)).toEqual([own.id])
+    // Appointments are not planning: the Kapper stays.
+    expect(await api.calendar.eventsInRange(new Date(`${day}T00:00:00`).getTime(), new Date(`${day}T23:59:00`).getTime())).toHaveLength(1)
   })
 
   it('reviews a day: what got done, what did not', async () => {

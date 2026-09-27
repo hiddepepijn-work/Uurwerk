@@ -793,6 +793,30 @@ export function buildImplementation(
       quit: async () => host().window.quit()
     },
 
+    assistant: {
+      rules: async () => store.rules.list(),
+      addRule: async (rule) => {
+        const added = store.rules.add(rule)
+        emitEvent('data:invalidated', { domain: 'planning' })
+        return added
+      },
+      updateRule: async (id, patch) => {
+        const updated = store.rules.update(id, patch)
+        emitEvent('data:invalidated', { domain: 'planning' })
+        return updated
+      },
+      dayLog: async (date) => store.dayLog.get(date),
+      markDay: async (date, patch) => store.dayLog.mark(date, patch),
+      lastSummary: async (before) => store.dayLog.lastSummaryBefore(before),
+      propose: async (input) => {
+        store.proposals.prune(7 * 86_400_000)
+        return store.proposals.create(input)
+      },
+      proposal: async (id) => store.proposals.get(id),
+      pendingProposals: async () => store.proposals.pending(),
+      settleProposal: async (id, patch) => store.proposals.settle(id, patch)
+    },
+
     jarvis: {
       ask: async (input) => jarvisHost().ask(input),
       askStart: async (input) => jarvisHost().askStart(input),

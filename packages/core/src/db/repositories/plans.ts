@@ -44,6 +44,7 @@ interface BlockRow {
   original_block_id: string | null
   explanation: string | null
   score: number | null
+  created_by: 'jarvis' | null
 }
 
 const mapPlan = (row: PlanRow): Plan => ({
@@ -77,7 +78,8 @@ const mapBlock = (row: BlockRow): PlanBlock => ({
   source: row.source,
   originalBlockId: row.original_block_id,
   explanation: row.explanation,
-  score: row.score
+  score: row.score,
+  createdBy: row.created_by ?? null
 })
 
 const SELECT_BLOCKS = /* sql */ `
@@ -324,8 +326,8 @@ export class PlanRepo {
     this.db.run(
       `INSERT INTO plan_blocks
          (id, plan_id, task_id, area_id, date, start_min, end_min, kind, title,
-          fixed, locked, source, original_block_id, explanation, score)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          fixed, locked, source, original_block_id, explanation, score, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         planId,
@@ -341,7 +343,8 @@ export class PlanRepo {
         input.source ?? 'planner',
         input.originalBlockId ?? null,
         input.explanation ?? null,
-        input.score ?? null
+        input.score ?? null,
+        input.createdBy ?? null
       ]
     )
     return this.getBlock(id)!
@@ -403,7 +406,8 @@ export class PlanRepo {
           source: block.source,
           originalBlockId: block.originalBlockId ?? block.id,
           explanation: block.explanation,
-          score: block.score
+          score: block.score,
+          createdBy: block.createdBy
         })
       )
     )

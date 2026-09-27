@@ -434,6 +434,8 @@ export interface PlanBlock {
   /** Why the planner put this here, in plain language. */
   explanation: string | null
   score: number | null
+  /** 'jarvis' when the assistant placed it; null for everything else. */
+  createdBy: 'jarvis' | null
 }
 
 export interface NewPlanBlock {
@@ -450,6 +452,7 @@ export interface NewPlanBlock {
   originalBlockId?: string | null
   explanation?: string | null
   score?: number | null
+  createdBy?: 'jarvis' | null
 }
 
 /**
@@ -1026,6 +1029,10 @@ export interface CalendarEvent {
 
   localUpdatedAt: number
   deletedAt: number | null
+  /** 'jarvis' when the assistant made it; null for everything else. */
+  createdBy: 'jarvis' | null
+  /** The task this appointment is for, if any. */
+  taskId: string | null
 }
 
 export interface NewCalendarEvent {
@@ -1053,6 +1060,8 @@ export interface NewCalendarEvent {
   includeInPlanning?: boolean
   registrationMode?: RegistrationMode
   countsAsWorked?: boolean
+  createdBy?: 'jarvis' | null
+  taskId?: string | null
 }
 
 export type SyncStatus =
@@ -1443,4 +1452,47 @@ export interface Settings {
   focusShortcuts: boolean
   /** Laptop: programs closed while a focus task is running, by process name. Per device. */
   focusBlockedApps: string[]
+}
+
+// ------------------------------------------------------------------ Jarvis
+
+/**
+ * A standing wish. Hard rules the planner enforces in code; soft ones go into Jarvis's
+ * context as text. `config` is the rule's own JSON, read by whatever enforces its type.
+ */
+export interface Rule {
+  id: string
+  kind: 'hard' | 'soft'
+  type: string
+  config: Record<string, unknown>
+  description: string
+  active: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export type NewRule = Pick<Rule, 'kind' | 'type' | 'description'> & {
+  config?: Record<string, unknown>
+  active?: boolean
+}
+
+/** One day as Jarvis saw it: opened, closed, and what a new conversation starts from. */
+export interface JarvisDayLog {
+  date: IsoDate
+  openingDoneAt: number | null
+  closingDoneAt: number | null
+  summary: string | null
+}
+
+/** Something Jarvis proposed, and what came of it. Kept on the copy it was made on. */
+export interface JarvisProposal {
+  id: string
+  tool: string
+  payload: Record<string, unknown>
+  summary: string
+  status: 'pending' | 'executed' | 'failed' | 'cancelled' | 'expired'
+  result: unknown
+  error: string | null
+  createdAt: number
+  expiresAt: number
 }

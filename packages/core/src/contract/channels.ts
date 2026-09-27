@@ -127,6 +127,18 @@ export const CHANNELS = {
   // This copy and the VPS. Offline first: everything above works without it.
   sync: ['status', 'pair', 'now', 'unpair'],
   // The assistant. Lives on the server; devices forward.
+  assistant: [
+    'rules',
+    'addRule',
+    'updateRule',
+    'dayLog',
+    'markDay',
+    'lastSummary',
+    'propose',
+    'proposal',
+    'pendingProposals',
+    'settleProposal'
+  ],
   jarvis: ['ask', 'askStart', 'askJob', 'status', 'liveSession', 'liveUsage', 'runTool']
 } as const
 

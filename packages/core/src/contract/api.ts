@@ -13,6 +13,10 @@
  */
 
 import type {
+  JarvisDayLog,
+  JarvisProposal,
+  NewRule,
+  Rule,
   Area,
   Breakdown,
   BreakdownFilter,
@@ -596,6 +600,27 @@ export interface TimeTrackerAPI {
     /** One push-and-pull round, now rather than at the next tick. */
     now(): Promise<SyncStatus>
     unpair(): Promise<SyncStatus>
+  }
+
+  /**
+   * What Jarvis keeps in the database, on every copy: the standing rules, the day log, and
+   * his proposals (those stay on the copy they were made on).
+   */
+  assistant: {
+    rules(): Promise<Rule[]>
+    addRule(rule: NewRule): Promise<Rule>
+    updateRule(id: string, patch: Partial<Pick<Rule, 'kind' | 'type' | 'config' | 'description' | 'active'>>): Promise<Rule>
+    dayLog(date: IsoDate): Promise<JarvisDayLog>
+    markDay(date: IsoDate, patch: { opening?: boolean; closing?: boolean; summary?: string | null }): Promise<JarvisDayLog>
+    /** The latest summary before a date: what a new conversation starts from. */
+    lastSummary(before: IsoDate): Promise<JarvisDayLog | null>
+    propose(input: Pick<JarvisProposal, 'tool' | 'payload' | 'summary' | 'expiresAt'>): Promise<JarvisProposal>
+    proposal(id: string): Promise<JarvisProposal | null>
+    pendingProposals(): Promise<JarvisProposal[]>
+    settleProposal(
+      id: string,
+      patch: { status: JarvisProposal['status']; result?: unknown; error?: string | null }
+    ): Promise<JarvisProposal>
   }
 
   /**

@@ -140,7 +140,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'clear_planning',
     description:
-      'Wist wat de planner heeft ingepland van een dag tot en met een dag, zonder opnieuw te plannen. Afspraken en met de hand gezette blokken blijven. Voor "haal de planning weg".' +
+      'Wist wat de planner en jij (Jarvis) hebben ingepland van een dag tot en met een dag, zonder opnieuw te plannen. Afspraken en wat Hidde zelf zette blijven. Voor "haal de planning weg".' +
       PROPOSAL,
     parameters: object({ from: date, to: date }, ['from', 'to']),
     writes: true,
@@ -259,28 +259,14 @@ const fromToday = (from: IsoDate): IsoDate => {
 type Input = Record<string, unknown>
 
 // ---------------------------------------------------------------- proposals
-
-interface Proposal {
-  id: string
-  name: string
-  input: Input
-  summary: string
-  createdAt: number
-  expiresAt: number
-  status: 'pending' | 'executed' | 'failed' | 'cancelled'
-  outcome?: unknown
-  error?: string
-}
+// Stored in the database (_jarvis_proposals, local to this copy), so a proposal outlives
+// a restart and what a "ja" did can be looked up afterwards.
 
 /** Long enough to think it over; short enough that a stale "ja" does nothing. */
 const PROPOSAL_MS = 30 * 60_000
-const proposals = new Map<string, Proposal>()
-let sequence = 0
 
-function sweep(): void {
-  const cutoff = Date.now() - 6 * 3_600_000
-  for (const [id, proposal] of proposals) if (proposal.createdAt < cutoff) proposals.delete(id)
-}
+/** Proposals being carried out right now: a second "ja" meanwhile must not run them again. */
+const inFlight = new Set<string>()
 
 /** What a proposal will do, in words to read out — with names, not ids. */
 async function describe(api: TimeTrackerAPI, name: string, input: Input): Promise<string> {
@@ -298,7 +284,7 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
     case 'plan_range':
       return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} opnieuw laten maken (afspraken en handmatige blokken blijven)`
     case 'clear_planning':
-      return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} wissen (afspraken en handmatige blokken blijven)`
+      return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} wissen (afspraken en wat Hidde zelf zette blijven)`
     case 'create_appointment':
       return `Nieuwe afspraak "${String(input.title)}" op ${String(input.date)} ${String(input.start)}–${String(input.end)}${typeof input.travelMinutes === 'number' && input.travelMinutes > 0 ? `, ${input.travelMinutes} min reistijd` : ''}`
     case 'move_appointment':
@@ -325,18 +311,15 @@ async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promis
 }
 
 async function propose(api: TimeTrackerAPI, name: string, input: Input): Promise<unknown> {
-  sweep()
   try {
     await precheck(api, name, input)
   } catch (error) {
     return { error: `Kan niet: ${error instanceof Error ? error.message : String(error)}` }
   }
-  sequence += 1
-  const id = `v${sequence}${Date.now().toString(36).slice(-3)}`
   const summary = await describe(api, name, input)
-  proposals.set(id, { id, name, input, summary, createdAt: Date.now(), expiresAt: Date.now() + PROPOSAL_MS, status: 'pending' })
+  const proposal = await api.assistant.propose({ tool: name, payload: input, summary, expiresAt: Date.now() + PROPOSAL_MS })
   return {
-    pendingId: id,
+    pendingId: proposal.id,
     summary,
     next: 'Nog niet uitgevoerd. Vat samen en vraag "Zal ik dat zo doen?". Pas na een ja: confirm.'
   }
@@ -345,8 +328,8 @@ async function propose(api: TimeTrackerAPI, name: string, input: Input): Promise
 async function confirm(api: TimeTrackerAPI, input: Input): Promise<unknown> {
   const wanted = Array.isArray(input.pendingIds) ? input.pendingIds.map(String) : null
   const chosen = wanted
-    ? wanted.map((id) => proposals.get(id) ?? null)
-    : [...proposals.values()].filter((proposal) => proposal.status === 'pending')
+    ? await Promise.all(wanted.map((id) => api.assistant.proposal(id)))
+    : await api.assistant.pendingProposals()
   if (chosen.length === 0) return { error: 'Er staat geen voorstel open. Er is niets uitgevoerd.' }
 
   const executed: Array<{ summary: string; result: unknown }> = []
@@ -357,28 +340,33 @@ async function confirm(api: TimeTrackerAPI, input: Input): Promise<unknown> {
       failed.push({ summary: `voorstel ${wanted?.[index] ?? '?'}`, error: 'bestaat niet (meer)' })
       continue
     }
-    if (proposal.status === 'executed') {
+    if (proposal.status === 'executed' || inFlight.has(proposal.id)) {
       alreadyDone.push(proposal.summary)
       continue
     }
     if (proposal.status !== 'pending') {
-      failed.push({ summary: proposal.summary, error: proposal.status === 'cancelled' ? 'was afgezegd' : proposal.error ?? 'mislukt' })
+      failed.push({
+        summary: proposal.summary,
+        error: proposal.status === 'cancelled' ? 'was afgezegd' : proposal.status === 'expired' ? 'verlopen' : proposal.error ?? 'mislukt'
+      })
       continue
     }
     if (Date.now() > proposal.expiresAt) {
-      proposal.status = 'failed'
-      proposal.error = 'verlopen, maak een nieuw voorstel'
-      failed.push({ summary: proposal.summary, error: proposal.error })
+      await api.assistant.settleProposal(proposal.id, { status: 'expired', error: 'verlopen' })
+      failed.push({ summary: proposal.summary, error: 'verlopen, maak een nieuw voorstel' })
       continue
     }
+    inFlight.add(proposal.id)
     try {
-      proposal.outcome = await execute(api, proposal.name, proposal.input)
-      proposal.status = 'executed'
-      executed.push({ summary: proposal.summary, result: proposal.outcome })
+      const result = await execute(api, proposal.tool, proposal.payload)
+      await api.assistant.settleProposal(proposal.id, { status: 'executed', result })
+      executed.push({ summary: proposal.summary, result })
     } catch (error) {
-      proposal.status = 'failed'
-      proposal.error = error instanceof Error ? error.message : String(error)
-      failed.push({ summary: proposal.summary, error: proposal.error })
+      const message = error instanceof Error ? error.message : String(error)
+      await api.assistant.settleProposal(proposal.id, { status: 'failed', error: message })
+      failed.push({ summary: proposal.summary, error: message })
+    } finally {
+      inFlight.delete(proposal.id)
     }
   }
   return {
@@ -389,12 +377,12 @@ async function confirm(api: TimeTrackerAPI, input: Input): Promise<unknown> {
   }
 }
 
-function cancel(input: Input): unknown {
+async function cancel(api: TimeTrackerAPI, input: Input): Promise<unknown> {
   const wanted = Array.isArray(input.pendingIds) ? new Set(input.pendingIds.map(String)) : null
   let count = 0
-  for (const proposal of proposals.values()) {
-    if (proposal.status === 'pending' && (!wanted || wanted.has(proposal.id))) {
-      proposal.status = 'cancelled'
+  for (const proposal of await api.assistant.pendingProposals()) {
+    if (!wanted || wanted.has(proposal.id)) {
+      await api.assistant.settleProposal(proposal.id, { status: 'cancelled' })
       count += 1
     }
   }
@@ -417,7 +405,7 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
       return confirm(api, input)
 
     case 'cancel':
-      return cancel(input)
+      return cancel(api, input)
 
     case 'get_now': {
       const now = new Date()
@@ -628,7 +616,8 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
         endMin: slot.endMin,
         kind: 'task',
         source: 'manual',
-        locked: true
+        locked: true,
+        createdBy: 'jarvis'
       })
       if (needsAccept) await api.plans.accept(planId)
       const after = await api.plans.day(slot.day)
@@ -658,14 +647,19 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
 
     case 'clear_planning': {
       const days = daysBetween(fromToday(String(input.from)), String(input.to))
+      // The planner's own blocks and what Jarvis placed; never what Hidde set himself.
+      const ours = async (day: IsoDate) =>
+        (await api.plans.day(day)).blocks.filter(
+          (block) => block.createdBy === 'jarvis' || (block.source === 'planner' && !block.locked && !block.fixed)
+        )
       let removed = 0
       for (const day of days) {
-        for (const block of await plannerBlocks(api, day)) {
+        for (const block of await ours(day)) {
           await api.plans.removeBlock(block.id)
           removed += 1
         }
       }
-      const left = (await Promise.all(days.map((day) => plannerBlocks(api, day)))).flat().length
+      const left = (await Promise.all(days.map((day) => ours(day)))).flat().length
       if (left > 0) throw new Error(`${removed} blokken verwijderd, maar er staan er nog ${left}.`)
       return { removedBlocks: removed, from: days[0], to: days[days.length - 1] }
     }
@@ -682,7 +676,8 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
         classificationStatus: 'unclassified',
         includeInPlanning: true,
         registrationMode: 'none',
-        countsAsWorked: false
+        countsAsWorked: false,
+        createdBy: 'jarvis'
       })
       const travel = typeof input.travelMinutes === 'number' ? input.travelMinutes : 0
       await api.calendar.classify(created.id, {
