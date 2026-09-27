@@ -25,7 +25,7 @@ import { buildImplementation } from '@backend/implementation.js'
 import type { TimeTrackerAPI } from '@core/contract/api.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 
-import { MOMENT, SYSTEM } from '../packages/server/app/jarvis/index.js'
+import { createJarvis, MOMENT, SYSTEM } from '../packages/server/app/jarvis/index.js'
 import { addUsage, liveSession } from '../packages/server/app/jarvis/live.js'
 import { speakGemini } from '../packages/server/app/jarvis/speech.js'
 
@@ -194,10 +194,23 @@ async function main(): Promise<void> {
   const key = geminiKey()
   const usagePath = join(work, 'spend.json')
 
+  // A real open task from the copy, to plan in late in the evening where nothing else is.
+  const tasks = await api.tasks.list({ status: 'active' })
+  const task = tasks.find((entry) => /broeken/i.test(entry.title)) ?? tasks[0]
+  if (!task) throw new Error('Geen open taak in de database om mee te testen.')
+  const dayAfter = (days: number): string => {
+    const d = new Date(Date.now() + days * 86_400_000)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const placedAt = async (day: string): Promise<boolean> =>
+    (await api.plans.day(day)).blocks.some((block) => block.taskId === task.id && block.startMin === 22 * 60)
+
   console.log('Stem opnemen voor de testvragen…')
-  const [tomorrow, today] = await Promise.all([
+  const [tomorrow, today, schedule, yes] = await Promise.all([
     voice(key, 'Wat staat er morgen op de planning?'),
-    voice(key, 'Wat heb ik vandaag nog te doen?')
+    voice(key, 'Wat heb ik vandaag nog te doen?'),
+    voice(key, `Zet ${task.title} morgen van tien uur tot half elf 's avonds in de planning.`),
+    voice(key, 'Ja, doe maar.')
   ])
 
   const outcomes: Outcome[] = []
@@ -267,6 +280,49 @@ async function main(): Promise<void> {
     for (const problem of closed) morning.problems.push(problem)
     outcomes.push(morning)
     session.close()
+  }
+
+  // 4: changing something by voice: a proposal, "ja", and then it is really there.
+  {
+    const { session, inbox, closed } = await connect(null)
+    const proposal = await exchange(session, inbox, usage, () => speakInto(session, schedule), 'gesproken: inplannen (voorstel)')
+    judge(proposal, 'schedule_task')
+    if (!proposal.reply.includes('?')) proposal.problems.push('vraagt geen bevestiging')
+    if (await placedAt(dayAfter(1))) proposal.problems.push('al ingepland vóór het ja')
+    outcomes.push(proposal)
+    const done = await exchange(session, inbox, usage, () => speakInto(session, yes), 'gesproken: ja')
+    judge(done, 'confirm')
+    if (!(await placedAt(dayAfter(1)))) done.problems.push('staat na het ja niet in de planning')
+    for (const problem of closed) done.problems.push(problem)
+    outcomes.push(done)
+    session.close()
+  }
+
+  // 5: the same by text, through the server's Jarvis and its jobs.
+  {
+    process.env.JARVIS_MODEL ||= 'gemini-3.8-flash'
+    const vault = { get: (name: string) => (name === 'geminiKey' ? key : null), has: (name: string) => name === 'geminiKey', set: () => undefined }
+    const jarvis = createJarvis(api, vault as never, usagePath)
+    const turn = async (name: string, input: { conversationId?: string | null; text: string }): Promise<{ outcome: Outcome; conversationId: string }> => {
+      const started = Date.now()
+      const { jobId } = await jarvis.askStart({ ...input, speak: false })
+      let job = await jarvis.askJob(jobId)
+      while (job.status === 'running') {
+        await sleep(300)
+        job = await jarvis.askJob(jobId)
+      }
+      const outcome: Outcome = { name, reply: job.reply?.text ?? '', tools: [], firstAudioMs: Date.now() - started, problems: job.error ? [job.error] : [] }
+      return { outcome, conversationId: job.reply?.conversationId ?? '' }
+    }
+    const first = await turn('tekst: inplannen (voorstel)', { text: `Zet ${task.title} overmorgen van tien uur tot half elf 's avonds in de planning.` })
+    judge(first.outcome, null)
+    if (!first.outcome.reply.includes('?')) first.outcome.problems.push('vraagt geen bevestiging')
+    if (await placedAt(dayAfter(2))) first.outcome.problems.push('al ingepland vóór het ja')
+    outcomes.push(first.outcome)
+    const second = await turn('tekst: ja', { conversationId: first.conversationId, text: 'Ja, doe maar.' })
+    judge(second.outcome, null)
+    if (!(await placedAt(dayAfter(2)))) second.outcome.problems.push('staat na het ja niet in de planning')
+    outcomes.push(second.outcome)
   }
 
   const spend = addUsage(usagePath, usage)

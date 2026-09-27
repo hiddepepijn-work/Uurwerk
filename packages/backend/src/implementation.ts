@@ -619,6 +619,15 @@ export function buildImplementation(
         return created
       },
 
+      deleteEvent: async (eventId) => {
+        if (!store.calendar.event(eventId)) throw new Error(`No appointment ${eventId}.`)
+        store.db.transaction(() => {
+          for (const travel of store.calendar.travelFor(eventId)) store.calendar.softDelete(travel.id)
+          store.calendar.softDelete(eventId)
+        })
+        emitEvent('data:invalidated', { domain: 'planning' })
+      },
+
       rules: async () => store.calendarRules.list(),
       forgetRule: async (id) => {
         store.calendarRules.forget(id)
@@ -786,6 +795,8 @@ export function buildImplementation(
 
     jarvis: {
       ask: async (input) => jarvisHost().ask(input),
+      askStart: async (input) => jarvisHost().askStart(input),
+      askJob: async (jobId) => jarvisHost().askJob(jobId),
       status: async () => jarvisHost().status(),
       liveSession: async (input) => jarvisHost().liveSession(input),
       liveUsage: async (input) => jarvisHost().liveUsage(input),

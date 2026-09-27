@@ -485,6 +485,11 @@ export interface TimeTrackerAPI {
     ignore(eventId: string): Promise<CalendarEvent>
     /** Moves an appointment; its travel blocks follow unless you detached them. */
     move(eventId: string, startsAt: number, endsAt: number): Promise<CalendarEvent>
+    /**
+     * Removes an appointment and its travel blocks. Soft: the row stays, marked deleted, so a
+     * calendar sync does not import it straight back.
+     */
+    deleteEvent(eventId: string): Promise<void>
     createEvent(event: NewCalendarEvent): Promise<CalendarEvent>
 
     rules(): Promise<ClassificationRule[]>
@@ -600,6 +605,13 @@ export interface TimeTrackerAPI {
   jarvis: {
     /** One turn: Hidde's words (or a moment that opens the conversation) in, Jarvis's reply out. */
     ask(input: JarvisAsk): Promise<JarvisReply>
+    /**
+     * The same turn as a job on the server: the id comes back at once and the work carries on
+     * there even if the phone drops the connection ("Load failed") or goes to the background.
+     */
+    askStart(input: JarvisAsk): Promise<{ jobId: string }>
+    /** Where a job stands; the reply once it is done. */
+    askJob(jobId: string): Promise<JarvisJob>
     status(): Promise<JarvisStatus>
     /**
      * A live voice conversation: a short-lived token with which the device talks straight to
@@ -664,7 +676,15 @@ export interface JarvisReply {
   changed: boolean
 }
 
+export interface JarvisJob {
+  status: 'running' | 'done' | 'failed'
+  reply: JarvisReply | null
+  error: string | null
+}
+
 export interface JarvisStatus {
+  /** No morning conversation yet today (before 14:00): the first contact opens the day. */
+  openingDue: boolean
   ready: boolean
   provider: string
   model: string

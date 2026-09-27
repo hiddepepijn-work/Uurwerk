@@ -104,7 +104,7 @@ export const CHANNELS = {
     'suggest',
     'classify',
     'ignore',
-    'move',
+    'move', 'deleteEvent',
     'createEvent',
     'rules',
     'forgetRule'
@@ -127,7 +127,7 @@ export const CHANNELS = {
   // This copy and the VPS. Offline first: everything above works without it.
   sync: ['status', 'pair', 'now', 'unpair'],
   // The assistant. Lives on the server; devices forward.
-  jarvis: ['ask', 'status', 'liveSession', 'liveUsage', 'runTool']
+  jarvis: ['ask', 'askStart', 'askJob', 'status', 'liveSession', 'liveUsage', 'runTool']
 } as const
 
 export type ChannelDomain = keyof typeof CHANNELS

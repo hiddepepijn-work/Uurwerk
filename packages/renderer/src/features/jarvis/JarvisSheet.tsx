@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { JarvisStatus } from '@core/contract/api.js'
 import { api } from '../../api/client.js'
 import { CloseIcon, MicIcon, SendIcon } from '../../ui/icons.js'
+import { askJarvis } from './ask.js'
 
 /**
  * Talking to Jarvis: his replies as text and in his own voice, yours typed or dictated.
@@ -82,7 +83,7 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
     setProblem(null)
     if (input.text) setLines((current) => [...current, { from: 'hidde', text: input.text! }])
     try {
-      const reply = await api.jarvis.ask({
+      const reply = await askJarvis({
         conversationId: input.moment ? null : conversation.current,
         ...(input.text ? { text: input.text } : {}),
         ...(input.moment ? { moment: input.moment } : {}),
@@ -102,9 +103,13 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
     if (!open) return
     void api.jarvis
       .status()
-      .then(setStatus)
+      .then((next) => {
+        setStatus(next)
+        // The first contact of the day opens the day.
+        if (next.ready && next.openingDue && conversation.current === null) void ask({ moment: 'morning' })
+      })
       .catch((error: unknown) => setProblem(error instanceof Error ? error.message : String(error)))
-  }, [open])
+  }, [open, ask])
 
   const send = (): void => {
     const text = draft.trim()

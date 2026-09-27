@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, events } from '../../api/client.js'
 import { CloseIcon, SendIcon } from '../../ui/icons.js'
+import { askJarvis } from './ask.js'
 import { JarvisOrb, type OrbState } from './JarvisOrb.js'
 import { LiveCall } from './live.js'
 
@@ -145,7 +146,7 @@ export function JarvisVoice({
       setPhase('thinking')
       setProblem(null)
       try {
-        const answer = await api.jarvis.ask({
+        const answer = await askJarvis({
           conversationId: input.moment ? null : conversation.current,
           ...(input.text ? { text: input.text } : {}),
           ...(input.moment ? { moment: input.moment } : {}),
@@ -231,13 +232,18 @@ export function JarvisVoice({
     setReply('')
     setHeard('')
     setProblem(null)
-    const moment = pendingMoment.current
+    const asked = pendingMoment.current
     pendingMoment.current = null
-    void startLive(moment).then((ok) => {
-      if (ok || !alive.current) return
-      if (moment) void ask({ moment })
-      else void listen()
-    })
+    // The first contact of the day opens the day, whatever it was opened for.
+    void (asked ? Promise.resolve(asked) : api.jarvis.status().then((status) => (status.openingDue ? 'morning' : null)).catch(() => null))
+      .then((moment) => {
+        if (!alive.current) return
+        return startLive(moment).then((ok) => {
+          if (ok || !alive.current) return
+          if (moment) void ask({ moment })
+          else void listen()
+        })
+      })
     return () => {
       alive.current = false
       void live.current?.end()

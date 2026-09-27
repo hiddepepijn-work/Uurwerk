@@ -2,9 +2,13 @@
  * What Jarvis can do, as tools over the same TimeTrackerAPI the screens use — so a task he
  * makes is a task like any other: it syncs, it plans, it reminds.
  *
- * Writing tools take `confirmed`: the model has to have asked Hidde and heard "ja" first
- * (the system prompt says so), and a call without it is refused with a sentence telling it
- * to ask. Belt and braces: the prompt is the rule, this is the lock.
+ * Changing something is two steps, and the second does not depend on the chat. A writing
+ * tool does not write: it stores a proposal here (an id, what it will do, until when it
+ * holds) and returns a summary to read out. Hidde's "ja" becomes `confirm`, which runs the
+ * stored proposals — not whatever the model reconstructs from the conversation — checks
+ * the result against the database, and returns the real outcome, failures included. A
+ * "ja" that arrives twice (a retry after "Load failed") finds the proposal already done
+ * and says so instead of doing it again.
  */
 
 import type { TimeTrackerAPI } from '@core/contract/api.js'
@@ -15,17 +19,17 @@ export interface ToolSpec {
   description: string
   /** JSON Schema for the input. */
   parameters: Record<string, unknown>
+  /** It changes something. */
   writes: boolean
+  /** It only becomes a proposal; `confirm` carries it out. */
+  proposes?: boolean
 }
 
 const AREAS = ['stage', 'work', 'school', 'personal']
 
 const date = { type: 'string', description: 'Datum als YYYY-MM-DD' }
 const clock = { type: 'string', description: 'Tijd als HH:MM (24 uur)' }
-const confirmed = {
-  type: 'boolean',
-  description: 'Alleen true als Hidde deze wijziging in dit gesprek expliciet heeft bevestigd.'
-}
+const PROPOSAL = ' Maakt een voorstel; pas na Hiddes ja uitvoeren met confirm.'
 
 const object = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: 'object',
@@ -74,7 +78,8 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'create_task',
     description:
-      'Nieuwe taak. Vraag eerst alles uit (wat, klaar-als, gebied/project, schatting, deadline, prioriteit, bijzonderheden) en zet dat in notes.',
+      'Nieuwe taak. Vraag eerst alles uit (wat, klaar-als, gebied/project, schatting, deadline, prioriteit, bijzonderheden) en zet dat in notes.' +
+      PROPOSAL,
     parameters: object(
       {
         title: { type: 'string' },
@@ -89,16 +94,16 @@ export const TOOLS: ToolSpec[] = [
           type: 'string',
           enum: ['auto', 'always', 'never'],
           description: 'auto = stage altijd focus, privé vanaf 30 min; always/never als Hidde het anders wil'
-        },
-        confirmed
+        }
       },
-      ['title', 'areaId', 'confirmed']
+      ['title', 'areaId']
     ),
-    writes: true
+    writes: true,
+    proposes: true
   },
   {
     name: 'update_task',
-    description: 'Een bestaande taak aanpassen (titel, prioriteit, schatting, deadline, notitie, status).',
+    description: 'Een bestaande taak aanpassen (titel, prioriteit, schatting, deadline, notitie, status).' + PROPOSAL,
     parameters: object(
       {
         taskId: { type: 'string' },
@@ -107,17 +112,45 @@ export const TOOLS: ToolSpec[] = [
         estimateMinutes: { type: 'integer', minimum: 0 },
         dueDate: { type: ['string', 'null'] },
         notes: { type: 'string' },
-        status: { type: 'string', enum: ['open', 'done', 'blocked'] },
-        confirmed
+        status: { type: 'string', enum: ['open', 'done', 'blocked'] }
       },
-      ['taskId', 'confirmed']
+      ['taskId']
     ),
-    writes: true
+    writes: true,
+    proposes: true
+  },
+  {
+    name: 'schedule_task',
+    description:
+      'Een taak op een vast tijdstip in de planning zetten (een blok, geen afspraak). Taken plan je altijd hiermee of met plan_range, nooit met create_appointment. Weigert overlap met afspraken en met blokken die met de hand zijn gezet; blokken van de planner op die plek maken plaats.' +
+      PROPOSAL,
+    parameters: object({ taskId: { type: 'string' }, date, start: clock, end: clock }, ['taskId', 'date', 'start', 'end']),
+    writes: true,
+    proposes: true
+  },
+  {
+    name: 'plan_range',
+    description:
+      'De planner opnieuw laten plannen van een dag tot en met een dag: open taken in de vrije tijd, met de harde regels (stage alleen ma-vr binnen de stage-uren, pauzes). Vervangt alleen wat de planner eerder zette; afspraken en met de hand gezette blokken blijven. Voor "plan opnieuw tot …".' +
+      PROPOSAL,
+    parameters: object({ from: date, to: date }, ['from', 'to']),
+    writes: true,
+    proposes: true
+  },
+  {
+    name: 'clear_planning',
+    description:
+      'Wist wat de planner heeft ingepland van een dag tot en met een dag, zonder opnieuw te plannen. Afspraken en met de hand gezette blokken blijven. Voor "haal de planning weg".' +
+      PROPOSAL,
+    parameters: object({ from: date, to: date }, ['from', 'to']),
+    writes: true,
+    proposes: true
   },
   {
     name: 'create_appointment',
     description:
-      'Nieuwe afspraak. Vraag eerst: wat, wanneer, duur, gebied, waar, vervoer en reistijd, belangrijk?, bijzonderheden. Reistijd maakt een reisblok; daarop tellen de vertrekmeldingen (30 en 15 min vooraf).',
+      'Nieuwe afspraak: alleen voor iets met een vaste tijd met iemand of ergens (geen taken). Vraag eerst: wat, wanneer, duur, gebied, waar, vervoer en reistijd, belangrijk?, bijzonderheden. Reistijd maakt een reisblok; daarop tellen de vertrekmeldingen (30 en 15 min vooraf).' +
+      PROPOSAL,
     parameters: object(
       {
         title: { type: 'string' },
@@ -128,24 +161,26 @@ export const TOOLS: ToolSpec[] = [
         location: { type: 'string' },
         travelMinutes: { type: 'integer', minimum: 0, description: 'Reistijd heen in minuten, 0 = geen reis' },
         travelBack: { type: 'boolean', description: 'Dezelfde reis terug na afloop' },
-        notes: { type: 'string', description: 'Doel, Wie, Meenemen/voorbereiden, Bijzonderheden, Belangrijk: ja/nee' },
-        confirmed
+        notes: { type: 'string', description: 'Doel, Wie, Meenemen/voorbereiden, Bijzonderheden, Belangrijk: ja/nee' }
       },
-      ['title', 'date', 'start', 'end', 'areaId', 'confirmed']
+      ['title', 'date', 'start', 'end', 'areaId']
     ),
-    writes: true
+    writes: true,
+    proposes: true
   },
   {
     name: 'move_appointment',
-    description: 'Een afspraak verzetten; het reisblok schuift mee.',
-    parameters: object({ eventId: { type: 'string' }, date, start: clock, end: clock, confirmed }, [
-      'eventId',
-      'date',
-      'start',
-      'end',
-      'confirmed'
-    ]),
-    writes: true
+    description: 'Een afspraak verzetten; het reisblok schuift mee.' + PROPOSAL,
+    parameters: object({ eventId: { type: 'string' }, date, start: clock, end: clock }, ['eventId', 'date', 'start', 'end']),
+    writes: true,
+    proposes: true
+  },
+  {
+    name: 'delete_appointment',
+    description: 'Een afspraak verwijderen, met zijn reisblokken.' + PROPOSAL,
+    parameters: object({ eventId: { type: 'string' } }, ['eventId']),
+    writes: true,
+    proposes: true
   },
   {
     name: 'propose_day_plan',
@@ -155,25 +190,41 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'apply_day_plan',
-    description: 'Het dagplan echt invullen met de planner en accepteren. Handmatig of vast geplaatste blokken blijven staan.',
-    parameters: object({ date, confirmed }, ['date', 'confirmed']),
+    description: 'Het dagplan van één dag laten invullen door de planner. Handmatig of vast geplaatste blokken blijven staan.' + PROPOSAL,
+    parameters: object({ date }, ['date']),
+    writes: true,
+    proposes: true
+  },
+  {
+    name: 'confirm',
+    description:
+      'Voert de openstaande voorstellen uit, na een duidelijk ja van Hidde. Zonder pendingIds: alle openstaande. Geeft de echte uitkomst uit de database terug; vertel Hidde precies die, ook wat mislukte.',
+    parameters: object({ pendingIds: { type: 'array', items: { type: 'string' } } }),
     writes: true
+  },
+  {
+    name: 'cancel',
+    description: 'Laat openstaande voorstellen vallen (Hidde zei nee of wil iets anders). Zonder pendingIds: alle.',
+    parameters: object({ pendingIds: { type: 'array', items: { type: 'string' } } }),
+    writes: false
   },
   {
     name: 'start_timer',
-    description: 'De timer starten, optioneel op een taak.',
-    parameters: object({ taskId: { type: 'string' }, confirmed }, ['confirmed']),
-    writes: true
+    description: 'De timer starten, optioneel op een taak.' + PROPOSAL,
+    parameters: object({ taskId: { type: 'string' } }),
+    writes: true,
+    proposes: true
   },
   {
     name: 'stop_timer',
-    description: 'De lopende timer stoppen.',
-    parameters: object({ confirmed }, ['confirmed']),
-    writes: true
+    description: 'De lopende timer stoppen.' + PROPOSAL,
+    parameters: object({}),
+    writes: true,
+    proposes: true
   }
 ]
 
-// ------------------------------------------------------------------ run
+// ------------------------------------------------------------------ helpers
 
 const pad = (n: number): string => String(n).padStart(2, '0')
 const isoDate = (d: Date): IsoDate => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -188,8 +239,169 @@ const clockOf = (ms: number): string => {
   const d = new Date(ms)
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
+const dayStart = (day: IsoDate): number => new Date(`${day}T00:00:00`).getTime()
+
+function daysBetween(from: IsoDate, to: IsoDate): IsoDate[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error('Datums als YYYY-MM-DD.')
+  const days: IsoDate[] = []
+  for (let ms = dayStart(from); ms <= dayStart(to); ms += 86_400_000) days.push(isoDate(new Date(ms + 3_600_000)))
+  if (days.length === 0) throw new Error('De einddatum ligt voor de begindatum.')
+  if (days.length > 31) throw new Error('Maximaal 31 dagen tegelijk.')
+  return days
+}
+
+/** From today on: what is past stays as it happened. */
+const fromToday = (from: IsoDate): IsoDate => {
+  const today = isoDate(new Date())
+  return from < today ? today : from
+}
 
 type Input = Record<string, unknown>
+
+// ---------------------------------------------------------------- proposals
+
+interface Proposal {
+  id: string
+  name: string
+  input: Input
+  summary: string
+  createdAt: number
+  expiresAt: number
+  status: 'pending' | 'executed' | 'failed' | 'cancelled'
+  outcome?: unknown
+  error?: string
+}
+
+/** Long enough to think it over; short enough that a stale "ja" does nothing. */
+const PROPOSAL_MS = 30 * 60_000
+const proposals = new Map<string, Proposal>()
+let sequence = 0
+
+function sweep(): void {
+  const cutoff = Date.now() - 6 * 3_600_000
+  for (const [id, proposal] of proposals) if (proposal.createdAt < cutoff) proposals.delete(id)
+}
+
+/** What a proposal will do, in words to read out — with names, not ids. */
+async function describe(api: TimeTrackerAPI, name: string, input: Input): Promise<string> {
+  const taskTitle = async (id: unknown): Promise<string> =>
+    (typeof id === 'string' && (await api.tasks.get(id).catch(() => null))?.title) || 'onbekende taak'
+  switch (name) {
+    case 'create_task':
+      return `Nieuwe taak "${String(input.title)}" (${String(input.areaId)}${typeof input.estimateMinutes === 'number' ? `, ${input.estimateMinutes} min` : ''}${input.dueDate ? `, deadline ${String(input.dueDate)}` : ''})`
+    case 'update_task': {
+      const changes = Object.keys(input).filter((key) => key !== 'taskId')
+      return `Taak "${await taskTitle(input.taskId)}" aanpassen: ${changes.join(', ') || 'niets'}`
+    }
+    case 'schedule_task':
+      return `Taak "${await taskTitle(input.taskId)}" inplannen op ${String(input.date)} ${String(input.start)}–${String(input.end)}`
+    case 'plan_range':
+      return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} opnieuw laten maken (afspraken en handmatige blokken blijven)`
+    case 'clear_planning':
+      return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} wissen (afspraken en handmatige blokken blijven)`
+    case 'create_appointment':
+      return `Nieuwe afspraak "${String(input.title)}" op ${String(input.date)} ${String(input.start)}–${String(input.end)}${typeof input.travelMinutes === 'number' && input.travelMinutes > 0 ? `, ${input.travelMinutes} min reistijd` : ''}`
+    case 'move_appointment':
+      return `Afspraak verzetten naar ${String(input.date)} ${String(input.start)}–${String(input.end)}`
+    case 'delete_appointment':
+      return 'Afspraak verwijderen'
+    case 'apply_day_plan':
+      return `Dagplan van ${String(input.date)} laten invullen door de planner`
+    case 'start_timer':
+      return input.taskId ? `Timer starten op "${await taskTitle(input.taskId)}"` : 'Timer starten'
+    case 'stop_timer':
+      return 'Timer stoppen'
+  }
+  return name
+}
+
+/** Checks what can be checked before the "ja", so a proposal that cannot work is not asked. */
+async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promise<void> {
+  if (name === 'schedule_task') await slotFor(api, input)
+  if (name === 'plan_range' || name === 'clear_planning') daysBetween(fromToday(String(input.from)), String(input.to))
+  if (['create_appointment', 'move_appointment'].includes(name)) {
+    if (minuteOf(String(input.end)) <= minuteOf(String(input.start))) throw new Error('Het einde ligt voor het begin.')
+  }
+}
+
+async function propose(api: TimeTrackerAPI, name: string, input: Input): Promise<unknown> {
+  sweep()
+  try {
+    await precheck(api, name, input)
+  } catch (error) {
+    return { error: `Kan niet: ${error instanceof Error ? error.message : String(error)}` }
+  }
+  sequence += 1
+  const id = `v${sequence}${Date.now().toString(36).slice(-3)}`
+  const summary = await describe(api, name, input)
+  proposals.set(id, { id, name, input, summary, createdAt: Date.now(), expiresAt: Date.now() + PROPOSAL_MS, status: 'pending' })
+  return {
+    pendingId: id,
+    summary,
+    next: 'Nog niet uitgevoerd. Vat samen en vraag "Zal ik dat zo doen?". Pas na een ja: confirm.'
+  }
+}
+
+async function confirm(api: TimeTrackerAPI, input: Input): Promise<unknown> {
+  const wanted = Array.isArray(input.pendingIds) ? input.pendingIds.map(String) : null
+  const chosen = wanted
+    ? wanted.map((id) => proposals.get(id) ?? null)
+    : [...proposals.values()].filter((proposal) => proposal.status === 'pending')
+  if (chosen.length === 0) return { error: 'Er staat geen voorstel open. Er is niets uitgevoerd.' }
+
+  const executed: Array<{ summary: string; result: unknown }> = []
+  const failed: Array<{ summary: string; error: string }> = []
+  const alreadyDone: string[] = []
+  for (const [index, proposal] of chosen.entries()) {
+    if (!proposal) {
+      failed.push({ summary: `voorstel ${wanted?.[index] ?? '?'}`, error: 'bestaat niet (meer)' })
+      continue
+    }
+    if (proposal.status === 'executed') {
+      alreadyDone.push(proposal.summary)
+      continue
+    }
+    if (proposal.status !== 'pending') {
+      failed.push({ summary: proposal.summary, error: proposal.status === 'cancelled' ? 'was afgezegd' : proposal.error ?? 'mislukt' })
+      continue
+    }
+    if (Date.now() > proposal.expiresAt) {
+      proposal.status = 'failed'
+      proposal.error = 'verlopen, maak een nieuw voorstel'
+      failed.push({ summary: proposal.summary, error: proposal.error })
+      continue
+    }
+    try {
+      proposal.outcome = await execute(api, proposal.name, proposal.input)
+      proposal.status = 'executed'
+      executed.push({ summary: proposal.summary, result: proposal.outcome })
+    } catch (error) {
+      proposal.status = 'failed'
+      proposal.error = error instanceof Error ? error.message : String(error)
+      failed.push({ summary: proposal.summary, error: proposal.error })
+    }
+  }
+  return {
+    executed,
+    failed,
+    alreadyDone,
+    say: 'Vertel Hidde precies dit: wat gelukt is (met de aantallen hierboven) en wat mislukte. Zeg niets dat hier niet staat.'
+  }
+}
+
+function cancel(input: Input): unknown {
+  const wanted = Array.isArray(input.pendingIds) ? new Set(input.pendingIds.map(String)) : null
+  let count = 0
+  for (const proposal of proposals.values()) {
+    if (proposal.status === 'pending' && (!wanted || wanted.has(proposal.id))) {
+      proposal.status = 'cancelled'
+      count += 1
+    }
+  }
+  return { cancelled: count }
+}
+
+// ------------------------------------------------------------------ run
 
 /**
  * Runs one tool call. Returns what the model reads back — small and readable, never whole
@@ -198,11 +410,15 @@ type Input = Record<string, unknown>
 export async function runTool(api: TimeTrackerAPI, name: string, input: Input): Promise<unknown> {
   const spec = TOOLS.find((tool) => tool.name === name)
   if (!spec) throw new Error(`Onbekende tool: ${name}`)
-  if (spec.writes && input.confirmed !== true) {
-    return { refused: 'Niet uitgevoerd: vat eerst samen wat je gaat doen en vraag Hidde om bevestiging.' }
-  }
+  if (spec.proposes) return propose(api, name, input)
 
   switch (name) {
+    case 'confirm':
+      return confirm(api, input)
+
+    case 'cancel':
+      return cancel(input)
+
     case 'get_now': {
       const now = new Date()
       return {
@@ -234,7 +450,8 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
             title: block.taskTitle ?? block.title,
             taskId: block.taskId,
             area: block.areaId,
-            project: block.projectName
+            project: block.projectName,
+            byHand: block.source !== 'planner'
           }))
         })
       }
@@ -303,12 +520,62 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
       }
     }
 
+  }
+  throw new Error(`Tool zonder uitvoering: ${name}`)
+}
+
+// ------------------------------------------------------------ carrying out
+
+/**
+ * Where a task block would go, and what it would push aside. Appointments and blocks set by
+ * hand are walls; the planner's own blocks there make way.
+ */
+async function slotFor(
+  api: TimeTrackerAPI,
+  input: Input
+): Promise<{ day: IsoDate; startMin: number; endMin: number; replaces: Array<{ id: string; title: string }> }> {
+  const day = String(input.date)
+  const startMin = minuteOf(String(input.start))
+  const endMin = minuteOf(String(input.end))
+  if (endMin <= startMin) throw new Error('Het einde ligt voor het begin.')
+  if (day < isoDate(new Date())) throw new Error('Die dag is al voorbij.')
+  const task = typeof input.taskId === 'string' ? await api.tasks.get(input.taskId) : null
+  if (!task) throw new Error('Die taak bestaat niet; haal de taskId op met list_tasks.')
+
+  const plan = await api.plans.day(day)
+  const overlaps = (from: number, to: number): boolean => from < endMin && to > startMin
+  const walls: string[] = []
+  const replaces: Array<{ id: string; title: string }> = []
+  for (const block of plan.blocks) {
+    if (!overlaps(block.startMin, block.endMin)) continue
+    const title = block.taskTitle ?? block.title ?? block.kind
+    if (block.source === 'planner' && !block.locked && !block.fixed) replaces.push({ id: block.id, title })
+    else walls.push(`${title} ${hm(block.startMin)}–${hm(block.endMin)}`)
+  }
+  const events = await api.calendar.eventsInRange(dayStart(day), dayStart(day) + 86_400_000)
+  for (const event of events) {
+    if (event.cancelled || event.allDay) continue
+    const from = Math.round((event.startsAt - dayStart(day)) / 60_000)
+    const to = Math.round((event.endsAt - dayStart(day)) / 60_000)
+    if (overlaps(from, to)) walls.push(`${event.title} ${clockOf(event.startsAt)}–${clockOf(event.endsAt)}`)
+  }
+  if (walls.length > 0) throw new Error(`Overlapt met ${walls.join(', ')}`)
+  return { day, startMin, endMin, replaces }
+}
+
+/** The planner's own blocks on a day: what plan_range replaces and clear_planning removes. */
+const plannerBlocks = async (api: TimeTrackerAPI, day: IsoDate) =>
+  (await api.plans.day(day)).blocks.filter((block) => block.source === 'planner' && !block.locked && !block.fixed)
+
+/** Does the work of a confirmed proposal, and reads the result back from the database. */
+async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise<unknown> {
+  switch (name) {
     case 'create_task': {
       let projectId: string | null = null
       if (typeof input.projectName === 'string' && input.projectName.trim()) {
         const wanted = input.projectName.trim().toLowerCase()
         const project = (await api.projects.list()).find((entry) => entry.name.toLowerCase() === wanted)
-        if (!project) return { error: `Geen project "${input.projectName}". Kies uit list_projects of laat het leeg.` }
+        if (!project) throw new Error(`Geen project "${input.projectName}". Kies uit list_projects of laat het leeg.`)
         projectId = project.id
       }
       const task = await api.tasks.create({
@@ -322,23 +589,85 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
         notes: (input.notes as string | undefined) ?? null,
         focusMode: (input.focusMode as 'auto' | 'always' | 'never' | undefined) ?? 'auto'
       })
+      if (!(await api.tasks.get(task.id))) throw new Error('De taak staat na het aanmaken niet in de database.')
       return { created: task.title, taskId: task.id, focus: task.focusMode }
     }
 
     case 'update_task': {
+      const taskId = String(input.taskId)
+      if (input.status === 'done') {
+        const task = await api.tasks.complete(taskId, true)
+        return { done: task.title }
+      }
       const patch: TaskPatch = {}
       if (typeof input.title === 'string') patch.title = input.title
       if (typeof input.priority === 'string') patch.priority = input.priority as Priority
       if (typeof input.estimateMinutes === 'number') patch.estimateMin = input.estimateMinutes
       if (input.dueDate !== undefined) patch.dueDate = input.dueDate as string | null
       if (typeof input.notes === 'string') patch.notes = input.notes
-      if (input.status === 'done') {
-        const task = await api.tasks.complete(String(input.taskId), true)
-        return { done: task.title }
-      }
       if (typeof input.status === 'string') patch.status = input.status as TaskPatch['status']
-      const task = await api.tasks.update(String(input.taskId), patch)
+      const task = await api.tasks.update(taskId, patch)
       return { updated: task.title }
+    }
+
+    case 'schedule_task': {
+      const slot = await slotFor(api, input)
+      for (const block of slot.replaces) await api.plans.removeBlock(block.id)
+      const current = await api.plans.day(slot.day)
+      let planId = current.plan?.status === 'accepted' ? current.plan.id : null
+      const needsAccept = planId === null
+      if (!planId) {
+        const draft = await api.plans.draft(slot.day)
+        if (!draft.plan) throw new Error('Kon voor die dag geen plan openen.')
+        planId = draft.plan.id
+      }
+      const block = await api.plans.addBlock(planId, {
+        taskId: String(input.taskId),
+        date: slot.day,
+        startMin: slot.startMin,
+        endMin: slot.endMin,
+        kind: 'task',
+        source: 'manual',
+        locked: true
+      })
+      if (needsAccept) await api.plans.accept(planId)
+      const after = await api.plans.day(slot.day)
+      if (!after.blocks.some((entry) => entry.startMin === block.startMin && entry.taskId === block.taskId)) {
+        throw new Error('Het blok staat na het opslaan niet in de planning.')
+      }
+      return {
+        placed: `${slot.day} ${hm(slot.startMin)}–${hm(slot.endMin)}`,
+        madeWayFor: slot.replaces.map((entry) => entry.title)
+      }
+    }
+
+    case 'plan_range': {
+      const days = daysBetween(fromToday(String(input.from)), String(input.to))
+      const before = (await Promise.all(days.map((day) => plannerBlocks(api, day)))).flat().length
+      const result = await api.planner.applyRange(days[0]!, days[days.length - 1]!)
+      const after = (await Promise.all(days.map((day) => plannerBlocks(api, day)))).flat()
+      return {
+        from: days[0],
+        to: days[days.length - 1],
+        removedOldBlocks: before,
+        plannedBlocks: after.filter((block) => block.kind === 'task').length,
+        plannedHours: Math.round((result.plannedMin / 60) * 10) / 10,
+        notPlaced: result.unplaced.map((entry) => `${entry.taskTitle} (${entry.minutes} min): ${entry.reason}`)
+      }
+    }
+
+    case 'clear_planning': {
+      const days = daysBetween(fromToday(String(input.from)), String(input.to))
+      let removed = 0
+      for (const day of days) {
+        for (const block of await plannerBlocks(api, day)) {
+          await api.plans.removeBlock(block.id)
+          removed += 1
+        }
+      }
+      const left = (await Promise.all(days.map((day) => plannerBlocks(api, day)))).flat().length
+      if (left > 0) throw new Error(`${removed} blokken verwijderd, maar er staan er nog ${left}.`)
+      return { removedBlocks: removed, from: days[0], to: days[days.length - 1] }
     }
 
     case 'create_appointment': {
@@ -383,22 +712,22 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
     case 'move_appointment': {
       const day = String(input.date)
       const moved = await api.calendar.move(String(input.eventId), at(day, String(input.start)), at(day, String(input.end)))
-      return { moved: moved.title, to: `${day} ${input.start}–${input.end}` }
+      return { moved: moved.title, to: `${day} ${clockOf(moved.startsAt)}–${clockOf(moved.endsAt)}` }
     }
 
-    case 'propose_day_plan': {
-      const proposal = await api.planner.proposeDay(String(input.date))
-      return {
-        blocks: proposal.blocks.map((block) => ({
-          from: hm(block.startMin),
-          to: hm(block.endMin),
-          taskId: block.taskId,
-          kind: block.kind
-        })),
-        unplaced: proposal.unplaced,
-        plannedMinutes: proposal.plannedMin,
-        availableMinutes: proposal.availableMin
-      }
+    case 'delete_appointment': {
+      await api.calendar.deleteEvent(String(input.eventId))
+      return { deleted: true }
+    }
+
+    case 'start_timer': {
+      const run = await api.tracking.startRun((input.taskId as string | undefined) ?? null)
+      return { started: true, at: clockOf(run.startedAt) }
+    }
+
+    case 'stop_timer': {
+      await api.tracking.stopRun()
+      return { stopped: true }
     }
 
     case 'apply_day_plan': {
@@ -413,16 +742,6 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
           .filter((block) => block.kind !== 'break')
           .map((block) => `${hm(block.startMin)}–${hm(block.endMin)} ${block.taskTitle ?? block.title ?? ''}`)
       }
-    }
-
-    case 'start_timer': {
-      const run = await api.tracking.startRun((input.taskId as string | undefined) ?? null)
-      return { started: true, at: clockOf(run.startedAt) }
-    }
-
-    case 'stop_timer': {
-      await api.tracking.stopRun()
-      return { stopped: true }
     }
   }
   throw new Error(`Tool zonder uitvoering: ${name}`)

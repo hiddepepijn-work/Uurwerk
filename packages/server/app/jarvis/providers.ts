@@ -68,8 +68,10 @@ async function callTool(runTool: RunTool, name: string, input: unknown): Promise
   try {
     const args = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
     const result = await runTool(name, args)
-    const refused = typeof result === 'object' && result !== null && 'refused' in result
-    return { content: JSON.stringify(result), error: false, wrote: WRITES.has(name) && !refused }
+    // A proposal, a refusal or an error changed nothing; only confirm and the timer write.
+    const nothing =
+      typeof result === 'object' && result !== null && ('pendingId' in result || 'error' in result || 'refused' in result)
+    return { content: JSON.stringify(result), error: false, wrote: WRITES.has(name) && !nothing }
   } catch (error) {
     return { content: error instanceof Error ? error.message : String(error), error: true, wrote: false }
   }

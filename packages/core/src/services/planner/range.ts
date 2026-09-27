@@ -322,6 +322,19 @@ export function planRange(input: RangePlanInput): RangeProposal {
   const finishedAt = new Map<string, Position>()
 
   /**
+   * Work already in the range that the replan keeps: blocks placed by hand, locked or fixed.
+   * Those minutes count towards the task, or a task you put at two o'clock yourself would be
+   * planned in full a second time around it.
+   */
+  const alreadyPlanned = new Map<string, number>()
+  for (const day of input.days) {
+    for (const block of day.existing) {
+      if (block.kind !== 'task' || !block.taskId) continue
+      alreadyPlanned.set(block.taskId, (alreadyPlanned.get(block.taskId) ?? 0) + (block.endMin - block.startMin))
+    }
+  }
+
+  /**
    * Deadline order, but never before a prerequisite.
    *
    * A plain sort cannot express both: the most urgent task in a chain is usually the last
@@ -365,8 +378,10 @@ export function planRange(input: RangePlanInput): RangeProposal {
       ? calendar.freeUntil(deadline, wantsStage)
       : calendar.freeTotal(wantsStage)
     let placedMin = 0
+    const needMin = scored.scheduleMin - (alreadyPlanned.get(scored.task.id) ?? 0)
+    if (needMin <= 0) continue
 
-    for (const chunk of splitIntoBlocks(scored.scheduleMin, input.profile)) {
+    for (const chunk of splitIntoBlocks(needMin, input.profile)) {
       const size = Math.max(input.profile.minimumBlockMin, chunk)
       const slot = calendar.take(size, wantsStage, deadline, after ?? undefined)
       if (!slot) break
@@ -389,7 +404,7 @@ export function planRange(input: RangePlanInput): RangeProposal {
       )
     }
 
-    const missing = scored.scheduleMin - placedMin
+    const missing = needMin - placedMin
     if (missing <= 0) continue
 
     if (deadline) {

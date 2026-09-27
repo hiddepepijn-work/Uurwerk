@@ -17,8 +17,10 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
-import type { JarvisAsk, JarvisReply, JarvisStatus, TimeTrackerAPI } from '@core/contract/api.js'
+import type { JarvisAsk, JarvisJob, JarvisReply, JarvisStatus, TimeTrackerAPI } from '@core/contract/api.js'
 import type { SecretVault } from '@backend/host.js'
 import { log } from '@backend/log.js'
 
@@ -41,9 +43,18 @@ Regels voor elk antwoord:
 - Maximaal een paar zinnen per beurt. Stel één vraag tegelijk.
 - Haal feiten op met je tools (get_now, get_agenda, list_tasks, day_review) voordat je
   iets over de agenda of taken zegt. Verzin nooit een afspraak, taak of tijd.
-- Schrijvende tools (aanmaken, wijzigen, plannen, timer): eerst samenvatten wat je gaat
-  doen en vragen "Zal ik dat zo doen?". Pas na een duidelijk ja de tool aanroepen met
-  confirmed: true. Daarna kort terugzeggen wat er nu staat.
+- Iets veranderen gaat in twee stappen. De schrijvende tools (create_task, update_task,
+  schedule_task, plan_range, clear_planning, create_appointment, move_appointment,
+  delete_appointment, apply_day_plan, start_timer, stop_timer) voeren niets uit: ze maken een voorstel. Zet alles
+  wat bij één verzoek hoort in voorstellen, vat ze samen en vraag "Zal ik dat zo doen?".
+  Bij een duidelijk ja: confirm. Bij nee of iets anders: cancel.
+- Na confirm vertel je precies wat confirm teruggeeft: wat gelukt is, met de echte aantallen,
+  en wat mislukte. Zeg nooit dat iets staat als confirm dat niet zegt.
+- Taken plan je met schedule_task (een vast tijdstip) of plan_range (de planner), nooit als
+  afspraak. create_appointment is alleen voor iets met een vaste tijd met iemand of ergens.
+- "Haal de planning weg en plan opnieuw tot …" is één plan_range: die vervangt wat de planner
+  eerder zette en laat afspraken en handmatige blokken staan. De planner kent de harde
+  regels (stage alleen ma-vr binnen de stage-uren); plan zelf nooit stage in het weekend.
 - Alles wat je bij een nieuwe afspraak of taak hoort, gaat in de notitie.
 
 --- BRIEF ---
@@ -109,10 +120,55 @@ export function createJarvis(
     return `[Nu: ${now.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}]`
   }
 
-  return {
+  // ------------------------------------------------------------ the day's opening
+  // The first contact of the day opens with the morning conversation. Which day last had
+  // one is kept on disk, so a restart of the server does not open the day twice.
+  const dayPath = join(dirname(usagePath), 'jarvis-day.json')
+  const today = (): string => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  }
+  const openedOn = (): string | null => {
+    try {
+      return existsSync(dayPath) ? ((JSON.parse(readFileSync(dayPath, 'utf8')) as { morning?: string }).morning ?? null) : null
+    } catch {
+      return null
+    }
+  }
+  const markOpened = (): void => writeFileSync(dayPath, JSON.stringify({ morning: today() }))
+  /** Before two in the afternoon; later than that a morning conversation is no use. */
+  const openingDue = (): boolean => new Date().getHours() < 14 && openedOn() !== today()
+
+  // --------------------------------------------------------------------- jobs
+  // A turn can take half a minute when he replans. On a phone that is long enough for the
+  // connection to drop; the job carries on here and the phone asks how it went.
+  const jobs = new Map<string, JarvisJob & { at: number }>()
+
+  const jarvis: TimeTrackerAPI['jarvis'] = {
+    async askStart(input) {
+      for (const [id, job] of jobs) if (Date.now() - job.at > 15 * 60_000) jobs.delete(id)
+      const jobId = randomUUID()
+      jobs.set(jobId, { status: 'running', reply: null, error: null, at: Date.now() })
+      void jarvis.ask(input).then(
+        (reply) => jobs.set(jobId, { status: 'done', reply, error: null, at: Date.now() }),
+        (error: unknown) => {
+          log.warn('A Jarvis job failed.', error)
+          jobs.set(jobId, { status: 'failed', reply: null, error: error instanceof Error ? error.message : String(error), at: Date.now() })
+        }
+      )
+      return { jobId }
+    },
+
+    async askJob(jobId) {
+      const job = jobs.get(jobId)
+      if (!job) return { status: 'failed', reply: null, error: 'Dit antwoord is niet meer bekend op de server. Vraag het opnieuw.' }
+      return { status: job.status, reply: job.reply, error: job.error }
+    },
+
     async status(): Promise<JarvisStatus> {
       const keyPresent = secrets.has(keyName)
       return {
+        openingDue: openingDue(),
         ready: keyPresent,
         provider: family,
         model,
@@ -137,6 +193,7 @@ export function createJarvis(
       live.lastUsed = Date.now()
 
       const said = input.moment ? MOMENT[input.moment] : (input.text ?? '').trim()
+      if (input.moment === 'morning') markOpened()
       if (!said) throw new Error('Zeg iets tegen Jarvis.')
 
       const turn = await live.conversation.send(said, context(), (name, args) => runTool(api, name, args), {
@@ -171,6 +228,7 @@ export function createJarvis(
     async liveSession(input) {
       const key = secrets.get('geminiKey')
       if (!key) throw new Error('Geen geminiKey op de server. Zet hem met: uurwerk-secrets set geminiKey')
+      if (input.moment === 'morning') markOpened()
       return liveSession({
         api,
         key,
@@ -193,4 +251,5 @@ export function createJarvis(
       return spend
     }
   }
+  return jarvis
 }
