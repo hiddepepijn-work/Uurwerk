@@ -556,8 +556,8 @@ export interface TimeTrackerAPI {
     get(): Promise<Settings>
     update(patch: Partial<Settings>): Promise<Settings>
     /** Stored via Electron safeStorage, never returned to the renderer. */
-    setSecret(key: 'smtpPassword' | 'publishToken', value: string): Promise<void>
-    hasSecret(key: 'smtpPassword' | 'publishToken'): Promise<boolean>
+    setSecret(key: 'smtpPassword' | 'publishToken' | 'picovoiceKey', value: string): Promise<void>
+    hasSecret(key: 'smtpPassword' | 'publishToken' | 'picovoiceKey'): Promise<boolean>
   }
 
   publish: {
@@ -575,6 +575,18 @@ export interface TimeTrackerAPI {
   window: {
     minimizeToTray(): Promise<void>
     closeQuickAdd(): Promise<void>
+    /** Laptop: shows the Jarvis corner window, bottom right, without taking the focus. */
+    jarvisShow(): Promise<void>
+    jarvisHide(): Promise<void>
+    /**
+     * Whether the corner window takes the mouse. It is transparent and larger than what it
+     * shows, so it lets clicks through except over the orb and the cards.
+     */
+    jarvisInteractive(on: boolean): Promise<void>
+    /** Brings the main window up at a screen. */
+    openApp(target: 'agenda' | 'tasks' | 'today'): Promise<void>
+    /** The Picovoice AccessKey for the wake word; null when none is set. Laptop only. */
+    wakeWordKey(): Promise<string | null>
     /**
      * Ends the app for real, tray and hotkeys included.
      *

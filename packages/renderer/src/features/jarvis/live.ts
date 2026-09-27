@@ -23,6 +23,8 @@ export interface LiveHandlers {
   onReply(text: string): void
   /** The conversation ended by itself: a problem, or the connection closed. */
   onEnd(problem: string | null): void
+  /** A tool ran: the laptop's corner shows what a confirm changed. */
+  onToolResult?(name: string, result: unknown): void
 }
 
 const MIC_RATE = 16_000
@@ -290,6 +292,7 @@ export class LiveCall {
         message.toolCall.functionCalls.map(async (call) => {
           try {
             const result = await api.jarvis.runTool({ name: call.name ?? '', args: (call.args ?? {}) as Record<string, unknown> })
+            this.handlers.onToolResult?.(call.name ?? '', result)
             // No scheduling: 3.8 Live refuses it (and closes), and answers on its own.
             return { id: call.id, name: call.name, response: { result } }
           } catch (error) {

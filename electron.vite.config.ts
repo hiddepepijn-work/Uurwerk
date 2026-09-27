@@ -1,7 +1,22 @@
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+
+/**
+ * `import x from './file.pv?base64'` gives the file's bytes as a base64 string, inside the
+ * bundle. The Jarvis corner needs its wake word model that way: a page loaded from file://
+ * cannot fetch a file next to it.
+ */
+const base64Import = {
+  name: 'uurwerk-base64-import',
+  enforce: 'pre' as const,
+  load(id: string) {
+    if (!id.endsWith('?base64')) return null
+    return `export default ${JSON.stringify(readFileSync(id.slice(0, -'?base64'.length)).toString('base64'))}`
+  }
+}
 
 const alias = {
   '@core': resolve(__dirname, 'packages/core/src'),
@@ -41,7 +56,7 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'packages/renderer'),
     resolve: { alias },
-    plugins: [react(), tailwindcss()],
+    plugins: [base64Import, react(), tailwindcss()],
     build: {
       outDir: resolve(__dirname, 'out/renderer'),
       emptyOutDir: true,
@@ -49,7 +64,8 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'packages/renderer/index.html'),
           quickadd: resolve(__dirname, 'packages/renderer/quickadd.html'),
-          timelapse: resolve(__dirname, 'packages/renderer/timelapse.html')
+          timelapse: resolve(__dirname, 'packages/renderer/timelapse.html'),
+          jarvis: resolve(__dirname, 'packages/renderer/jarvis.html')
         }
       }
     }

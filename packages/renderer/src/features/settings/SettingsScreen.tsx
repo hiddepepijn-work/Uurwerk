@@ -13,6 +13,7 @@ import { ProjectSettings } from './ProjectSettings.js'
 import { PublishSettings } from './PublishSettings.js'
 import { ServerSettings } from './ServerSettings.js'
 import { FocusSettings } from './FocusSettings.js'
+import { JarvisSettings } from './JarvisSettings.js'
 import { SettingRow, SettingsSection, Toggle, numberField, textField } from './SettingsSection.js'
 
 /** The three built-in areas; they cannot be archived, so they get no archive button. */
@@ -27,7 +28,8 @@ const HOTKEY_LABELS: Array<{ key: keyof Hotkeys; label: string; hint: string }> 
     label: 'Take a screenshot now',
     hint: 'Captures the screen and marks the frame for the report straight away'
   },
-  { key: 'endOfDay', label: 'End of day', hint: '' }
+  { key: 'endOfDay', label: 'End of day', hint: '' },
+  { key: 'jarvis', label: 'Jarvis', hint: 'Roept Jarvis rechtsonder in beeld, net als "Jarvis" zeggen' }
 ]
 
 /**
@@ -401,6 +403,7 @@ export function SettingsScreen() {
       <ServerSettings />
 
       <FocusSettings settings={settings} onPatch={(changes) => void patch(changes)} />
+      <JarvisSettings />
 
       <PublishSettings settings={settings} onPatch={(changes) => void patch(changes)} />
     </div>

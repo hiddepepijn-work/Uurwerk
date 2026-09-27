@@ -12,7 +12,7 @@
  */
 
 import type { TimeTrackerAPI } from '@core/contract/api.js'
-import type { IsoDate, Priority, TaskPatch } from '@core/contract/types.js'
+import type { IsoDate, JarvisCard, Priority, TaskPatch } from '@core/contract/types.js'
 
 export interface ToolSpec {
   name: string
@@ -644,7 +644,7 @@ async function confirm(api: TimeTrackerAPI, input: Input): Promise<unknown> {
     : await api.assistant.pendingProposals()
   if (chosen.length === 0) return { error: 'Er staat geen voorstel open. Er is niets uitgevoerd.' }
 
-  const executed: Array<{ summary: string; result: unknown }> = []
+  const executed: Array<{ summary: string; result: unknown; cards: JarvisCard[] }> = []
   const failed: Array<{ summary: string; error: string }> = []
   const alreadyDone: string[] = []
   for (const [index, proposal] of chosen.entries()) {
@@ -672,7 +672,7 @@ async function confirm(api: TimeTrackerAPI, input: Input): Promise<unknown> {
     try {
       const result = await execute(api, proposal.tool, proposal.payload)
       await api.assistant.settleProposal(proposal.id, { status: 'executed', result })
-      executed.push({ summary: proposal.summary, result })
+      executed.push({ summary: proposal.summary, result, cards: cardsFor(proposal.tool, proposal.payload, result) })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await api.assistant.settleProposal(proposal.id, { status: 'failed', error: message })
@@ -687,6 +687,52 @@ async function confirm(api: TimeTrackerAPI, input: Input): Promise<unknown> {
     alreadyDone,
     say: 'Vertel Hidde precies dit: wat gelukt is (met de aantallen hierboven) en wat mislukte. Zeg niets dat hier niet staat.'
   }
+}
+
+/** What a carried-out proposal changed, as cards for the laptop's Jarvis corner. */
+function cardsFor(tool: string, input: Input, result: unknown): JarvisCard[] {
+  const out = (result ?? {}) as Record<string, unknown>
+  const slot = (date: unknown, start: unknown, end: unknown): string => `${shortDay(String(date))} ${String(start)}–${String(end)}`
+  const card = (kind: JarvisCard['kind'], action: JarvisCard['action'], title: unknown, when: string | null = null, date: unknown = null): JarvisCard => ({
+    kind,
+    action,
+    title: String(title ?? ''),
+    when,
+    date: typeof date === 'string' ? date : null
+  })
+  switch (tool) {
+    case 'create_task':
+      return [card('taak', 'nieuw', input.title, input.dueDate ? `deadline ${shortDay(String(input.dueDate))}` : null)]
+    case 'update_task':
+      return [card('taak', input.status === 'done' ? 'af' : 'gewijzigd', out.done ?? out.updated)]
+    case 'schedule_task':
+      return [card('planning', 'nieuw', out.task, slot(input.date, input.start, input.end), input.date)]
+    case 'place_tasks':
+      return ((input.placements as Placement[]) ?? []).map((entry) =>
+        card('planning', 'nieuw', entry.title, slot(entry.date, entry.start, entry.end), entry.date)
+      )
+    case 'plan_range':
+      return [card('planning', 'gewijzigd', `${String(out.plannedBlocks)} blokken opnieuw gepland`, `${shortDay(String(out.from))} – ${shortDay(String(out.to))}`, out.from)]
+    case 'clear_planning':
+      return [card('planning', 'weg', `${String(out.removedBlocks)} blokken weggehaald`, `${shortDay(String(out.from))} – ${shortDay(String(out.to))}`, out.from)]
+    case 'apply_day_plan':
+      return [card('planning', 'gewijzigd', `Dagplan ${shortDay(String(input.date))}`, null, input.date)]
+    case 'create_appointment':
+      return [card('afspraak', 'nieuw', input.title, slot(input.date, input.start, input.end), input.date)]
+    case 'move_appointment':
+      return [card('afspraak', 'gewijzigd', out.moved, slot(input.date, input.start, input.end), input.date)]
+    case 'delete_appointment':
+      return [card('afspraak', 'weg', out.title ?? 'Afspraak')]
+    case 'add_rule':
+      return [card('regel', 'nieuw', out.added)]
+    case 'update_rule':
+      return [card('regel', 'gewijzigd', out.updated)]
+    case 'start_timer':
+      return [card('timer', 'nieuw', 'Timer gestart', typeof out.at === 'string' ? out.at : null)]
+    case 'stop_timer':
+      return [card('timer', 'af', 'Timer gestopt')]
+  }
+  return []
 }
 
 async function cancel(api: TimeTrackerAPI, input: Input): Promise<unknown> {
@@ -884,6 +930,7 @@ async function slotFor(
   startMin: number
   endMin: number
   areaId: string | null
+  title: string
   replaces: Array<{ id: string; title: string }>
 }> {
   const day = String(input.date)
@@ -912,7 +959,7 @@ async function slotFor(
     if (overlaps(from, to)) walls.push(`${event.title} ${clockOf(event.startsAt)}–${clockOf(event.endsAt)}`)
   }
   if (walls.length > 0) throw new Error(`Overlapt met ${walls.join(', ')}`)
-  return { day, startMin, endMin, areaId: task.areaId, replaces }
+  return { day, startMin, endMin, areaId: task.areaId, title: task.title, replaces }
 }
 
 /** The planner's own blocks on a day: what plan_range replaces and clear_planning removes. */
@@ -990,6 +1037,7 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
         throw new Error('Het blok staat na het opslaan niet in de planning.')
       }
       return {
+        task: slot.title,
         placed: `${slot.day} ${hm(slot.startMin)}–${hm(slot.endMin)}`,
         madeWayFor: slot.replaces.map((entry) => entry.title)
       }
@@ -1076,8 +1124,12 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
     }
 
     case 'delete_appointment': {
+      const now = Date.now()
+      const title = (await api.calendar.eventsInRange(now - 30 * 86_400_000, now + 120 * 86_400_000)).find(
+        (event) => event.id === input.eventId
+      )?.title
       await api.calendar.deleteEvent(String(input.eventId))
-      return { deleted: true }
+      return { deleted: true, title: title ?? null }
     }
 
     case 'start_timer': {

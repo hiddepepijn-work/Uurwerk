@@ -7,7 +7,7 @@
  * end up shipping with nodeIntegration quietly left on.
  */
 
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, screen, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { log } from './logger.js'
@@ -41,7 +41,7 @@ const baseWebPreferences = {
   spellcheck: false
 } as const
 
-type Page = 'index' | 'quickadd' | 'timelapse'
+type Page = 'index' | 'quickadd' | 'timelapse' | 'jarvis'
 
 /** Renderer entry URLs differ between `electron-vite dev` and a packaged build. */
 function rendererUrl(page: Page): { url?: string; file?: string } {
@@ -168,6 +168,80 @@ export function createEncoderWindow(): BrowserWindow {
   lockDownNavigation(window)
   load(window, 'timelapse')
   return window
+}
+
+// ------------------------------------------------------------ Jarvis corner
+
+/** Size of the corner window: room for the orb, its caption and a stack of cards. */
+const CORNER = { width: 420, height: 620, margin: 12 }
+let corner: BrowserWindow | null = null
+/** How the corner opens the main window at a screen; set by index.ts, which owns that window. */
+let openAppAt: ((target: 'agenda' | 'tasks' | 'today') => void) | null = null
+
+/**
+ * Jarvis in the corner of the screen: transparent, frameless, always on top, never in the
+ * taskbar. It exists from start-up, hidden, because the wake word listens in it — so it
+ * must not be throttled in the background. It lets the mouse through except over what it
+ * shows (the renderer says when), so the corner of the desktop stays usable.
+ */
+export function createJarvisWindow(open: (target: 'agenda' | 'tasks' | 'today') => void): BrowserWindow {
+  openAppAt = open
+  const window = new BrowserWindow({
+    width: CORNER.width,
+    height: CORNER.height,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: { ...baseWebPreferences, backgroundThrottling: false }
+  })
+  lockDownNavigation(window)
+  window.setAlwaysOnTop(true, 'floating')
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  window.setIgnoreMouseEvents(true, { forward: true })
+  placeInCorner(window)
+  load(window, 'jarvis')
+  corner = window
+  return window
+}
+
+function placeInCorner(window: BrowserWindow): void {
+  const area = screen.getPrimaryDisplay().workArea
+  window.setBounds({
+    x: area.x + area.width - CORNER.width - CORNER.margin,
+    y: area.y + area.height - CORNER.height - CORNER.margin,
+    width: CORNER.width,
+    height: CORNER.height
+  })
+}
+
+export function showJarvis(): void {
+  if (!corner || corner.isDestroyed()) return
+  placeInCorner(corner)
+  // Shown without taking the focus: what you were typing in keeps it.
+  corner.showInactive()
+}
+
+export function hideJarvis(): void {
+  if (corner && !corner.isDestroyed()) corner.hide()
+}
+
+export function setJarvisInteractive(on: boolean): void {
+  if (!corner || corner.isDestroyed()) return
+  if (on) corner.setIgnoreMouseEvents(false)
+  else corner.setIgnoreMouseEvents(true, { forward: true })
+}
+
+export function openAppFromJarvis(target: 'agenda' | 'tasks' | 'today'): void {
+  openAppAt?.(target)
 }
 
 /** The Ctrl+Alt+T window: small, frameless, always on top, no taskbar entry. */

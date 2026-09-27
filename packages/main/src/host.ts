@@ -17,6 +17,7 @@ import { reportDir } from './paths.js'
 import { getSecret, hasSecret, setSecret } from './secrets.js'
 import { applyAutoLaunch, getLoginItemStatus } from './startup.js'
 import { buildTimelapse } from './timelapse.js'
+import { hideJarvis, openAppFromJarvis, setJarvisInteractive, showJarvis } from './windows.js'
 
 export function electronHost(backend: Backend, sync: SyncClient): Host {
   return {
@@ -44,6 +45,11 @@ export function electronHost(backend: Backend, sync: SyncClient): Host {
       minimizeToTray: async () => {
         BrowserWindow.getFocusedWindow()?.hide()
       },
+      jarvisShow: async () => showJarvis(),
+      jarvisHide: async () => hideJarvis(),
+      jarvisInteractive: async (on) => setJarvisInteractive(on),
+      openApp: async (target) => openAppFromJarvis(target),
+      wakeWordKey: async () => getSecret('picovoiceKey'),
       closeQuickAdd: async () => {
         for (const window of BrowserWindow.getAllWindows()) {
           if (!window.isVisible()) continue

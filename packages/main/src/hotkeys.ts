@@ -20,6 +20,7 @@ export interface HotkeyActions {
   toggleWindow: () => void
   markScreenshot: () => void
   endOfDay: () => void
+  jarvis: () => void
 }
 
 /** The switch-task shortcut is not in Hotkeys yet; keep the default in one place. */
@@ -43,7 +44,8 @@ export function registerHotkeys(hotkeys: Hotkeys, actions: HotkeyActions): strin
     { accelerator: hotkeys.quickAdd, handler: actions.quickAdd, name: 'quick add' },
     { accelerator: hotkeys.toggleWindow, handler: actions.toggleWindow, name: 'show/hide' },
     { accelerator: hotkeys.markScreenshot, handler: actions.markScreenshot, name: 'screenshot' },
-    { accelerator: hotkeys.endOfDay, handler: actions.endOfDay, name: 'end of day' }
+    { accelerator: hotkeys.endOfDay, handler: actions.endOfDay, name: 'end of day' },
+    { accelerator: hotkeys.jarvis, handler: actions.jarvis, name: 'jarvis' }
   ]
 
   const failed: string[] = []

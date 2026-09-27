@@ -278,6 +278,12 @@ describe('Jarvis tools', () => {
 
     const done = (await runTool(api, 'confirm', { pendingIds: [proposed.pendingId] })) as Confirmed
     expect(done.executed[0]!.result).toMatchObject({ placedCount: 2 })
+    // The laptop's corner shows these as cards springing out of the orb.
+    const cards = (done.executed[0] as unknown as { cards: Array<{ kind: string; title: string; when: string }> }).cards
+    expect(cards.map((card) => [card.kind, card.title, card.when.slice(-11)])).toEqual([
+      ['planning', 'BO afmaken', '20:15–21:15'],
+      ['planning', 'Wie betaald wat invullen', '21:15–22:15']
+    ])
     const blocks = (await api.plans.day(day)).blocks.filter((block) => block.kind === 'task')
     expect(blocks.map((block) => [block.taskTitle, block.startMin, block.endMin])).toEqual([
       ['BO afmaken', 1215, 1275],

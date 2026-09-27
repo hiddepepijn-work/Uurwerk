@@ -15,7 +15,8 @@ export const DEFAULT_SETTINGS: Settings = {
     quickAdd: 'CommandOrControl+Alt+T',
     toggleWindow: 'CommandOrControl+Alt+D',
     markScreenshot: 'CommandOrControl+Alt+P',
-    endOfDay: 'CommandOrControl+Alt+E'
+    endOfDay: 'CommandOrControl+Alt+E',
+    jarvis: 'CommandOrControl+Alt+J'
   },
   dailyGoalMin: 8 * 60,
   weeklyGoalMin: 40 * 60,

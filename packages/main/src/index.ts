@@ -19,7 +19,7 @@ import { registerIpc } from './ipc.js'
 import { dbPath } from './paths.js'
 import { captureNow, startCapture, stopCapture } from './capture.js'
 import { cancelTimelapse } from './timelapse.js'
-import { createMainWindow, createQuickAddWindow } from './windows.js'
+import { createJarvisWindow, createMainWindow, createQuickAddWindow, showJarvis } from './windows.js'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys.js'
 import { createTray, destroyTray, update as updateTray } from './tray.js'
 import { startMorningCheck, stopMorningCheck } from './morning.js'
@@ -90,6 +90,9 @@ function start(): void {
     attachCloseToTray(mainWindow)
   }
 
+  // Jarvis's corner: created hidden at start, because the wake word listens in it.
+  createJarvisWindow((target) => openInWindow(target))
+
   startTimerTick()
   startIdleWatchdog()
   // Asks once, in the morning, only when the day has no accepted plan. It opens nothing by
@@ -144,7 +147,7 @@ function attachCloseToTray(window: BrowserWindow): void {
 }
 
 /** Brings the window forward and tells the renderer what to open once it is there. */
-function openInWindow(target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay'): void {
+function openInWindow(target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay' | 'agenda'): void {
   showMainWindow()
   // A window created a moment ago has not loaded yet; wait for it before shouting.
   const send = (): void => emitEvent('ui:open', { target })
@@ -220,7 +223,11 @@ function setupHotkeys(): void {
     markScreenshot: () => {
       void captureNow()
     },
-    endOfDay: () => openInWindow('endOfDay')
+    endOfDay: () => openInWindow('endOfDay'),
+    jarvis: () => {
+      showJarvis()
+      emitEvent('jarvis:summon', {})
+    }
   })
 
   if (failed.length > 0) {
@@ -238,9 +245,15 @@ function setupHotkeys(): void {
  */
 function applyContentSecurityPolicy(): void {
   const devServer = process.env['ELECTRON_RENDERER_URL']
-  const scriptSrc = devServer ? `'self' 'unsafe-inline' ${devServer}` : `'self'`
+  // wasm-unsafe-eval: the wake word (Porcupine) runs as WebAssembly in the Jarvis corner.
+  // blob: the audio worklets (live microphone, wake word) are loaded from blob URLs.
+  const scriptSrc = devServer
+    ? `'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: ${devServer}`
+    : `'self' 'wasm-unsafe-eval' blob:`
   // Jarvis live talks straight to Gemini Live over a WebSocket.
-  const gemini = 'wss://generativelanguage.googleapis.com https://generativelanguage.googleapis.com'
+  // ...and the wake word checks its AccessKey with Picovoice, and reads its model file.
+  const gemini =
+    'wss://generativelanguage.googleapis.com https://generativelanguage.googleapis.com https://rest.picovoice.ai file:'
   const connectSrc = devServer ? `'self' ${devServer} ws://localhost:* ${gemini}` : `'self' ${gemini}`
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -256,6 +269,8 @@ function applyContentSecurityPolicy(): void {
             `media-src 'self' blob: file:`,
             `font-src 'self' data:`,
             `connect-src ${connectSrc}`,
+            // The wake word and the audio capture run in workers made from blobs.
+            `worker-src 'self' blob:`,
             `object-src 'none'`,
             `frame-src 'none'`,
             `base-uri 'none'`,

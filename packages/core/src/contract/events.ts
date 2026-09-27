@@ -37,6 +37,8 @@ export interface AppEvents {
    */
   /** Open Jarvis; a moment makes him start the conversation himself. */
   'jarvis:open': { moment: 'morning' | 'evening' | null }
+  /** Laptop: the hotkey called Jarvis into the corner window. */
+  'jarvis:summon': Record<string, never>
   'ui:open': { target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay' | 'addEvent' | 'agenda' }
 }
 

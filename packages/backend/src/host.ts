@@ -22,6 +22,8 @@ import type { AppEventName, AppEvents } from '@core/contract/events.js'
 // the Settings screen has to be able to show you which account is connected.
 export type SecretKey =
   | 'smtpPassword'
+  // The Picovoice AccessKey: the laptop listens for "Jarvis" with it.
+  | 'picovoiceKey'
   | 'publishToken'
   // The token this device syncs with. Made on the server, shown once, kept here.
   | 'deviceToken'
@@ -52,7 +54,9 @@ export interface Host {
   /** Only a machine with a screen can take screenshots or encode a timelapse. */
   capture: Pick<TimeTrackerAPI['capture'], 'markNow' | 'buildTimelapse'>
   startup: TimeTrackerAPI['startup']
-  window: TimeTrackerAPI['window']
+  /** The corner window and the wake word exist on the laptop only; elsewhere they are left out. */
+  window: Pick<TimeTrackerAPI['window'], 'minimizeToTray' | 'closeQuickAdd' | 'quit'> &
+    Partial<Omit<TimeTrackerAPI['window'], 'minimizeToTray' | 'closeQuickAdd' | 'quit'>>
   /** Restart the app, e.g. to open a database downloaded from the server. */
   relaunch(): Promise<void>
   /** This copy and the server. Only a device has one; on the server every call refuses. */

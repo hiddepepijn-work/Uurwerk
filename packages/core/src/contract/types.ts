@@ -1368,6 +1368,8 @@ export interface Hotkeys {
   toggleWindow: string
   markScreenshot: string
   endOfDay: string
+  /** Laptop: calls Jarvis into the corner of the screen, as saying "Jarvis" does. */
+  jarvis: string
 }
 
 export interface Settings {
@@ -1482,6 +1484,20 @@ export interface JarvisDayLog {
   openingDoneAt: number | null
   closingDoneAt: number | null
   summary: string | null
+}
+
+/**
+ * What a carried-out proposal changed, as a card to show: the laptop's Jarvis corner lets
+ * these spring out of the orb, so you see what he made without opening the app.
+ */
+export interface JarvisCard {
+  kind: 'taak' | 'afspraak' | 'planning' | 'regel' | 'timer'
+  action: 'nieuw' | 'gewijzigd' | 'af' | 'weg'
+  title: string
+  /** When, in words: "ma 28/9 20:00–21:00". */
+  when: string | null
+  /** The day it is on, to open the agenda there. */
+  date: IsoDate | null
 }
 
 /** Something Jarvis proposed, and what came of it. Kept on the copy it was made on. */
