@@ -278,9 +278,12 @@ export async function startApp(options: AppOptions): Promise<App> {
       if (!methods?.includes(name) || NOT_OVER_RPC.has(domain) || NOT_OVER_RPC.has(`${domain}.${name}`)) {
         return json(response, 404, { error: `No such call here: ${domain}.${name}` })
       }
-      const args = JSON.parse((await readBody(request, MAX_RPC)).toString('utf8') || '[]') as unknown[]
+      const body = JSON.parse((await readBody(request, MAX_RPC)).toString('utf8') || '[]') as unknown
+      // The app sends the arguments as a list. Shortcuts on the iPhone can only send one
+      // JSON object, so an object on its own is the single argument.
+      const args = Array.isArray(body) ? body : body !== null && typeof body === 'object' ? [body] : []
       try {
-        const result = await implementation[domain]![name]!(...(Array.isArray(args) ? args : []))
+        const result = await implementation[domain]![name]!(...args)
         return json(response, 200, result ?? null)
       } catch (error) {
         log.warn(`RPC ${domain}.${name} failed.`, error)
