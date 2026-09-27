@@ -49,8 +49,12 @@ export interface UsageEntry {
   historyMessages: number
 }
 
+/** Who else wants each entry: the end-to-end test measures with it. */
+export const usageListeners: Array<(entry: UsageEntry) => void> = []
+
 export function logUsage(entry: UsageEntry): void {
   log.info('Jarvis usage.', entry)
+  for (const listener of usageListeners) listener(entry)
 }
 
 export interface Provider {
@@ -61,6 +65,67 @@ export interface Provider {
 
 /** Stop a runaway loop: a normal turn needs two or three tool rounds. */
 const MAX_ROUNDS = 10
+
+// ---------------------------------------------------------------- history
+// Every request sends the whole history again, so what stays in it is paid for over and
+// over. Three things keep it flat: the state of the day (the snapshot) rides only on the
+// newest message, a tool result is cut to one line once the model has answered with it,
+// and only the last WINDOW messages go along at all. The database is the memory; the chat
+// is not.
+
+/** Messages of history sent along: the exchange at hand, not the whole day. */
+export const WINDOW = 10
+
+const STATE_OPEN = '[stand]'
+const STATE_CLOSE = '[/stand]'
+
+/** The newest user message: the state of the day first, then what Hidde said. */
+export const withState = (context: string, userText: string): string =>
+  `${STATE_OPEN}\n${context}\n${STATE_CLOSE}\n\n${userText}`
+
+/** An older user message: only what Hidde said. The state it carried is out of date anyway. */
+export const withoutState = (text: string): string => {
+  const end = text.indexOf(STATE_CLOSE)
+  return text.startsWith(STATE_OPEN) && end >= 0 ? text.slice(end + STATE_CLOSE.length).trimStart() : text
+}
+
+/** A tool result the model has already used: what it was, in one line. */
+export function condense(content: string): string {
+  if (content.length <= 240) return content
+  try {
+    const value = JSON.parse(content) as unknown
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const record = value as Record<string, unknown>
+      if (Array.isArray(record.executed) || Array.isArray(record.failed)) {
+        const done = (record.executed as Array<{ summary: string }> | undefined)?.map((entry) => entry.summary) ?? []
+        const failed =
+          (record.failed as Array<{ summary: string; error: string }> | undefined)?.map(
+            (entry) => `${entry.summary}: ${entry.error}`
+          ) ?? []
+        return JSON.stringify({ uitgevoerd: done, mislukt: failed })
+      }
+    }
+  } catch {
+    // Not JSON: plain text, cut below.
+  }
+  return `[al gebruikt, ${content.length} tekens] ${content.slice(0, 160)}…`
+}
+
+/**
+ * Where the window starts: the oldest plain user message (not a tool result) that still
+ * leaves at most WINDOW messages. Never in the middle of a tool exchange, which the APIs
+ * refuse. `first` skips what always stays, like the system message.
+ */
+export function windowStart<T>(messages: T[], first: number, isPlainUser: (message: T) => boolean): number {
+  // The newest question always stays, however long its exchange; older ones while they fit.
+  let start = -1
+  for (let index = messages.length - 1; index >= first; index--) {
+    if (!isPlainUser(messages[index]!)) continue
+    if (start === -1 || messages.length - index <= WINDOW) start = index
+    else break
+  }
+  return start === -1 ? first : start
+}
 
 const WRITES = new Set(TOOLS.filter((tool) => tool.writes).map((tool) => tool.name))
 
@@ -99,8 +164,16 @@ export function claude(apiKey: string, model: string, effort: Effort): Provider 
       return {
         async send(userText, context, runTool, { kind = 'text', effort: turnEffort }: TurnOptions = {}) {
           // The standing instructions are cached; the moment-specific context rides with
-          // the message, so it never invalidates that cache.
-          history.push({ role: 'user', content: `${context}\n\n${userText}` })
+          // the newest message only, so it never invalidates that cache.
+          for (const message of history) {
+            if (message.role !== 'user') continue
+            if (typeof message.content === 'string') message.content = withoutState(message.content)
+            else
+              for (const block of message.content)
+                if (block.type === 'tool_result' && typeof block.content === 'string') block.content = condense(block.content)
+          }
+          history.push({ role: 'user', content: withState(context, userText) })
+          history.splice(0, windowStart(history, 0, (message) => message.role === 'user' && typeof message.content === 'string'))
           let changed = false
 
           for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -187,9 +260,7 @@ export function openai(apiKey: string, model: string, effort: Effort): Provider 
       return {
         async send(userText, context, runTool, { kind = 'text', effort: turnEffort }: TurnOptions = {}) {
           let changed = false
-          let input: OpenAI.Responses.ResponseInput = [{ role: 'user', content: `${context}
-
-${userText}` }]
+          let input: OpenAI.Responses.ResponseInput = [{ role: 'user', content: withState(context, userText) }]
 
           for (let round = 0; round < MAX_ROUNDS; round++) {
             const response = await client.responses.create({
@@ -305,7 +376,13 @@ export function compatible(
 
       return {
         async send(userText, context, runTool, { kind = 'text', effort: turnEffort }: TurnOptions = {}) {
-          history.push({ role: 'user', content: `${context}\n\n${userText}` })
+          for (const message of history) {
+            if (message.role === 'user' && typeof message.content === 'string') message.content = withoutState(message.content)
+            if (message.role === 'tool' && typeof message.content === 'string') message.content = condense(message.content)
+          }
+          history.push({ role: 'user', content: withState(context, userText) })
+          // The system message stays; the rest is the window.
+          history.splice(1, windowStart(history, 1, (message) => message.role === 'user') - 1)
           let changed = false
 
           for (let round = 0; round < MAX_ROUNDS; round++) {

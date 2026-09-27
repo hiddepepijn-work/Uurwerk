@@ -223,6 +223,110 @@ describe('Jarvis tools', () => {
     expect(await api.calendar.eventsInRange(new Date(`${day}T00:00:00`).getTime(), new Date(`${day}T23:59:00`).getTime())).toHaveLength(1)
   })
 
+  it('gives a compact snapshot, with short refs the tools accept as ids', async () => {
+    const day = next(4)
+    const task = await api.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 60, dueDate: '2020-01-01' })
+    const text = (await runTool(api, 'get_snapshot', { from: day, to: day })) as string
+    const shortRef = `t:${task.id.replace(/-/g, '').slice(0, 6)}`
+    expect(text).toContain(`${shortRef} BO afmaken [school] medium, 60 min, deadline 2020-01-01 TE LAAT`)
+
+    // The ref works as the id in a proposal.
+    const placed = await proposeAndConfirm('schedule_task', { taskId: shortRef, date: day, start: '20:00', end: '21:00' })
+    expect(placed.executed).toHaveLength(1)
+    expect((await runTool(api, 'get_snapshot', { from: day, to: day, tasks: false })) as string).toContain(
+      `20:00-21:00 BO afmaken [school] (jarvis) ${shortRef}`
+    )
+  })
+
+  it('places tasks one after another after the appointments, never over them (regressie 3)', async () => {
+    const day = next(2)
+    // Hidde works on into the evening on a Tuesday.
+    await api.availability.save({
+      week: null,
+      weekday: 2,
+      startMin: 9 * 60,
+      endMin: 23 * 60,
+      allowedAreas: [],
+      areaTargets: {},
+      stageStartMin: 9 * 60,
+      stageEndMin: 18 * 60,
+      enabled: true
+    })
+    const bo = await api.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 90 })
+    const wbw = await api.tasks.create({ title: 'Wie betaald wat invullen', areaId: 'personal', estimateMin: 30 })
+    for (const [start, end] of [['19:00', '19:30'], ['19:30', '20:15']]) {
+      await api.calendar.createEvent({
+        title: `Afspraak ${start}`,
+        startsAt: new Date(`${day}T${start}:00`).getTime(),
+        endsAt: new Date(`${day}T${end}:00`).getTime(),
+        origin: 'uurwerk',
+        classificationStatus: 'unclassified',
+        includeInPlanning: true,
+        registrationMode: 'none',
+        countsAsWorked: false
+      })
+    }
+    const proposed = (await runTool(api, 'propose_plan', {
+      taskIds: [bo.id, wbw.id],
+      after: `${day}T19:00`,
+      minutes: 60
+    })) as Proposed
+    expect(proposed.summary).toContain('20:15–21:15')
+    expect(proposed.summary).toContain('21:15–22:15')
+    // Nothing written before the ja.
+    expect((await api.plans.day(day)).blocks).toEqual([])
+
+    const done = (await runTool(api, 'confirm', { pendingIds: [proposed.pendingId] })) as Confirmed
+    expect(done.executed[0]!.result).toMatchObject({ placedCount: 2 })
+    const blocks = (await api.plans.day(day)).blocks.filter((block) => block.kind === 'task')
+    expect(blocks.map((block) => [block.taskTitle, block.startMin, block.endMin])).toEqual([
+      ['BO afmaken', 1215, 1275],
+      ['Wie betaald wat invullen', 1275, 1335]
+    ])
+  })
+
+  it('keeps stage work inside the internship hours when it places it', async () => {
+    const monday = next(1)
+    const stage = await api.tasks.create({ title: 'Architectuur onderzoek', areaId: 'stage', estimateMin: 60 })
+    const proposed = (await runTool(api, 'propose_plan', { taskIds: [stage.id], after: `${monday}T19:00` })) as Proposed
+    // After seven in the evening there is no internship left that day: the next weekday, at nine.
+    expect(proposed.summary).toMatch(/09:00–10:00/)
+    expect(proposed.summary).not.toContain(monday.slice(8).replace(/^0/, '') + '/')
+  })
+
+  it('makes "voortaan geen stage op woensdag" a hard rule the planner keeps', async () => {
+    const added = await proposeAndConfirm('add_rule', {
+      type: 'stage_window',
+      description: 'Stage alleen ma, di, do en vr, 9 tot 5',
+      days: [1, 2, 4, 5],
+      from: '09:00',
+      to: '17:00'
+    })
+    expect(added.failed).toEqual([])
+    expect(added.executed[0]!.result).toMatchObject({ kind: 'hard' })
+
+    const wednesday = next(3)
+    await api.tasks.create({ title: 'Architectuur onderzoek', areaId: 'stage', estimateMin: 900 })
+    await proposeAndConfirm('plan_range', { from: wednesday, to: wednesday })
+    expect((await api.plans.day(wednesday)).blocks.filter((block) => block.areaId === 'stage')).toEqual([])
+
+    const thursday = next(4)
+    await proposeAndConfirm('plan_range', { from: thursday, to: thursday })
+    const stageBlocks = (await api.plans.day(thursday)).blocks.filter((block) => block.areaId === 'stage')
+    expect(stageBlocks.length).toBeGreaterThan(0)
+    expect(Math.max(...stageBlocks.map((block) => block.endMin))).toBeLessThanOrEqual(17 * 60)
+
+    const rules = (await runTool(api, 'list_rules', {})) as Array<{ kind: string; description: string }>
+    expect(rules).toEqual([expect.objectContaining({ kind: 'hard', description: 'Stage alleen ma, di, do en vr, 9 tot 5' })])
+    expect((await runTool(api, 'get_snapshot', {})) as string).toContain('hard: Stage alleen ma, di, do en vr, 9 tot 5')
+  })
+
+  it('keeps the day summary a next conversation starts from', async () => {
+    expect(await runTool(api, 'note_day_summary', { summary: 'BO af. Wie betaalt wat niet; morgen eerst.' })).toEqual({ saved: true })
+    const today = ahead(0)
+    expect((await api.assistant.dayLog(today)).summary).toBe('BO af. Wie betaalt wat niet; morgen eerst.')
+  })
+
   it('reviews a day: what got done, what did not', async () => {
     const done = await api.tasks.create({ title: 'Af', areaId: 'stage' })
     const open = await api.tasks.create({ title: 'Niet af', areaId: 'stage' })

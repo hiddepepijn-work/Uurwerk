@@ -27,6 +27,7 @@ import { runTool } from '@core/services/jarvis-tools.js'
 
 import { createJarvis, MOMENT, SYSTEM } from '../packages/server/app/jarvis/index.js'
 import { addUsage, liveSession } from '../packages/server/app/jarvis/live.js'
+import { usageListeners } from '../packages/server/app/jarvis/providers.js'
 import { speakGemini } from '../packages/server/app/jarvis/speech.js'
 
 // ------------------------------------------------------------------ setup
@@ -205,13 +206,15 @@ async function main(): Promise<void> {
   const placedAt = async (day: string): Promise<boolean> =>
     (await api.plans.day(day)).blocks.some((block) => block.taskId === task.id && block.startMin === 22 * 60)
 
-  console.log('Stem opnemen voor de testvragen…')
-  const [tomorrow, today, schedule, yes] = await Promise.all([
+  // ONLY=regressie skips the spoken scenarios (and their cost) and runs the regression test.
+  const voiceToo = process.env.ONLY !== 'regressie'
+  console.log(voiceToo ? 'Stem opnemen voor de testvragen…' : 'Alleen de regressietest.')
+  const [tomorrow, today, schedule, yes] = voiceToo ? await Promise.all([
     voice(key, 'Wat staat er morgen op de planning?'),
     voice(key, 'Wat heb ik vandaag nog te doen?'),
     voice(key, `Zet ${task.title} morgen van tien uur tot half elf 's avonds in de planning.`),
     voice(key, 'Ja, doe maar.')
-  ])
+  ]) : [new Int16Array(0), new Int16Array(0), new Int16Array(0), new Int16Array(0)]
 
   const outcomes: Outcome[] = []
   const usage: Usage = { textIn: 0, audioIn: 0, textOut: 0, audioOut: 0, thoughts: 0 }
@@ -254,10 +257,11 @@ async function main(): Promise<void> {
   }
 
   // 1 and 2: spoken questions, one conversation.
-  {
+  if (voiceToo) {
     const { session, inbox, closed } = await connect(null)
     const first = await exchange(session, inbox, usage, () => speakInto(session, tomorrow), 'gesproken: morgen')
-    judge(first, 'get_agenda')
+    // Tomorrow is in the snapshot: answering without a tool is the cheap, right way.
+    judge(first, null)
     outcomes.push(first)
     const second = await exchange(session, inbox, usage, () => speakInto(session, today), 'gesproken: vandaag')
     judge(second, null)
@@ -267,7 +271,7 @@ async function main(): Promise<void> {
   }
 
   // 3: the morning moment, opened by Jarvis himself.
-  {
+  if (voiceToo) {
     const { session, inbox, opening, closed } = await connect('morning')
     const morning = await exchange(
       session,
@@ -283,7 +287,7 @@ async function main(): Promise<void> {
   }
 
   // 4: changing something by voice: a proposal, "ja", and then it is really there.
-  {
+  if (voiceToo) {
     const { session, inbox, closed } = await connect(null)
     const proposal = await exchange(session, inbox, usage, () => speakInto(session, schedule), 'gesproken: inplannen (voorstel)')
     judge(proposal, 'schedule_task')
@@ -299,7 +303,7 @@ async function main(): Promise<void> {
   }
 
   // 5: the same by text, through the server's Jarvis and its jobs.
-  {
+  if (voiceToo) {
     process.env.JARVIS_MODEL ||= 'gemini-3.8-flash'
     const vault = { get: (name: string) => (name === 'geminiKey' ? key : null), has: (name: string) => name === 'geminiKey', set: () => undefined }
     const jarvis = createJarvis(api, vault as never, usagePath)
@@ -323,6 +327,137 @@ async function main(): Promise<void> {
     judge(second.outcome, null)
     if (!(await placedAt(dayAfter(2)))) second.outcome.problems.push('staat na het ja niet in de planning')
     outcomes.push(second.outcome)
+  }
+
+  // ---------------------------------------------------------- regression test
+  // From the refactor plan, on a clean database of its own: Jarvis-planned stage work, two
+  // private appointments by hand, and the requests that went wrong before.
+  {
+    process.env.JARVIS_MODEL ||= 'gemini-3.8-flash'
+    const test = buildImplementation(createBackend(':memory:')) as unknown as TimeTrackerAPI
+    const vault = { get: (name: string) => (name === 'geminiKey' ? key : null), has: (name: string) => name === 'geminiKey', set: () => undefined }
+    const jarvis = createJarvis(test, vault as never, join(work, 'spend-regressie.json'))
+    const perTurn: number[] = []
+    let turnPrompt = 0
+    usageListeners.push((entry) => {
+      if (entry.round === 0) turnPrompt = entry.prompt
+    })
+
+    for (let weekday = 1; weekday <= 7; weekday++) {
+      await test.availability.save({
+        week: null,
+        weekday,
+        startMin: weekday <= 5 ? 9 * 60 : 10 * 60,
+        endMin: 23 * 60,
+        allowedAreas: [],
+        areaTargets: {},
+        stageStartMin: weekday <= 5 ? 9 * 60 : null,
+        stageEndMin: weekday <= 5 ? 18 * 60 : null,
+        enabled: true
+      })
+    }
+    await test.tasks.create({ title: 'Architectuur onderzoek', areaId: 'stage', estimateMin: 900 })
+    const bo = await test.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 60 })
+    const wbw = await test.tasks.create({ title: 'Wie betaald wat invullen', areaId: 'personal', estimateMin: 60 })
+    const until = dayAfter(9)
+    // What Jarvis planned before: the planner's blocks over the whole stretch.
+    const seeded = (await runTool(test, 'plan_range', { from: dayAfter(0), to: until })) as { pendingId: string }
+    await runTool(test, 'confirm', { pendingIds: [seeded.pendingId] })
+    const tomorrowDay = dayAfter(1)
+    const at = (day: string, time: string): number => new Date(`${day}T${time}:00`).getTime()
+    for (const [title, end] of [['Kapper', '15:00'], ['Bellen met oma', '14:30']] as const) {
+      await test.calendar.createEvent({
+        title,
+        startsAt: at(tomorrowDay, '14:00'),
+        endsAt: at(tomorrowDay, end),
+        areaId: 'personal',
+        origin: 'uurwerk',
+        classificationStatus: 'confirmed',
+        includeInPlanning: true,
+        registrationMode: 'none',
+        countsAsWorked: false
+      })
+    }
+    const events = async () => test.calendar.eventsInRange(at(dayAfter(0), '00:00'), at(until, '23:59'))
+    const allBlocks = async () => {
+      const blocks = []
+      for (let offset = 0; offset <= 9; offset++) blocks.push(...(await test.plans.day(dayAfter(offset))).blocks)
+      return blocks
+    }
+
+    const ask = async (name: string, text: string, conversationId: string | null, dropFor = 0) => {
+      const started = Date.now()
+      const { jobId } = await jarvis.askStart({ text, conversationId, speak: false })
+      // dropFor: the phone loses the connection and asks nothing for a while.
+      if (dropFor > 0) await sleep(dropFor)
+      let job = await jarvis.askJob(jobId)
+      while (job.status === 'running') {
+        await sleep(300)
+        job = await jarvis.askJob(jobId)
+      }
+      perTurn.push(turnPrompt)
+      const outcome: Outcome = { name, reply: job.reply?.text ?? '', tools: [], firstAudioMs: Date.now() - started, problems: job.error ? [job.error] : [] }
+      judge(outcome, null)
+      outcomes.push(outcome)
+      return { outcome, conversationId: job.reply?.conversationId ?? null }
+    }
+
+    // 1. Everything away except the two private appointments, and replan until …
+    const dateWords = new Date(`${until}T12:00:00`).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
+    const blocksBefore = (await allBlocks()).length
+    const r1 = await ask('regressie 1: voorstel', `Haal alles weg behalve de twee privé-afspraken en plan opnieuw tot ${dateWords}.`, null)
+    if (!r1.outcome.reply.includes('?')) r1.outcome.problems.push('vraagt geen bevestiging')
+    if ((await allBlocks()).length !== blocksBefore || (await events()).length !== 2) r1.outcome.problems.push('iets veranderd vóór het ja')
+    const r1b = await ask('regressie 1+2: ja, verbinding 12 s weg', 'Ja, doe maar.', r1.conversationId, 12_000)
+    const afterEvents = await events()
+    if (afterEvents.length !== 2) r1b.outcome.problems.push(`privé-afspraken: ${afterEvents.length} over in plaats van 2`)
+    const blocks = (await allBlocks()).filter((entry) => entry.kind === 'task')
+    const stage = blocks.filter((entry) => entry.areaId === 'stage')
+    const weekend = stage.filter((entry) => [0, 6].includes(new Date(`${entry.date}T12:00:00`).getDay()))
+    if (weekend.length > 0) r1b.outcome.problems.push(`${weekend.length} stageblokken in het weekend`)
+    if (stage.some((entry) => entry.startMin < 9 * 60 || entry.endMin > 18 * 60)) r1b.outcome.problems.push('stage buiten de stage-uren')
+    if (stage.length === 0) r1b.outcome.problems.push('niets opnieuw gepland')
+    if (!/\d|een|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|elf|twaalf/i.test(r1b.outcome.reply)) r1b.outcome.problems.push('noemt geen aantallen')
+
+    // 3. Two tasks one after another after tomorrow's appointments, no overlap.
+    const r3 = await ask(
+      'regressie 3: voorstel',
+      'Zet BO afmaken en Wie betaald wat invullen morgen achter elkaar na mijn afspraken van 14:00, allebei 1 uur.',
+      r1b.conversationId
+    )
+    if (!r3.outcome.reply.includes('?')) r3.outcome.problems.push('vraagt geen bevestiging')
+    const r3b = await ask('regressie 3: ja', 'Ja.', r3.conversationId)
+    const placed = (await test.plans.day(tomorrowDay)).blocks.filter((entry) => entry.taskId === bo.id || entry.taskId === wbw.id)
+    if (placed.length < 2) r3b.outcome.problems.push(`${placed.length} van de 2 taken ingepland morgen`)
+    for (const entry of placed) {
+      for (const event of afterEvents) {
+        const from = Math.round((event.startsAt - at(tomorrowDay, '00:00')) / 60_000)
+        const to = Math.round((event.endsAt - at(tomorrowDay, '00:00')) / 60_000)
+        if (entry.startMin < to && entry.endMin > from) r3b.outcome.problems.push(`${entry.taskTitle} overlapt met ${event.title}`)
+      }
+    }
+
+    // 5. Twenty messages: the prompt per request stays about flat.
+    const questions = [
+      'Hoe laat is het?', 'Wat heb ik morgen?', 'Welke taken zijn te laat?', 'Wat staat er overmorgen?',
+      'Hoeveel stage heb ik deze week?', 'Wat doe ik vanavond?', 'Heb ik vrijdag afspraken?', 'Wat is mijn drukste dag?',
+      'Hoe lang duurt BO afmaken?', 'Wat heb ik zaterdag?', 'Wanneer is de kapper?', 'Wat staat er donderdag?',
+      'Wat moet ik als eerste doen?', 'Heb ik zondag iets?', 'Wat staat er morgenochtend?', 'Hoeveel open taken heb ik?'
+    ]
+    let conversation = r3b.conversationId
+    const flatStart = perTurn.length
+    const flatOutcomes: Outcome[] = []
+    for (const question of questions) {
+      const result = await ask(`20 berichten: ${question}`, question, conversation)
+      conversation = result.conversationId
+      flatOutcomes.push(result.outcome)
+    }
+    const series = perTurn.slice(flatStart)
+    const early = Math.max(...series.slice(2, 6))
+    const late = Math.max(...series.slice(-5))
+    const last = flatOutcomes[flatOutcomes.length - 1]!
+    last.name = `regressie 5: tokens per verzoek vroeg ${early}, laat ${late}`
+    if (late > early * 1.35) last.problems.push(`groeit mee: ${early} → ${late}`)
   }
 
   const spend = addUsage(usagePath, usage)

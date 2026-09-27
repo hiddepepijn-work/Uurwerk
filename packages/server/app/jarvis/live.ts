@@ -87,13 +87,10 @@ export function toSchema(json: Record<string, unknown>): Record<string, unknown>
 async function today(api: TimeTrackerAPI): Promise<string> {
   const now = new Date()
   const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  const [agenda, tasks] = await Promise.all([
-    runTool(api, 'get_agenda', { from: day, to: day }).catch(() => null),
-    runTool(api, 'list_tasks', {}).catch(() => null)
-  ])
+  // Compact text, not JSON: the same facts in a fraction of the tokens, read every turn.
+  const snapshot = await runTool(api, 'get_snapshot', { from: day }).catch(() => null)
   return `Nu: ${now.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}.
-Agenda van vandaag: ${JSON.stringify(agenda)}
-Open taken: ${JSON.stringify(tasks)}`
+${typeof snapshot === 'string' ? snapshot : '(stand niet beschikbaar)'}`
 }
 
 export async function liveSession(options: LiveOptions): Promise<JarvisLiveSession> {
@@ -117,9 +114,9 @@ Nederlands, en laat hem gerust onderbreken. Gebruik je een tool, zeg dan hooguit
 en geef het antwoord zodra het resultaat binnen is (dat duurt een fractie van een seconde).
 Zeg nooit dat je later terugkomt.
 
-De tijd, de agenda van vandaag en de open taken staan hieronder al. Gebruik daarvoor dus GEEN
-get_now, get_agenda voor vandaag of list_tasks, ook niet bij het ochtend- of avondmoment: dat
-kost tijd en geld. Een tool alleen voor andere dagen, of nadat er in dit gesprek iets is
+De tijd, de planning van vandaag en morgen, de open taken en de regels staan hieronder al.
+Gebruik daarvoor dus GEEN get_now, get_snapshot of list_tasks, ook niet bij het ochtend- of
+avondmoment: dat kost tijd en geld. Een tool alleen voor andere dagen, of nadat er in dit gesprek iets is
 veranderd.
 
 --- VANDAAG ---

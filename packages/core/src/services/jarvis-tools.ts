@@ -46,11 +46,74 @@ export const TOOLS: ToolSpec[] = [
     writes: false
   },
   {
+    name: 'get_snapshot',
+    description:
+      'Compact overzicht: per dag de planning en afspraken, de open en te late taken, en de actieve regels. Eén regel per item met een kort kenmerk (t:… taak, a:… afspraak) dat de andere tools als id accepteren. Standaard vandaag en morgen; maximaal 14 dagen.',
+    parameters: object({ from: date, to: date, tasks: { type: 'boolean', description: 'Taken meenemen, standaard ja' } }),
+    writes: false
+  },
+  {
     name: 'get_agenda',
     description:
-      'De agenda van een of meer dagen: geplande blokken (taken, pauzes) én afspraken met hun notitie, locatie en reisblokken. Maximaal 21 dagen.',
+      'Details van een of meer dagen als JSON, met notities, locaties en reisblokken van afspraken. Alleen als get_snapshot niet genoeg zegt. Maximaal 21 dagen.',
     parameters: object({ from: date, to: date }, ['from', 'to']),
     writes: false
+  },
+  {
+    name: 'propose_plan',
+    description:
+      'Laat de planner taken in vrije tijd zetten, achter elkaar, vanaf een moment: jij geeft alleen welke taken, hoe lang en het venster; de code zoekt de plekken met de harde regels (stage alleen in de stage-uren, niets over afspraken of wat Hidde zelf zette). Maakt één voorstel; na ja: confirm. Voor "zet X en Y achter elkaar na mijn afspraken".',
+    parameters: object(
+      {
+        taskIds: { type: 'array', items: { type: 'string' }, description: 'In deze volgorde' },
+        after: { type: 'string', description: 'Vanaf YYYY-MM-DDTHH:MM; standaard nu' },
+        before: { type: 'string', description: 'Uiterlijk YYYY-MM-DDTHH:MM; standaard een week later' },
+        minutes: { type: 'integer', minimum: 15, description: 'Minuten per taak; standaard de schatting van de taak, anders 60' }
+      },
+      ['taskIds']
+    ),
+    writes: false
+  },
+  {
+    name: 'list_rules',
+    description: 'De vaste regels: hard (de planner dwingt ze af) en zacht (voorkeuren om rekening mee te houden).',
+    parameters: object({}),
+    writes: false
+  },
+  {
+    name: 'add_rule',
+    description:
+      'Een vaste regel toevoegen, zodat "voortaan …" blijft. type stage_window (hard): op welke dagen en tussen welke uren stage mag; de planner dwingt dat af. type note (zacht): een voorkeur in woorden.' +
+      PROPOSAL,
+    parameters: object(
+      {
+        type: { type: 'string', enum: ['stage_window', 'note'] },
+        description: { type: 'string', description: 'De regel in gewone woorden' },
+        days: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 7 }, description: 'stage_window: 1 = maandag … 7 = zondag' },
+        from: clock,
+        to: clock
+      },
+      ['type', 'description']
+    ),
+    writes: true,
+    proposes: true
+  },
+  {
+    name: 'update_rule',
+    description: 'Een regel aanpassen of uitzetten.' + PROPOSAL,
+    parameters: object(
+      { ruleId: { type: 'string' }, active: { type: 'boolean' }, description: { type: 'string' } },
+      ['ruleId']
+    ),
+    writes: true,
+    proposes: true
+  },
+  {
+    name: 'note_day_summary',
+    description:
+      'Aan het eind van de dagafsluiting: twee of drie zinnen over hoe de dag ging en wat morgen telt. Een volgend gesprek begint hiermee. Direct, zonder voorstel.',
+    parameters: object({ summary: { type: 'string' } }, ['summary']),
+    writes: true
   },
   {
     name: 'list_tasks',
@@ -258,6 +321,240 @@ const fromToday = (from: IsoDate): IsoDate => {
 
 type Input = Record<string, unknown>
 
+// ------------------------------------------------------------------ refs
+// A uuid costs the model some twenty tokens every time it reads or repeats one. The
+// snapshot shows the first six characters instead (t:ab12cd, a:ef34ab), and every tool
+// takes either form. Six hex characters are unique among a few hundred rows; a clash is
+// refused rather than guessed.
+
+const ref = (prefix: 't' | 'a', id: string): string => `${prefix}:${id.replace(/-/g, '').slice(0, 6)}`
+const bare = (value: string): string => value.replace(/^[ta]:/, '').replace(/-/g, '').toLowerCase()
+
+async function resolveTask(api: TimeTrackerAPI, value: unknown): Promise<string> {
+  if (typeof value !== 'string' || !value.trim()) throw new Error('Geen taak opgegeven.')
+  const direct = await api.tasks.get(value).catch(() => null)
+  if (direct) return direct.id
+  const wanted = bare(value)
+  const matches = (await api.tasks.list({})).filter((task) => task.id.replace(/-/g, '').startsWith(wanted))
+  if (matches.length === 1) return matches[0]!.id
+  throw new Error(matches.length === 0 ? `Geen taak ${value}.` : `${value} past op meerdere taken; gebruik het hele id.`)
+}
+
+async function resolveEvent(api: TimeTrackerAPI, value: unknown): Promise<string> {
+  if (typeof value !== 'string' || !value.trim()) throw new Error('Geen afspraak opgegeven.')
+  const wanted = bare(value)
+  const now = Date.now()
+  const events = await api.calendar.eventsInRange(now - 30 * 86_400_000, now + 120 * 86_400_000)
+  const exact = events.find((event) => event.id === value)
+  if (exact) return exact.id
+  const matches = events.filter((event) => event.id.replace(/-/g, '').startsWith(wanted))
+  if (matches.length === 1) return matches[0]!.id
+  throw new Error(matches.length === 0 ? `Geen afspraak ${value}.` : `${value} past op meerdere afspraken; gebruik het hele id.`)
+}
+
+/** Turns refs in a proposal's input into full ids, before it is checked and stored. */
+async function resolveRefs(api: TimeTrackerAPI, input: Input): Promise<Input> {
+  const out: Input = { ...input }
+  if ('taskId' in out && out.taskId !== undefined && out.taskId !== null) out.taskId = await resolveTask(api, out.taskId)
+  if ('eventId' in out && out.eventId !== undefined) out.eventId = await resolveEvent(api, out.eventId)
+  if (Array.isArray(out.taskIds)) out.taskIds = await Promise.all(out.taskIds.map((id) => resolveTask(api, id)))
+  return out
+}
+
+const WEEKDAY = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za']
+const shortDay = (day: IsoDate): string => {
+  const d = new Date(`${day}T12:00:00`)
+  return `${WEEKDAY[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`
+}
+
+/** One line per item, for the model to read: the day's planning and appointments, the tasks, the rules. */
+async function snapshot(api: TimeTrackerAPI, from: IsoDate, to: IsoDate, withTasks: boolean): Promise<string> {
+  const days = daysBetween(from, to)
+  if (days.length > 14) throw new Error('Maximaal 14 dagen tegelijk.')
+  const lines: string[] = []
+  const start = dayStart(days[0]!)
+  const end = dayStart(days[days.length - 1]!) + 86_400_000
+  const events = (await api.calendar.eventsInRange(start, end)).filter((event) => !event.cancelled)
+  for (const day of days) {
+    lines.push(shortDay(day))
+    const plan = await api.plans.day(day)
+    const items: Array<{ at: number; line: string }> = []
+    for (const block of plan.blocks) {
+      if (block.kind === 'break') continue
+      const who = block.createdBy === 'jarvis' ? 'jarvis' : block.source === 'planner' ? 'planner' : 'zelf'
+      const area = block.areaId ? ` [${block.areaId}]` : ''
+      const task = block.taskId ? ` ${ref('t', block.taskId)}` : ''
+      items.push({ at: block.startMin, line: `  ${hm(block.startMin)}-${hm(block.endMin)} ${block.taskTitle ?? block.title ?? block.kind}${area} (${who})${task}` })
+    }
+    for (const event of events) {
+      if (isoDate(new Date(event.startsAt)) !== day) continue
+      const what = event.kind === 'travel' ? 'reis' : 'afspraak'
+      const when = event.allDay ? 'hele dag' : `${clockOf(event.startsAt)}-${clockOf(event.endsAt)}`
+      const where = event.location ? ` @${event.location}` : ''
+      items.push({
+        at: event.allDay ? -1 : Math.round((event.startsAt - dayStart(day)) / 60_000),
+        line: `  ${when} ${event.title} [${what}${event.areaId ? `, ${event.areaId}` : ''}]${where} ${ref('a', event.id)}`
+      })
+    }
+    items.sort((a, b) => a.at - b.at)
+    lines.push(...(items.length > 0 ? items.map((item) => item.line) : ['  (niets)']))
+  }
+  if (withTasks) {
+    const today = isoDate(new Date())
+    const tasks = await api.tasks.list({ status: 'active' })
+    lines.push('', 'Open taken')
+    for (const task of tasks.slice(0, 60)) {
+      const late = task.dueDate !== null && task.dueDate < today ? ' TE LAAT' : ''
+      const estimate = task.estimateMin ? `, ${task.estimateMin} min` : ''
+      const due = task.dueDate ? `, deadline ${task.dueDate}` : ''
+      lines.push(`  ${ref('t', task.id)} ${task.title} [${task.areaId ?? '-'}] ${task.priority}${estimate}${due}${late}`)
+    }
+  }
+  const rules = await api.assistant.rules()
+  if (rules.length > 0) {
+    lines.push('', 'Regels')
+    for (const rule of rules) lines.push(`  ${rule.kind === 'hard' ? 'hard' : 'zacht'}: ${rule.description}`)
+  }
+  return lines.join('\n')
+}
+
+// --------------------------------------------------------------- placing
+// The planner's side of propose_plan: the model says which tasks, how long and within
+// which window; this finds the room. Walls are appointments, breaks and anything not the
+// planner's own; stage work only fits inside the day's internship window, everything else
+// only outside it — the same hard rule the range planner keeps.
+
+interface Placement {
+  taskId: string
+  title: string
+  date: IsoDate
+  start: string
+  end: string
+}
+
+async function freeStretches(
+  api: TimeTrackerAPI,
+  day: IsoDate,
+  stage: boolean,
+  notBefore: number,
+  notAfter: number
+): Promise<Array<[number, number]>> {
+  const plan = await api.plans.day(day)
+  const availability = plan.availability
+  let from = Math.max(notBefore, availability?.startMin ?? 8 * 60)
+  let to = Math.min(notAfter, availability?.endMin ?? 22 * 60)
+  if (availability && !availability.enabled) return []
+  const stageFrom = availability?.stageStartMin ?? null
+  const stageTo = availability?.stageEndMin ?? null
+  if (stage) {
+    if (stageFrom === null || stageTo === null) return []
+    from = Math.max(from, stageFrom)
+    to = Math.min(to, stageTo)
+  }
+  if (to <= from) return []
+
+  const walls: Array<[number, number]> = []
+  for (const block of plan.blocks) {
+    const replaceable = block.source === 'planner' && !block.locked && !block.fixed && block.createdBy !== 'jarvis'
+    if (!replaceable || block.kind === 'break') walls.push([block.startMin, block.endMin])
+  }
+  for (const fixed of plan.events) walls.push([fixed.startMin, fixed.endMin])
+  const events = await api.calendar.eventsInRange(dayStart(day), dayStart(day) + 86_400_000)
+  for (const event of events) {
+    if (event.cancelled) continue
+    if (event.allDay) return []
+    walls.push([Math.round((event.startsAt - dayStart(day)) / 60_000), Math.round((event.endsAt - dayStart(day)) / 60_000)])
+  }
+  // Non-stage work goes around the internship window, not through it.
+  if (!stage && stageFrom !== null && stageTo !== null) walls.push([stageFrom, stageTo])
+
+  walls.sort((a, b) => a[0] - b[0])
+  const free: Array<[number, number]> = []
+  let cursor = from
+  for (const [wallFrom, wallTo] of walls) {
+    if (wallTo <= cursor) continue
+    if (wallFrom >= to) break
+    if (wallFrom > cursor) free.push([cursor, Math.min(wallFrom, to)])
+    cursor = Math.max(cursor, wallTo)
+  }
+  if (cursor < to) free.push([cursor, to])
+  return free
+}
+
+async function placeInOrder(api: TimeTrackerAPI, input: Input): Promise<{ placements: Placement[]; notPlaced: string[] }> {
+  const taskIds = (input.taskIds as string[]) ?? []
+  if (taskIds.length === 0) throw new Error('Geen taken opgegeven.')
+  const now = new Date()
+  const after = typeof input.after === 'string' ? new Date(input.after) : now
+  if (Number.isNaN(after.getTime())) throw new Error('after als YYYY-MM-DDTHH:MM.')
+  const start = after < now ? now : after
+  const before = typeof input.before === 'string' ? new Date(input.before) : new Date(start.getTime() + 7 * 86_400_000)
+  if (Number.isNaN(before.getTime()) || before <= start) throw new Error('before moet na after liggen.')
+
+  const placements: Placement[] = []
+  const notPlaced: string[] = []
+  // Where the previous task ended: the next one goes after it.
+  let cursorDay = isoDate(start)
+  let cursorMin = start.getHours() * 60 + start.getMinutes()
+  const lastDay = isoDate(before)
+  for (const taskId of taskIds) {
+    const task = await api.tasks.get(taskId)
+    if (!task) throw new Error(`Geen taak ${taskId}.`)
+    const minutes = typeof input.minutes === 'number' ? input.minutes : task.estimateMin && task.estimateMin <= 240 ? task.estimateMin : 60
+    const stage = task.areaId === 'stage'
+    let placed: Placement | null = null
+    for (let day = cursorDay; day <= lastDay && !placed; day = isoDate(new Date(dayStart(day) + 36 * 3_600_000))) {
+      const notBefore = day === cursorDay ? cursorMin : 0
+      const notAfter = day === lastDay ? before.getHours() * 60 + before.getMinutes() : 24 * 60
+      const taken: Array<[number, number]> = placements
+        .filter((entry) => entry.date === day)
+        .map((entry) => [minuteOf(entry.start), minuteOf(entry.end)])
+      for (const [from, to] of await freeStretches(api, day, stage, notBefore, notAfter)) {
+        // Skip what an earlier task in this same proposal already takes.
+        let begin = from
+        for (const [takenFrom, takenTo] of taken) if (takenFrom < begin + minutes && takenTo > begin) begin = Math.max(begin, takenTo)
+        if (begin + minutes <= to) {
+          placed = { taskId, title: task.title, date: day, start: hm(begin), end: hm(begin + minutes) }
+          break
+        }
+      }
+    }
+    if (!placed) {
+      notPlaced.push(`${task.title}: geen ruimte van ${minutes} min voor ${lastDay}`)
+      continue
+    }
+    placements.push(placed)
+    cursorDay = placed.date
+    cursorMin = minuteOf(placed.end)
+  }
+  return { placements, notPlaced }
+}
+
+/** A stage window rule, written where the planner reads it: the availability rows. */
+async function applyStageWindow(api: TimeTrackerAPI, days: number[], from: string, to: string): Promise<number> {
+  const startMin = minuteOf(from)
+  const endMin = minuteOf(to)
+  if (endMin <= startMin) throw new Error('Het einde ligt voor het begin.')
+  const { toIsoWeek } = await import('@core/util/time.js')
+  // The recurring pattern plus the weeks already adjusted by hand, from this week on.
+  const seen = new Set<string>()
+  let changed = 0
+  for (let week = 0; week < 8; week++) {
+    for (const row of await api.availability.forWeek(toIsoWeek(new Date(Date.now() + week * 7 * 86_400_000)))) {
+      if (seen.has(row.id)) continue
+      seen.add(row.id)
+      const allowed = days.includes(row.weekday)
+      await api.availability.save({
+        ...row,
+        stageStartMin: allowed ? startMin : null,
+        stageEndMin: allowed ? endMin : null
+      })
+      changed += 1
+    }
+  }
+  return changed
+}
+
 // ---------------------------------------------------------------- proposals
 // Stored in the database (_jarvis_proposals, local to this copy), so a proposal outlives
 // a restart and what a "ja" did can be looked up afterwards.
@@ -293,6 +590,10 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
       return 'Afspraak verwijderen'
     case 'apply_day_plan':
       return `Dagplan van ${String(input.date)} laten invullen door de planner`
+    case 'add_rule':
+      return `Regel toevoegen (${input.type === 'stage_window' ? 'hard' : 'zacht'}): ${String(input.description)}`
+    case 'update_rule':
+      return `Regel ${input.active === false ? 'uitzetten' : 'aanpassen'}${input.description ? `: ${String(input.description)}` : ''}`
     case 'start_timer':
       return input.taskId ? `Timer starten op "${await taskTitle(input.taskId)}"` : 'Timer starten'
     case 'stop_timer':
@@ -304,14 +605,25 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
 /** Checks what can be checked before the "ja", so a proposal that cannot work is not asked. */
 async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promise<void> {
   if (name === 'schedule_task') await slotFor(api, input)
+  if (name === 'add_rule' && input.type === 'stage_window') {
+    if (!Array.isArray(input.days) || typeof input.from !== 'string' || typeof input.to !== 'string') {
+      throw new Error('Een stage_window heeft days, from en to nodig.')
+    }
+    if (minuteOf(input.to) <= minuteOf(input.from)) throw new Error('Het einde ligt voor het begin.')
+  }
+  if (name === 'update_rule' && !(await api.assistant.rules()).some((rule) => rule.id === input.ruleId || rule.id.startsWith(bare(String(input.ruleId))))) {
+    throw new Error(`Geen regel ${String(input.ruleId)}.`)
+  }
   if (name === 'plan_range' || name === 'clear_planning') daysBetween(fromToday(String(input.from)), String(input.to))
   if (['create_appointment', 'move_appointment'].includes(name)) {
     if (minuteOf(String(input.end)) <= minuteOf(String(input.start))) throw new Error('Het einde ligt voor het begin.')
   }
 }
 
-async function propose(api: TimeTrackerAPI, name: string, input: Input): Promise<unknown> {
+async function propose(api: TimeTrackerAPI, name: string, given: Input): Promise<unknown> {
+  let input: Input
   try {
+    input = await resolveRefs(api, given)
     await precheck(api, name, input)
   } catch (error) {
     return { error: `Kan niet: ${error instanceof Error ? error.message : String(error)}` }
@@ -406,6 +718,52 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
 
     case 'cancel':
       return cancel(api, input)
+
+    case 'get_snapshot': {
+      const from = typeof input.from === 'string' ? input.from : isoDate(new Date())
+      const to = typeof input.to === 'string' ? input.to : isoDate(new Date(Date.now() + 86_400_000))
+      return snapshot(api, from, to, input.tasks !== false)
+    }
+
+    case 'propose_plan': {
+      let resolved: Input
+      let found: { placements: Placement[]; notPlaced: string[] }
+      try {
+        resolved = await resolveRefs(api, input)
+        found = await placeInOrder(api, resolved)
+      } catch (error) {
+        return { error: `Kan niet: ${error instanceof Error ? error.message : String(error)}` }
+      }
+      if (found.placements.length === 0) return { error: 'Geen ruimte gevonden.', notPlaced: found.notPlaced }
+      const summary = found.placements.map((entry) => `${entry.title} ${shortDay(entry.date)} ${entry.start}–${entry.end}`).join('; ')
+      const proposal = await api.assistant.propose({
+        tool: 'place_tasks',
+        payload: { placements: found.placements },
+        summary: `Inplannen: ${summary}`,
+        expiresAt: Date.now() + PROPOSAL_MS
+      })
+      return {
+        pendingId: proposal.id,
+        summary: proposal.summary,
+        notPlaced: found.notPlaced,
+        next: 'Nog niet uitgevoerd. Vat samen en vraag "Zal ik dat zo doen?". Pas na een ja: confirm.'
+      }
+    }
+
+    case 'list_rules':
+      return (await api.assistant.rules()).map((rule) => ({
+        ruleId: rule.id.slice(0, 8),
+        kind: rule.kind,
+        type: rule.type,
+        description: rule.description
+      }))
+
+    case 'note_day_summary': {
+      const summary = String(input.summary ?? '').trim()
+      if (!summary) return { error: 'Geen samenvatting.' }
+      await api.assistant.markDay(isoDate(new Date()), { summary: summary.slice(0, 600) })
+      return { saved: true }
+    }
 
     case 'get_now': {
       const now = new Date()
@@ -521,7 +879,13 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
 async function slotFor(
   api: TimeTrackerAPI,
   input: Input
-): Promise<{ day: IsoDate; startMin: number; endMin: number; replaces: Array<{ id: string; title: string }> }> {
+): Promise<{
+  day: IsoDate
+  startMin: number
+  endMin: number
+  areaId: string | null
+  replaces: Array<{ id: string; title: string }>
+}> {
   const day = String(input.date)
   const startMin = minuteOf(String(input.start))
   const endMin = minuteOf(String(input.end))
@@ -548,7 +912,7 @@ async function slotFor(
     if (overlaps(from, to)) walls.push(`${event.title} ${clockOf(event.startsAt)}–${clockOf(event.endsAt)}`)
   }
   if (walls.length > 0) throw new Error(`Overlapt met ${walls.join(', ')}`)
-  return { day, startMin, endMin, replaces }
+  return { day, startMin, endMin, areaId: task.areaId, replaces }
 }
 
 /** The planner's own blocks on a day: what plan_range replaces and clear_planning removes. */
@@ -611,6 +975,7 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
       }
       const block = await api.plans.addBlock(planId, {
         taskId: String(input.taskId),
+        areaId: slot.areaId,
         date: slot.day,
         startMin: slot.startMin,
         endMin: slot.endMin,
@@ -723,6 +1088,50 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
     case 'stop_timer': {
       await api.tracking.stopRun()
       return { stopped: true }
+    }
+
+    case 'place_tasks': {
+      // Everything of one proposal in one go, each slot checked again: the agenda may have
+      // changed between the proposal and the "ja".
+      const placed: string[] = []
+      for (const entry of (input.placements as Placement[]) ?? []) {
+        const outcome = (await execute(api, 'schedule_task', {
+          taskId: entry.taskId,
+          date: entry.date,
+          start: entry.start,
+          end: entry.end
+        })) as { placed: string }
+        placed.push(`${entry.title} ${outcome.placed}`)
+      }
+      return { placedCount: placed.length, placed }
+    }
+
+    case 'add_rule': {
+      const stage = input.type === 'stage_window'
+      const rule = await api.assistant.addRule({
+        kind: stage ? 'hard' : 'soft',
+        type: String(input.type),
+        description: String(input.description),
+        config: stage ? { days: input.days, from: input.from, to: input.to } : {}
+      })
+      const rows = stage
+        ? await applyStageWindow(api, input.days as number[], String(input.from), String(input.to))
+        : 0
+      return { added: rule.description, kind: rule.kind, availabilityRowsChanged: rows }
+    }
+
+    case 'update_rule': {
+      const wanted = bare(String(input.ruleId))
+      const rule = (await api.assistant.rules()).find((entry) => entry.id === input.ruleId || entry.id.replace(/-/g, '').startsWith(wanted))
+      if (!rule) throw new Error(`Geen regel ${String(input.ruleId)}.`)
+      const updated = await api.assistant.updateRule(rule.id, {
+        ...(typeof input.active === 'boolean' ? { active: input.active } : {}),
+        ...(typeof input.description === 'string' ? { description: input.description } : {})
+      })
+      // A stage window switched off: back to the standard internship week.
+      let rows = 0
+      if (rule.type === 'stage_window' && input.active === false) rows = await applyStageWindow(api, [1, 2, 3, 4, 5], '09:00', '18:00')
+      return { updated: updated.description, active: updated.active, availabilityRowsChanged: rows }
     }
 
     case 'apply_day_plan': {

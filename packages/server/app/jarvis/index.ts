@@ -29,7 +29,11 @@ import { addUsage, liveSession } from './live.js'
 import { speak, speakFree, speakGemini } from './speech.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 
-const IDLE_MS = 2 * 3_600_000
+/**
+ * A conversation ends after half an hour of silence, and at the end of the day: the next
+ * one starts clean, from the database and the day's summary, not from an ever longer chat.
+ */
+const IDLE_MS = 30 * 60_000
 
 export const SYSTEM = `Je bent Jarvis, de assistent van Hidde in de app Uurwerk. Hieronder staat je brief: wie
 Hidde is, wat je doet op welke momenten, wat je altijd vraagt en wat je wel en niet mag.
@@ -39,8 +43,9 @@ Regels voor elk antwoord:
 - Je antwoord wordt voorgelezen. Schrijf gesproken Nederlands: korte zinnen, geen opmaak,
   geen lijstjes met streepjes, geen emoji. Tijden als "half negen" of "18:25" is allebei goed.
 - Maximaal een paar zinnen per beurt. Stel één vraag tegelijk.
-- Haal feiten op met je tools (get_now, get_agenda, list_tasks, day_review) voordat je
-  iets over de agenda of taken zegt. Verzin nooit een afspraak, taak of tijd.
+- Elk bericht begint met de stand van nu: vandaag en morgen, de open en te late taken en de
+  regels (de snapshot). Andere dagen haal je op met get_snapshot, details met get_agenda.
+  Verzin nooit een afspraak, taak of tijd. De kenmerken t:… en a:… gebruik je als id.
 - Iets veranderen gaat in twee stappen. De schrijvende tools (create_task, update_task,
   schedule_task, plan_range, clear_planning, create_appointment, move_appointment,
   delete_appointment, apply_day_plan, start_timer, stop_timer) voeren niets uit: ze maken een voorstel. Zet alles
@@ -48,26 +53,37 @@ Regels voor elk antwoord:
   Bij een duidelijk ja: confirm. Bij nee of iets anders: cancel.
 - Na confirm vertel je precies wat confirm teruggeeft: wat gelukt is, met de echte aantallen,
   en wat mislukte. Zeg nooit dat iets staat als confirm dat niet zegt.
-- Taken plan je met schedule_task (een vast tijdstip) of plan_range (de planner), nooit als
-  afspraak. create_appointment is alleen voor iets met een vaste tijd met iemand of ergens.
+- Taken plan je nooit zelf blok voor blok. Eén taak op een genoemd tijdstip: schedule_task.
+  Taken "achter elkaar", "na mijn afspraken", "ergens vanavond": propose_plan met alleen de
+  taken, de minuten en het venster; de code zoekt de plekken. Een hele periode: plan_range.
+  Nooit als afspraak: create_appointment is alleen voor iets met een vaste tijd met iemand of
+  ergens.
+- "Voortaan …" of "nooit meer …" is een vaste regel: add_rule (stage-dagen en -uren als
+  stage_window, al het andere als note). Een regel wijzigen of uitzetten: update_rule.
 - "Haal de planning weg en plan opnieuw tot …" is één plan_range: die vervangt wat de planner
   eerder zette en laat afspraken en handmatige blokken staan. De planner kent de harde
   regels (stage alleen ma-vr binnen de stage-uren); plan zelf nooit stage in het weekend.
 - Alles wat je bij een nieuwe afspraak of taak hoort, gaat in de notitie.
+- Sluit de dagafsluiting af met note_day_summary: twee of drie zinnen over hoe de dag ging
+  en wat morgen telt. Het volgende gesprek begint daarmee.
 
 --- BRIEF ---
 ${brief}`
 
 export const MOMENT: Record<'morning' | 'evening', string> = {
   morning:
-    '(Ochtendmoment, 08:30. Hidde heeft op de melding getikt. Begin het ochtendgesprek zoals in de brief: haal agenda en taken van vandaag op, noem wat vastligt, wat te laat is en hoe laat hij weg moet, en vraag wat hij vandaag gaat doen.)',
+    '(Ochtendmoment, 08:30. Hidde heeft op de melding getikt. Begin het ochtendgesprek zoals in de brief: de stand van vandaag staat in de snapshot; noem wat vastligt, wat te laat is en hoe laat hij weg moet, en vraag wat hij vandaag gaat doen.)',
   evening:
-    '(Dagafsluiting, 21:00. Hidde heeft op de melding getikt. Doe de dagafsluiting zoals in de brief: day_review van vandaag, zeg wat af is en wat niet — streng —, vraag waarom en wanneer het wel gebeurt, vraag naar extra afspraken, en noem kort wat morgen vastligt.)'
+    '(Dagafsluiting, 21:00. Hidde heeft op de melding getikt. Doe de dagafsluiting zoals in de brief: day_review van vandaag, zeg wat af is en wat niet — streng —, vraag waarom en wanneer het wel gebeurt, vraag naar extra afspraken, noem kort wat morgen vastligt, en sluit af met note_day_summary.)'
 }
 
 interface Live {
   conversation: Conversation
   lastUsed: number
+  /** The day it started: a new day is a new conversation. */
+  day: string
+  /** Nothing sent yet: the first message carries the summary to start from. */
+  fresh: boolean
 }
 
 export function createJarvis(
@@ -113,9 +129,24 @@ export function createJarvis(
     }
   }
 
-  const context = (): string => {
+  /**
+   * The state of the day for the newest message: the time, the snapshot (today and tomorrow,
+   * tasks, rules), and for a fresh conversation the latest summary to start from.
+   */
+  const context = async (fresh: boolean): Promise<string> => {
     const now = new Date()
-    return `[Nu: ${now.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}]`
+    const lines = [
+      `Nu: ${now.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`
+    ]
+    const snapshot = await runTool(api, 'get_snapshot', {}).catch(() => null)
+    if (typeof snapshot === 'string') lines.push(snapshot)
+    if (fresh) {
+      const log = (await api.assistant.dayLog(today())).summary
+        ? await api.assistant.dayLog(today())
+        : await api.assistant.lastSummary(today())
+      if (log?.summary) lines.push('', `Samenvatting ${log.date}: ${log.summary}`)
+    }
+    return lines.join('\n')
   }
 
   // ------------------------------------------------------------ the day's opening
@@ -174,14 +205,14 @@ export function createJarvis(
 
     async ask(input: JarvisAsk): Promise<JarvisReply> {
       for (const [id, live] of conversations) {
-        if (Date.now() - live.lastUsed > IDLE_MS) conversations.delete(id)
+        if (Date.now() - live.lastUsed > IDLE_MS || live.day !== today()) conversations.delete(id)
       }
 
       let id = input.conversationId ?? null
       let live = id ? conversations.get(id) : undefined
       if (!live || input.moment) {
         id = randomUUID()
-        live = { conversation: provider().start(SYSTEM), lastUsed: Date.now() }
+        live = { conversation: provider().start(SYSTEM), lastUsed: Date.now(), day: today(), fresh: true }
         conversations.set(id, live)
       }
       live.lastUsed = Date.now()
@@ -190,7 +221,9 @@ export function createJarvis(
       await markMoment(input.moment)
       if (!said) throw new Error('Zeg iets tegen Jarvis.')
 
-      const turn = await live.conversation.send(said, context(), (name, args) => runTool(api, name, args), {
+      const fresh = live.fresh
+      live.fresh = false
+      const turn = await live.conversation.send(said, await context(fresh), (name, args) => runTool(api, name, args), {
         kind: input.moment ?? 'text',
         effort: effortFor(input.text, effort, bigEffort)
       })
