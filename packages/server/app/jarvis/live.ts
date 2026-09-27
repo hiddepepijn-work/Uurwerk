@@ -9,7 +9,7 @@
  * needs no tool round. The tools themselves run on the device, against its own copy.
  *
  *   JARVIS_LIVE_MODEL     gemini-3.8-live-extended-thinking (default)
- *   JARVIS_LIVE_THINKING  minimal | low | medium (default) | high
+ *   JARVIS_LIVE_THINKING  minimal | low (default) | medium | high
  *   JARVIS_LIVE_CAP_USD   10 (default) — no new conversations past this, per calendar month
  */
 
@@ -103,7 +103,7 @@ export async function liveSession(options: LiveOptions): Promise<JarvisLiveSessi
   }
 
   const model = process.env.JARVIS_LIVE_MODEL?.trim() || 'gemini-3.8-live-extended-thinking'
-  const thinking = (process.env.JARVIS_LIVE_THINKING?.trim() || 'medium').toUpperCase()
+  const thinking = (process.env.JARVIS_LIVE_THINKING?.trim() || 'low').toUpperCase()
 
   // Native audio models pick their language themselves; only the instruction can pin it.
   const instruction = `TAAL: je spreekt uitsluitend Nederlands. Nooit Engels, ook niet als je iets niet goed

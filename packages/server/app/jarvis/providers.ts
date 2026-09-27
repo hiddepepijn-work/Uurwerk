@@ -8,6 +8,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 
+import { log } from '@backend/log.js'
 import { TOOLS } from '@core/services/jarvis-tools.js'
 
 export interface Turn {
@@ -20,8 +21,36 @@ export interface Turn {
 export type RunTool = (name: string, input: Record<string, unknown>) => Promise<unknown>
 
 export interface Conversation {
-  /** One user message in, one reply out; history stays inside. */
-  send(userText: string, context: string, runTool: RunTool): Promise<Turn>
+  /**
+   * One user message in, one reply out; history stays inside. `kind` names the request in
+   * the usage log (text, morning, evening); `effort` overrides the thinking level for this
+   * turn — low for everyday questions, higher for replanning.
+   */
+  send(userText: string, context: string, runTool: RunTool, options?: TurnOptions): Promise<Turn>
+}
+
+export type Effort = 'low' | 'medium' | 'high'
+
+export interface TurnOptions {
+  kind?: string
+  effort?: Effort
+}
+
+/** What one model request used: one log line per call, to see where the tokens go. */
+export interface UsageEntry {
+  model: string
+  kind: string
+  round: number
+  prompt: number
+  output: number
+  thoughts: number
+  cached: number
+  toolCalls: number
+  historyMessages: number
+}
+
+export function logUsage(entry: UsageEntry): void {
+  log.info('Jarvis usage.', entry)
 }
 
 export interface Provider {
@@ -48,7 +77,7 @@ async function callTool(runTool: RunTool, name: string, input: unknown): Promise
 
 // --------------------------------------------------------------- Claude
 
-export function claude(apiKey: string, model: string, effort: 'low' | 'medium' | 'high'): Provider {
+export function claude(apiKey: string, model: string, effort: Effort): Provider {
   const client = new Anthropic({ apiKey })
   const tools: Anthropic.Beta.BetaTool[] = TOOLS.map((tool) => ({
     name: tool.name,
@@ -66,7 +95,7 @@ export function claude(apiKey: string, model: string, effort: 'low' | 'medium' |
       const history: Anthropic.Beta.BetaMessageParam[] = []
 
       return {
-        async send(userText, context, runTool) {
+        async send(userText, context, runTool, { kind = 'text', effort: turnEffort }: TurnOptions = {}) {
           // The standing instructions are cached; the moment-specific context rides with
           // the message, so it never invalidates that cache.
           history.push({ role: 'user', content: `${context}\n\n${userText}` })
@@ -79,8 +108,19 @@ export function claude(apiKey: string, model: string, effort: 'low' | 'medium' |
               system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
               tools,
               messages: history,
-              output_config: { effort },
+              output_config: { effort: turnEffort ?? effort },
               ...(fallbacks ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {})
+            })
+            logUsage({
+              model: response.model ?? model,
+              kind,
+              round,
+              prompt: response.usage.input_tokens + (response.usage.cache_read_input_tokens ?? 0),
+              output: response.usage.output_tokens,
+              thoughts: 0,
+              cached: response.usage.cache_read_input_tokens ?? 0,
+              toolCalls: response.content.filter((block) => block.type === 'tool_use').length,
+              historyMessages: history.length
             })
 
             if (response.stop_reason === 'refusal') {
@@ -126,7 +166,7 @@ export function claude(apiKey: string, model: string, effort: 'low' | 'medium' |
  * on the GPT-6 family. The conversation is chained with previous_response_id, so OpenAI
  * keeps the model's own reasoning between turns and nothing has to be sent back by hand.
  */
-export function openai(apiKey: string, model: string, effort: 'low' | 'medium' | 'high'): Provider {
+export function openai(apiKey: string, model: string, effort: Effort): Provider {
   const client = new OpenAI({ apiKey })
   const tools: OpenAI.Responses.FunctionTool[] = TOOLS.map((tool) => ({
     type: 'function',
@@ -143,7 +183,7 @@ export function openai(apiKey: string, model: string, effort: 'low' | 'medium' |
       let previous: string | null = null
 
       return {
-        async send(userText, context, runTool) {
+        async send(userText, context, runTool, { kind = 'text', effort: turnEffort }: TurnOptions = {}) {
           let changed = false
           let input: OpenAI.Responses.ResponseInput = [{ role: 'user', content: `${context}
 
@@ -156,10 +196,21 @@ ${userText}` }]
               instructions: system,
               input,
               tools,
-              reasoning: { effort },
+              reasoning: { effort: turnEffort ?? effort },
               previous_response_id: previous
             })
             previous = response.id
+            logUsage({
+              model: response.model ?? model,
+              kind,
+              round,
+              prompt: response.usage?.input_tokens ?? 0,
+              output: response.usage?.output_tokens ?? 0,
+              thoughts: response.usage?.output_tokens_details?.reasoning_tokens ?? 0,
+              cached: response.usage?.input_tokens_details?.cached_tokens ?? 0,
+              toolCalls: response.output.filter((item) => item.type === 'function_call').length,
+              historyMessages: round + 1
+            })
 
             const calls = response.output.filter(
               (item): item is OpenAI.Responses.ResponseFunctionToolCall => item.type === 'function_call'
@@ -200,7 +251,7 @@ export function compatible(
   baseURL: string,
   apiKey: string,
   model: string,
-  effort: 'low' | 'medium' | 'high' | null,
+  effort: Effort | null,
   /** Tried in order when the model is overloaded (503) or out of quota (429). */
   fallbackModels: string[] = []
 ): Provider {
@@ -214,7 +265,8 @@ export function compatible(
   /** One completion, moving down the chain while models are busy or out of quota. */
   const complete = async (
     messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-    tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[]
+    tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[],
+    turnEffort: Effort | undefined
   ): Promise<OpenAI.Chat.Completions.ChatCompletion> => {
     let lastError: unknown = null
     const awake = chain.filter((candidate) => (resting.get(candidate) ?? 0) < Date.now())
@@ -224,7 +276,7 @@ export function compatible(
           model: candidate,
           tools,
           messages,
-          ...(effort ? { reasoning_effort: effort } : {})
+          ...(effort ? { reasoning_effort: turnEffort ?? effort } : {})
         })
       } catch (error) {
         if (error instanceof OpenAI.APIError && (error.status === 503 || error.status === 429)) {
@@ -250,12 +302,23 @@ export function compatible(
       const history: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [{ role: 'system', content: system }]
 
       return {
-        async send(userText, context, runTool) {
+        async send(userText, context, runTool, { kind = 'text', effort: turnEffort }: TurnOptions = {}) {
           history.push({ role: 'user', content: `${context}\n\n${userText}` })
           let changed = false
 
           for (let round = 0; round < MAX_ROUNDS; round++) {
-            const response = await complete(history, tools)
+            const response = await complete(history, tools, turnEffort)
+            logUsage({
+              model: response.model ?? model,
+              kind,
+              round,
+              prompt: response.usage?.prompt_tokens ?? 0,
+              output: response.usage?.completion_tokens ?? 0,
+              thoughts: response.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
+              cached: response.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+              toolCalls: response.choices[0]?.message?.tool_calls?.length ?? 0,
+              historyMessages: history.length
+            })
             const message = response.choices[0]?.message
             if (!message) return { text: 'Geen antwoord gekregen.', changed }
             history.push(message)

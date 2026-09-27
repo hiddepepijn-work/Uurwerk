@@ -6,7 +6,8 @@
  *
  *   JARVIS_MODEL     gemini-3.8-flash | mistral-medium-latest | gpt-6-luna | claude-opus-5 | …
  *                    — the prefix picks the provider and the key it needs
- *   JARVIS_EFFORT    low | medium (default) | high   — how much the model thinks per turn
+ *   JARVIS_EFFORT    low (default) | medium | high — thinking per turn
+ *   JARVIS_EFFORT_BIG  medium (default) — for replanning asks
  *   AZURE_SPEECH_REGION  westeurope (default)
  *   secrets.json     geminiKey / mistralKey / openaiKey / anthropicKey, azureSpeechKey
  *                    (bin/uurwerk-secrets.js). Without an Azure key: the free Edge voice.
@@ -22,7 +23,8 @@ import type { SecretVault } from '@backend/host.js'
 import { log } from '@backend/log.js'
 
 import brief from '../../../../docs/jarvis.md'
-import { claude, compatible, openai, type Conversation, type Provider } from './providers.js'
+import { claude, compatible, openai, type Conversation, type Effort, type Provider } from './providers.js'
+import { effortFor } from './effort.js'
 import { addUsage, liveSession } from './live.js'
 import { speak, speakFree, speakGemini } from './speech.js'
 import { runTool } from '@core/services/jarvis-tools.js'
@@ -67,7 +69,9 @@ export function createJarvis(
 ): TimeTrackerAPI['jarvis'] {
   const conversations = new Map<string, Live>()
   const model = process.env.JARVIS_MODEL?.trim() || 'claude-opus-5'
-  const effort = (process.env.JARVIS_EFFORT as 'low' | 'medium' | 'high' | undefined) ?? 'medium'
+  // Low for everyday questions; replanning ("plan de week opnieuw") thinks harder.
+  const effort = (process.env.JARVIS_EFFORT as Effort | undefined) ?? 'low'
+  const bigEffort = (process.env.JARVIS_EFFORT_BIG as Effort | undefined) ?? 'medium'
   const region = process.env.AZURE_SPEECH_REGION?.trim() || 'westeurope'
   /** Gemini voice (Kore, Charon, Orus, Aoede, …) and its model; used whenever there is a Gemini key. */
   const voice = process.env.JARVIS_VOICE?.trim() || 'Orus'
@@ -135,7 +139,10 @@ export function createJarvis(
       const said = input.moment ? MOMENT[input.moment] : (input.text ?? '').trim()
       if (!said) throw new Error('Zeg iets tegen Jarvis.')
 
-      const turn = await live.conversation.send(said, context(), (name, args) => runTool(api, name, args))
+      const turn = await live.conversation.send(said, context(), (name, args) => runTool(api, name, args), {
+        kind: input.moment ?? 'text',
+        effort: effortFor(input.text, effort, bigEffort)
+      })
 
       let audio: string | null = null
       let audioType: string | null = null
@@ -180,6 +187,8 @@ export function createJarvis(
 
     async liveUsage(input) {
       const spend = addUsage(usagePath, input)
+      // Live reports per conversation (the device adds up its turns), not per request.
+      log.info('Jarvis usage.', { model: process.env.JARVIS_LIVE_MODEL?.trim() || 'gemini-3.8-live-extended-thinking', kind: 'live-session', ...input })
       log.info('Jarvis live spend.', spend)
       return spend
     }

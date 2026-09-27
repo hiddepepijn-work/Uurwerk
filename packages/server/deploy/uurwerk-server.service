@@ -26,8 +26,11 @@ Environment=TZ=Europe/Amsterdam
 Environment=JARVIS_MODEL=gemini-3.8-flash
 # Busy (503) or out of free quota (429): these next, in order.
 Environment=JARVIS_FALLBACK_MODELS=gemini-3.7-flash,gemini-3.6-flash,gemini-flash-latest
-# How much it thinks per turn: low | medium | high. Medium is Luna's own default.
-Environment=JARVIS_EFFORT=medium
+# How much it thinks per turn: low for everyday questions, medium when he replans.
+Environment=JARVIS_EFFORT=low
+Environment=JARVIS_EFFORT_BIG=medium
+# The live voice conversation thinks low: it cannot change level mid-conversation.
+Environment=JARVIS_LIVE_THINKING=low
 # His voice: a Gemini voice (Orus = firm, male). Without a Gemini key: Azure, then Edge.
 Environment=JARVIS_VOICE=Orus
 Environment=AZURE_SPEECH_REGION=westeurope
