@@ -145,6 +145,8 @@ export class LiveCall {
   }
 
   private async open(moment: 'morning' | 'evening' | null): Promise<void> {
+    // In the car holder the screen must stay on: iOS pauses the call when it locks.
+    void window.audioFocus?.keepAwake?.({ on: true }).catch(() => undefined)
     // Audio first, while the tap that opened this still counts as a gesture.
     this.micContext = new AudioContext({ sampleRate: MIC_RATE })
     this.voiceContext = new AudioContext()
@@ -382,6 +384,7 @@ export class LiveCall {
   private async teardown(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    void window.audioFocus?.keepAwake?.({ on: false }).catch(() => undefined)
     cancelAnimationFrame(this.frame)
     this.level.current = 0
     this.stopVoice()

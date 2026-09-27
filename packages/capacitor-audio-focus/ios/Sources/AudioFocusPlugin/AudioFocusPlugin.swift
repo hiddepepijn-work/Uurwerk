@@ -2,6 +2,7 @@ import AVFoundation
 import Capacitor
 import Foundation
 import Speech
+import UIKit
 import WidgetKit
 
 /// Uurwerk's only native code, in one plugin:
@@ -24,7 +25,8 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "release", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setWidgetData", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "listenStart", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "listenStop", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "listenStop", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "keepAwake", returnType: CAPPluginReturnPromise)
     ]
 
     private var audioEngine: AVAudioEngine?
@@ -152,6 +154,16 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         let level = min(1, max(0, (decibels + 55) / 45))
         DispatchQueue.main.async {
             self.notifyListeners("speechLevel", data: ["level": level])
+        }
+    }
+
+    /// A live Jarvis call runs in the web view, which iOS pauses the moment the screen locks.
+    /// With the phone in the car holder, the screen stays on for as long as the call lasts.
+    @objc func keepAwake(_ call: CAPPluginCall) {
+        let on = call.getBool("on") ?? false
+        DispatchQueue.main.async {
+            UIApplication.shared.isIdleTimerDisabled = on
+            call.resolve()
         }
     }
 

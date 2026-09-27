@@ -18,6 +18,8 @@ export const AudioFocus = registerPlugin<{
   setWidgetData(options: { json: string }): Promise<void>
   listenStart(options: { locale: string }): Promise<void>
   listenStop(): Promise<void>
+  /** Keeps the screen on (true) or lets it sleep again (false): a live Jarvis call stops when it locks. */
+  keepAwake(options: { on: boolean }): Promise<void>
   addListener(
     event: 'speechPartial' | 'speechEnd' | 'speechLevel',
     handler: (data: { text?: string; level?: number }) => void
@@ -32,6 +34,7 @@ export const AudioFocus = registerPlugin<{
       throw new Error('Luisteren kan alleen in de iPhone-app.')
     },
     listenStop: async () => undefined,
+    keepAwake: async () => undefined,
     addListener: async () => ({ remove: async () => undefined })
   }
 })

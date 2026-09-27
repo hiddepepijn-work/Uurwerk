@@ -19,7 +19,12 @@ interface Line {
 /** Set by the phone app: pauses Spotify or Apple Music while Jarvis speaks. */
 declare global {
   interface Window {
-    audioFocus?: { take(): Promise<void>; release(): Promise<void> }
+    audioFocus?: {
+      take(): Promise<void>
+      release(): Promise<void>
+      /** Phone only: keep the screen on during a live call. */
+      keepAwake?(options: { on: boolean }): Promise<void>
+    }
     webkitSpeechRecognition?: new () => SpeechRecognitionLike
     SpeechRecognition?: new () => SpeechRecognitionLike
   }
