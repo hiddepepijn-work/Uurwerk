@@ -763,11 +763,7 @@ export function buildImplementation(
         if (patch.hotkeys) onSettingsChanged?.(settings)
         return settings
       },
-      setSecret: async (key, value) => {
-        await host().secrets.set(key as SecretKey, value)
-        // Whoever waits on a secret (the wake word) hears it is there now.
-        emitEvent('data:invalidated', { domain: 'settings' })
-      },
+      setSecret: async (key, value) => host().secrets.set(key as SecretKey, value),
       hasSecret: async (key) => host().secrets.has(key as SecretKey)
     },
 
@@ -798,7 +794,8 @@ export function buildImplementation(
       jarvisHide: async () => host().window.jarvisHide?.(),
       jarvisInteractive: async (on) => host().window.jarvisInteractive?.(on),
       openApp: async (target) => host().window.openApp?.(target),
-      wakeWordKey: async () => (await host().window.wakeWordKey?.()) ?? null,
+      wakeWordOn: async () => ((await host().window.wakeWordOn?.()) ?? false) && store.settings.get().jarvisWakeWord,
+      wakeAudio: async (pcm) => host().window.wakeAudio?.(pcm),
       quit: async () => host().window.quit()
     },
 

@@ -70,7 +70,8 @@ export const DEFAULT_SETTINGS: Settings = {
   closeToTray: true,
   serverUrl: '',
   focusShortcuts: false,
-  focusBlockedApps: ['steam', 'discord', 'epicgameslauncher', 'spotify']
+  focusBlockedApps: ['steam', 'discord', 'epicgameslauncher', 'spotify'],
+  jarvisWakeWord: true
 }
 
 export class SettingsRepo {

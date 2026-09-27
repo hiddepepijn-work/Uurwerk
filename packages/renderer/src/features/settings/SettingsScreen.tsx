@@ -403,7 +403,7 @@ export function SettingsScreen() {
       <ServerSettings />
 
       <FocusSettings settings={settings} onPatch={(changes) => void patch(changes)} />
-      <JarvisSettings />
+      <JarvisSettings settings={settings} onPatch={(changes) => void patch(changes)} />
 
       <PublishSettings settings={settings} onPatch={(changes) => void patch(changes)} />
     </div>

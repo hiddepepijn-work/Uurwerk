@@ -245,15 +245,10 @@ function setupHotkeys(): void {
  */
 function applyContentSecurityPolicy(): void {
   const devServer = process.env['ELECTRON_RENDERER_URL']
-  // wasm-unsafe-eval: the wake word (Porcupine) runs as WebAssembly in the Jarvis corner.
   // blob: the audio worklets (live microphone, wake word) are loaded from blob URLs.
-  const scriptSrc = devServer
-    ? `'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: ${devServer}`
-    : `'self' 'wasm-unsafe-eval' blob:`
+  const scriptSrc = devServer ? `'self' 'unsafe-inline' blob: ${devServer}` : `'self' blob:`
   // Jarvis live talks straight to Gemini Live over a WebSocket.
-  // ...and the wake word checks its AccessKey with Picovoice, and reads its model file.
-  const gemini =
-    'wss://generativelanguage.googleapis.com https://generativelanguage.googleapis.com https://rest.picovoice.ai file:'
+  const gemini = 'wss://generativelanguage.googleapis.com https://generativelanguage.googleapis.com'
   const connectSrc = devServer ? `'self' ${devServer} ws://localhost:* ${gemini}` : `'self' ${gemini}`
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -269,7 +264,7 @@ function applyContentSecurityPolicy(): void {
             `media-src 'self' blob: file:`,
             `font-src 'self' data:`,
             `connect-src ${connectSrc}`,
-            // The wake word and the audio capture run in workers made from blobs.
+            // The audio capture runs in worklets made from blobs.
             `worker-src 'self' blob:`,
             `object-src 'none'`,
             `frame-src 'none'`,

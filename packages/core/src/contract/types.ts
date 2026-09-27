@@ -1454,6 +1454,10 @@ export interface Settings {
   focusShortcuts: boolean
   /** Laptop: programs closed while a focus task is running, by process name. Per device. */
   focusBlockedApps: string[]
+
+  // ---------------------------------------------------------------- jarvis
+  /** Laptop: listen for "Hey Jarvis". Per device. */
+  jarvisWakeWord: boolean
 }
 
 // ------------------------------------------------------------------ Jarvis

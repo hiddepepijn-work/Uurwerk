@@ -123,7 +123,7 @@ export const CHANNELS = {
   publish: ['preview', 'now'],
   startup: ['getLoginItemStatus', 'setAutoLaunch'],
   // `quit` is the real exit: closing the window only hides it when close-to-tray is on.
-  window: ['minimizeToTray', 'closeQuickAdd', 'jarvisShow', 'jarvisHide', 'jarvisInteractive', 'openApp', 'wakeWordKey', 'quit'],
+  window: ['minimizeToTray', 'closeQuickAdd', 'jarvisShow', 'jarvisHide', 'jarvisInteractive', 'openApp', 'wakeWordOn', 'wakeAudio', 'quit'],
   // This copy and the VPS. Offline first: everything above works without it.
   sync: ['status', 'pair', 'now', 'unpair'],
   // The assistant. Lives on the server; devices forward.

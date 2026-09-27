@@ -22,8 +22,6 @@ import type { AppEventName, AppEvents } from '@core/contract/events.js'
 // the Settings screen has to be able to show you which account is connected.
 export type SecretKey =
   | 'smtpPassword'
-  // The Picovoice AccessKey: the laptop listens for "Jarvis" with it.
-  | 'picovoiceKey'
   | 'publishToken'
   // The token this device syncs with. Made on the server, shown once, kept here.
   | 'deviceToken'

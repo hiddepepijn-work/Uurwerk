@@ -556,8 +556,8 @@ export interface TimeTrackerAPI {
     get(): Promise<Settings>
     update(patch: Partial<Settings>): Promise<Settings>
     /** Stored via Electron safeStorage, never returned to the renderer. */
-    setSecret(key: 'smtpPassword' | 'publishToken' | 'picovoiceKey', value: string): Promise<void>
-    hasSecret(key: 'smtpPassword' | 'publishToken' | 'picovoiceKey'): Promise<boolean>
+    setSecret(key: 'smtpPassword' | 'publishToken', value: string): Promise<void>
+    hasSecret(key: 'smtpPassword' | 'publishToken'): Promise<boolean>
   }
 
   publish: {
@@ -585,8 +585,13 @@ export interface TimeTrackerAPI {
     jarvisInteractive(on: boolean): Promise<void>
     /** Brings the main window up at a screen. */
     openApp(target: 'agenda' | 'tasks' | 'today'): Promise<void>
-    /** The Picovoice AccessKey for the wake word; null when none is set. Laptop only. */
-    wakeWordKey(): Promise<string | null>
+    /** Whether this laptop listens for "Hey Jarvis" (the jarvisWakeWord setting, and a laptop). */
+    wakeWordOn(): Promise<boolean>
+    /**
+     * 16 kHz 16-bit mono microphone audio for the wake word, from the corner window; the
+     * models run in the main process. On "Hey Jarvis" the corner is summoned.
+     */
+    wakeAudio(pcm: ArrayBuffer): Promise<void>
     /**
      * Ends the app for real, tray and hotkeys included.
      *

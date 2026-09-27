@@ -224,15 +224,6 @@ export function JarvisCorner() {
   // #demo: the corner as it looks mid-conversation, without a microphone or a model — for
   // checking the design (scripts/corner-preview.cjs takes screenshots of it).
   useEffect(() => {
-    // #wake-test: loads the wake word engine with a dummy key; the preview logs whether it
-    // got as far as checking the key (engine fine) or failed before (engine broken).
-    if (window.location.hash === '#wake-test') {
-      WakeWord.start('dummy-key', () => undefined).then(
-        () => console.log('wake-test: started'),
-        (error: unknown) => console.log(`wake-test: ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`)
-      )
-      return
-    }
     if (window.location.hash !== '#demo') return
     setShown(true)
     setPhase('speaking')
@@ -249,27 +240,31 @@ export function JarvisCorner() {
       clearTimeout(timer)
     }
   }, [])
+  // The wake word: on while the setting says so; switching it in Settings takes effect at once.
   useEffect(() => {
+    if (window.location.hash === '#demo') return
     let stopped = false
-    const arm = (): void => {
-      if (wake.current || stopped) return
+    const sync = (): void => {
       void api.window
-        .wakeWordKey()
-        .then(async (key) => {
-          if (!key || stopped || wake.current) return
-          wake.current = await WakeWord.start(key, () => void summon())
+        .wakeWordOn()
+        .then(async (on) => {
+          if (stopped) return
+          if (on && !wake.current) wake.current = await WakeWord.start()
+          if (!on && wake.current) {
+            await wake.current.stop()
+            wake.current = null
+          }
         })
         .catch((error: unknown) => console.warn('Wake word unavailable:', error))
     }
-    arm()
-    // A key entered in Settings takes effect without a restart.
-    const off = events.on('data:invalidated', ({ domain }) => domain === 'settings' && arm())
+    sync()
+    const off = events.on('data:invalidated', ({ domain }) => domain === 'settings' && sync())
     return () => {
       stopped = true
       off()
       void wake.current?.stop()
     }
-  }, [summon])
+  }, [])
 
   // ------------------------------------------------------------- drawing
 

@@ -37,7 +37,8 @@ export const DEVICE_LOCAL_SETTINGS = [
   'closeToTray',
   'serverUrl',
   'focusShortcuts',
-  'focusBlockedApps'
+  'focusBlockedApps',
+  'jarvisWakeWord'
 ] as const
 
 /** Epoch milliseconds, computed inside SQLite so a trigger can stamp a change. */
