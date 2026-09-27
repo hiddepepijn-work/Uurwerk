@@ -244,10 +244,13 @@ export function JarvisCorner() {
   useEffect(() => {
     if (window.location.hash === '#demo') return
     let stopped = false
+    // One change at a time: a settings event during a start would otherwise open a second
+    // capture, and two streams interleaved into the detector drown the wake word.
+    let busy: Promise<void> = Promise.resolve()
     const sync = (): void => {
-      void api.window
-        .wakeWordOn()
-        .then(async (on) => {
+      busy = busy
+        .then(async () => {
+          const on = await api.window.wakeWordOn()
           if (stopped) return
           if (on && !wake.current) wake.current = await WakeWord.start()
           if (!on && wake.current) {
