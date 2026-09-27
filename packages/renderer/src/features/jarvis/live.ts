@@ -80,6 +80,9 @@ const add = (into: JarvisLiveUsage, more: JarvisLiveUsage): void => {
   for (const kind of Object.keys(into) as Array<keyof JarvisLiveUsage>) into[kind] += more[kind]
 }
 
+/** Jarvis's trail in the app log (the main process forwards "[jarvis]" lines). */
+const trail = (message: string): void => console.info(`[jarvis] ${message}`)
+
 const toBase64 = (bytes: ArrayBuffer): string => {
   let binary = ''
   const view = new Uint8Array(bytes)
@@ -119,6 +122,10 @@ export class LiveCall {
   private turnUsage: JarvisLiveUsage | null = null
   private frame = 0
   private closed = false
+  /** For the trail: loudest the microphone got since the last report, chunks sent. */
+  private loudest = 0
+  private sentChunks = 0
+  private lastReport = 0
 
   private constructor(
     private readonly level: MutableRefObject<number>,
@@ -166,6 +173,8 @@ export class LiveCall {
       })
     ])
     this.stream = stream
+    const track = stream.getAudioTracks()[0]
+    trail(`token voor ${live.model}; microfoon "${track?.label ?? '?'}" (${track?.readyState}), opname ${this.micContext.sampleRate} Hz ${this.micContext.state}`)
 
     const ai = new GoogleGenAI({ apiKey: live.token, httpOptions: { apiVersion: live.apiVersion } })
     this.session = await ai.live.connect({
@@ -173,8 +182,14 @@ export class LiveCall {
       config: live.config,
       callbacks: {
         onmessage: (message) => void this.receive(message),
-        onerror: (event) => this.finish(event.message || 'De verbinding met Jarvis viel weg.'),
-        onclose: (event) => this.finish(event.code === 1000 ? null : event.reason || 'De verbinding met Jarvis is gesloten.')
+        onerror: (event) => {
+          trail(`verbindingsfout: ${event.message}`)
+          this.finish(event.message || 'De verbinding met Jarvis viel weg.')
+        },
+        onclose: (event) => {
+          trail(`verbinding dicht: ${event.code} ${event.reason}`)
+          this.finish(event.code === 1000 ? null : event.reason || 'De verbinding met Jarvis is gesloten.')
+        }
       }
     })
 
@@ -187,6 +202,7 @@ export class LiveCall {
       this.hear(event.data.pcm, event.data.rms)
     source.connect(capture)
 
+    trail('verbonden, luistert')
     this.animate()
     if (live.opening) {
       this.session.sendClientContent({ turns: [{ role: 'user', parts: [{ text: live.opening }] }], turnComplete: true })
@@ -201,14 +217,24 @@ export class LiveCall {
     if (!this.session || this.closed) return
     this.micLevel = rms
     const now = performance.now()
+    this.loudest = Math.max(this.loudest, rms)
+    if (now - this.lastReport > 10_000) {
+      if (this.lastReport > 0 && !this.gateOpen) {
+        trail(`microfoon: hardste ${this.loudest.toFixed(3)}, drempel ${Math.max(0.006, this.noise * 2.5).toFixed(3)}, ${this.sentChunks} stukjes verstuurd`)
+      }
+      this.loudest = 0
+      this.lastReport = now
+    }
     // The noise floor follows the room slowly; speech is well above it.
     if (!this.gateOpen) this.noise = this.noise * 0.98 + Math.min(rms, 0.05) * 0.02
-    const threshold = Math.max(0.012, this.noise * 3)
+    // A laptop's built-in array comes in quiet: the floor is low, the room decides the rest.
+    const threshold = Math.max(0.006, this.noise * 2.5)
     const voiced = rms > threshold
 
     if (voiced) this.lastVoice = now
     if (!this.gateOpen && voiced) {
       this.gateOpen = true
+      trail(`je praat (${rms.toFixed(3)} boven ${threshold.toFixed(3)})`)
       for (const chunk of this.preroll) this.send(chunk)
       this.preroll = []
       if (this.phase !== 'speaking') {
@@ -220,6 +246,7 @@ export class LiveCall {
       this.send(pcm)
       if (now - this.lastVoice > HANGOVER_MS) {
         this.gateOpen = false
+        trail(`stil; verstuurd tot nu: ${this.sentChunks} stukjes, gehoord: "${this.heard.trim().slice(0, 80)}"`)
         // Tells the model the microphone paused, so it answers instead of waiting.
         this.session.sendRealtimeInput({ audioStreamEnd: true })
         if (this.phase === 'listening' && this.heard) this.setPhase('thinking')
@@ -231,6 +258,7 @@ export class LiveCall {
   }
 
   private send(pcm: ArrayBuffer): void {
+    this.sentChunks += 1
     this.session?.sendRealtimeInput({ audio: { data: toBase64(pcm), mimeType: `audio/pcm;rate=${MIC_RATE}` } })
   }
 
@@ -279,6 +307,7 @@ export class LiveCall {
       }
     }
     if (content?.turnComplete) {
+      trail(`beurt klaar (${String(content.interactionStatus ?? '')}): "${this.reply.trim().slice(0, 80)}"`)
       this.working = String(content.interactionStatus) === 'IN_PROGRESS'
       this.replyDone = true
       this.muted = false
@@ -287,6 +316,7 @@ export class LiveCall {
     }
 
     if (message.toolCall?.functionCalls?.length) {
+      trail(`tools: ${message.toolCall.functionCalls.map((call) => call.name).join(', ')}`)
       this.setPhase('thinking')
       const responses = await Promise.all(
         message.toolCall.functionCalls.map(async (call) => {

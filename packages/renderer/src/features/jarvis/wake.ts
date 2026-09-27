@@ -13,12 +13,19 @@ const CHUNK = 1280
 
 const WORKLET = `
 class WakeCapture extends AudioWorkletProcessor {
-  constructor() { super(); this.buffer = new Int16Array(${CHUNK}); this.fill = 0 }
+  // A quiet microphone is brought up to speaking level: the gain follows the loudness of
+  // the last seconds, at most eightfold, so a laptop's built-in array is heard as a headset is.
+  constructor() { super(); this.buffer = new Int16Array(${CHUNK}); this.fill = 0; this.level = 0.02; this.gain = 1 }
   process(inputs) {
     const channel = inputs[0] && inputs[0][0]
     if (!channel) return true
+    let sum = 0
+    for (let i = 0; i < channel.length; i++) sum += channel[i] * channel[i]
+    const rms = Math.sqrt(sum / channel.length)
+    if (rms > 0.002) this.level = this.level * 0.995 + rms * 0.005
+    this.gain = Math.min(8, Math.max(1, 0.05 / Math.max(this.level, 0.004)))
     for (let i = 0; i < channel.length; i++) {
-      const sample = Math.max(-1, Math.min(1, channel[i]))
+      const sample = Math.max(-1, Math.min(1, channel[i] * this.gain))
       this.buffer[this.fill++] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
       if (this.fill === ${CHUNK}) {
         this.port.postMessage(this.buffer.buffer, [this.buffer.buffer])
@@ -41,7 +48,8 @@ export class WakeWord {
 
   static async start(): Promise<WakeWord> {
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
+      // No noise suppression: it takes the edges off exactly the sounds the wake word needs.
+      audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true, channelCount: 1 }
     })
     const context = new AudioContext({ sampleRate: RATE })
     const url = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }))
@@ -54,6 +62,7 @@ export class WakeWord {
     }
     context.createMediaStreamSource(stream).connect(node)
     await context.resume()
+    console.info(`[jarvis] wekwoord luistert via "${stream.getAudioTracks()[0]?.label ?? '?'}" (${context.state})`)
     return wake
   }
 

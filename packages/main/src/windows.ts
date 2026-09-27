@@ -129,8 +129,17 @@ function instrumentLoading(window: BrowserWindow): void {
     log.error('The renderer process went away.', details)
   })
 
+  forwardConsole(window, 'Renderer')
+}
+
+/**
+ * Warnings and errors from a window into the log, and Jarvis's own trail ("[jarvis] …"
+ * lines) at any level: a spoken conversation that fails leaves nothing else to go on.
+ */
+function forwardConsole(window: BrowserWindow, name: string): void {
   window.webContents.on('console-message', (_event, level, message, line, source) => {
-    if (level >= 2) log.warn(`Renderer console: ${message}`, { source, line })
+    if (message.startsWith('[jarvis]')) log.info(`${name}: ${message}`)
+    else if (level >= 2) log.warn(`${name} console: ${message}`, { source, line })
   })
 }
 
@@ -204,6 +213,8 @@ export function createJarvisWindow(open: (target: 'agenda' | 'tasks' | 'today') 
     webPreferences: { ...baseWebPreferences, backgroundThrottling: false }
   })
   lockDownNavigation(window)
+  forwardConsole(window, 'Jarvis corner')
+  window.webContents.on('render-process-gone', (_event, details) => log.error('The Jarvis corner went away.', details))
   window.setAlwaysOnTop(true, 'floating')
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   window.setIgnoreMouseEvents(true, { forward: true })

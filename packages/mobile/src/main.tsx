@@ -229,18 +229,30 @@ async function start(): Promise<void> {
 
   onQuestionTapped((target, moment) => {
     // Jarvis takes the moment when he can; the plain planner and read-out are the fallback
-    // for when the server or its keys are not there.
-    void window.api!.jarvis
-      .status()
-      .then((status) => {
-        if (!status.ready) throw new Error(status.problem ?? 'not ready')
-        emit('jarvis:open', { moment })
-      })
-      .catch(() => {
-        emit('ui:open', { target })
-        if (moment === 'morning') void speakMorning(window.api!)
-        else void speakEvening(window.api!)
-      })
+    // for when the server or its keys are not there. A tap on a notification often wakes
+    // the phone with no network yet, so he is asked a few times before giving up — and the
+    // reason is shown, so a read-out never silently stands in for Jarvis.
+    void (async () => {
+      let problem = ''
+      for (const wait of [0, 1500, 3500, 6000]) {
+        if (wait) await new Promise((resolve) => setTimeout(resolve, wait))
+        try {
+          const status = await window.api!.jarvis.status()
+          if (status.ready) {
+            emit('jarvis:open', { moment })
+            return
+          }
+          problem = status.problem ?? 'Jarvis is niet klaar.'
+          break
+        } catch (error) {
+          problem = error instanceof Error ? error.message : String(error)
+        }
+      }
+      emit('notify', { level: 'warn', message: `Jarvis niet bereikbaar (${problem}); de korte versie in plaats daarvan.` })
+      emit('ui:open', { target })
+      if (moment === 'morning') void speakMorning(window.api!)
+      else void speakEvening(window.api!)
+    })()
   })
   void scheduleNotifications(reminders).catch(() => undefined)
 
