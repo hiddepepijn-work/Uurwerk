@@ -39,6 +39,7 @@ import { AudioFocus, speakEvening, speakMorning } from './speech.js'
 import { PhoneSync } from './sync.js'
 import { widgetData } from './widget-data.js'
 import { FocusGuard } from './focus.js'
+import { parseLink } from './links.js'
 
 // ------------------------------------------------------------------ events
 
@@ -255,10 +256,11 @@ async function start(): Promise<void> {
   })
   refreshWidgets()
 
-  // The widget buttons: uurwerk://timer, jarvis, task, appointment, agenda.
+  // The widget buttons (uurwerk://timer, jarvis, task, appointment, agenda) and the
+  // Shortcuts automations that open Jarvis at 08:30 and 21:00 (jarvis?moment=morning).
   void Capacitor.addListener('appUrlOpen', ({ url }) => {
-    const action = url.replace('uurwerk://', '').split(/[/?#]/)[0]
-    if (action === 'jarvis') emit('jarvis:open', { moment: null })
+    const { action, moment } = parseLink(url)
+    if (action === 'jarvis') emit('jarvis:open', { moment })
     else if (action === 'focus') void focus.toggle()
     else if (action === 'task') emit('ui:open', { target: 'tasks' })
     else if (action === 'appointment') emit('ui:open', { target: 'addEvent' })
