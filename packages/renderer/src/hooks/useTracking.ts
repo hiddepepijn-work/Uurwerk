@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TimeSegment } from '@core/contract/types.js'
 import { api, events } from '../api/client.js'
 
@@ -12,6 +12,8 @@ import { api, events } from '../api/client.js'
  */
 export function useTracking() {
   const [segment, setSegment] = useState<TimeSegment | null>(null)
+  const segmentRef = useRef<TimeSegment | null>(null)
+  segmentRef.current = segment
   const [elapsedSec, setElapsedSec] = useState(0)
   /**
    * When the whole working stretch began, across task switches.
@@ -43,7 +45,20 @@ export function useTracking() {
       void sync()
     })
 
+    // A timer started or stopped on another device arrives through sync, not as a
+    // segmentChanged here: without this the clock ticked while the screen said "Not tracking".
+    const offSynced = events.on('data:invalidated', ({ domain }) => {
+      if (domain === 'sessions') void sync()
+    })
+
+    let seenSegment = false
     const offTick = events.on('timer:tick', ({ elapsedSec: seconds }) => {
+      // A tick while this screen thinks nothing runs means it missed the start: ask once.
+      if (segmentRef.current === null && !seenSegment) {
+        seenSegment = true
+        void sync()
+      }
+      if (segmentRef.current !== null) seenSegment = false
       setElapsedSec(seconds)
       setRunStartedAt((started) => {
         if (started !== null) setRunElapsedSec(Math.floor((Date.now() - started) / 1000))
@@ -53,6 +68,7 @@ export function useTracking() {
 
     return () => {
       offChanged()
+      offSynced()
       offTick()
     }
   }, [])
