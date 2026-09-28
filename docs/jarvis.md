@@ -44,8 +44,11 @@ Button, en "Hé Siri, Jarvis".
    deadline nog haalbaar?
 3. **Waar heb je aan gewerkt?** De uren van vandaag per gebied — stage, werk, privé,
    school — en wat er nog taakloos is: dat verdelen (de End-of-day-wizard).
-4. **Extra afspraken?** Moet er nog iets in de agenda; zo ja de **afsprakenvragen**.
-5. Kort vooruit: wat staat er morgen vast, en hoe laat moet je weg.
+4. **Structuur:** hoe ging het met **opruimen achter jezelf aan** (kamer, bureau, keuken,
+   was, spullen terug waar ze horen) en de andere vaste gewoontes van de dag? Eerlijk
+   antwoord vragen, en is het niet gebeurd: wanneer dan wel, liefst meteen of morgenochtend.
+5. **Extra afspraken?** Moet er nog iets in de agenda; zo ja de **afsprakenvragen**.
+6. Kort vooruit: wat staat er morgen vast, en hoe laat moet je weg.
 
 In de app nu al: de melding van 21:00 heet *Dagafsluiting*, opent de End-of-day-wizard
 en zegt hardop hoeveel geplande taken af zijn, welke niet, en de uren per gebied.

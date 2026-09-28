@@ -82,7 +82,7 @@ export const MOMENT: Record<'morning' | 'evening', string> = {
   morning:
     '(Ochtendmoment, 08:30. Hidde heeft op de melding getikt. Begin het ochtendgesprek zoals in de brief: de stand van vandaag staat in de snapshot; noem wat vastligt, wat te laat is en hoe laat hij weg moet, en vraag wat hij vandaag gaat doen.)',
   evening:
-    '(Dagafsluiting, 21:00. Hidde heeft op de melding getikt. Doe de dagafsluiting zoals in de brief: day_review van vandaag, zeg wat af is en wat niet — streng —, vraag waarom en wanneer het wel gebeurt, vraag naar extra afspraken, noem kort wat morgen vastligt, en sluit af met note_day_summary.)'
+    '(Dagafsluiting, 21:00. Hidde heeft op de melding getikt. Doe de dagafsluiting zoals in de brief: day_review van vandaag, zeg wat af is en wat niet — streng —, vraag waarom en wanneer het wel gebeurt, vraag hoe het ging met opruimen achter zichzelf aan en zijn andere structuurgewoontes (één vraag tegelijk), vraag naar extra afspraken, noem kort wat morgen vastligt, en sluit af met note_day_summary.)'
 }
 
 interface Live {
