@@ -32,6 +32,8 @@ export interface LiveOptions {
   voice: string
   opening: string | null
   usagePath: string
+  /** A dropped conversation's resumption handle: the new connection carries on from it. */
+  resume?: string | null
 }
 
 const monthOf = (date = new Date()): string =>
@@ -42,29 +44,53 @@ const cap = (): number => {
   return Number.isFinite(value) && value > 0 ? value : 10
 }
 
+const round = (usd: number): number => Math.round(usd * 10_000) / 10_000
+
 export function readSpend(usagePath: string): JarvisLiveSpend {
   const month = monthOf()
   try {
     if (existsSync(usagePath)) {
-      const stored = JSON.parse(readFileSync(usagePath, 'utf8')) as { month?: string; usd?: number }
-      if (stored.month === month && typeof stored.usd === 'number') return { month, usd: stored.usd, capUsd: cap() }
+      const stored = JSON.parse(readFileSync(usagePath, 'utf8')) as { month?: string; usd?: number; live?: number; text?: number }
+      if (stored.month === month && typeof stored.usd === 'number') {
+        // Files from before the split counted Live only.
+        const live = typeof stored.live === 'number' ? stored.live : stored.usd
+        const text = typeof stored.text === 'number' ? stored.text : 0
+        return { month, usd: round(live + text), capUsd: cap(), live, text }
+      }
     }
   } catch {
     // A damaged file starts the month again rather than blocking Jarvis.
   }
-  return { month, usd: 0, capUsd: cap() }
+  return { month, usd: 0, capUsd: cap(), live: 0, text: 0 }
+}
+
+function addSpend(usagePath: string, kind: 'live' | 'text', usd: number): JarvisLiveSpend {
+  const spend = readSpend(usagePath)
+  const live = round(spend.live + (kind === 'live' ? usd : 0))
+  const text = round(spend.text + (kind === 'text' ? usd : 0))
+  writeFileSync(usagePath, JSON.stringify({ month: spend.month, usd: round(live + text), live, text }), { mode: 0o600 })
+  return { month: spend.month, usd: round(live + text), capUsd: spend.capUsd, live, text }
+}
+
+/** Gemini 3.8 Flash, typed Jarvis: per million tokens, cached input at a tenth. */
+const FLASH = { input: 0.75, cached: 0.075, output: 3.75 } as const
+
+export function addTextUsage(usagePath: string, usage: { prompt: number; cached: number; output: number; thoughts: number }): JarvisLiveSpend {
+  const clean = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 0)
+  const cached = Math.min(clean(usage.cached), clean(usage.prompt))
+  const usd =
+    ((clean(usage.prompt) - cached) * FLASH.input + cached * FLASH.cached + (clean(usage.output) + clean(usage.thoughts)) * FLASH.output) /
+    1_000_000
+  return addSpend(usagePath, 'text', usd)
 }
 
 export function addUsage(usagePath: string, usage: JarvisLiveUsage): JarvisLiveSpend {
-  const spend = readSpend(usagePath)
   const clean = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 0)
   const usd = (Object.keys(PRICE) as Array<keyof typeof PRICE>).reduce(
     (sum, kind) => sum + (clean(usage[kind]) * PRICE[kind]) / 1_000_000,
     0
   )
-  const next = { month: spend.month, usd: Math.round((spend.usd + usd) * 10_000) / 10_000 }
-  writeFileSync(usagePath, JSON.stringify(next), { mode: 0o600 })
-  return { ...next, capUsd: spend.capUsd }
+  return addSpend(usagePath, 'live', usd)
 }
 
 /** Gemini's schema dialect: upper-case types, no additionalProperties. */
@@ -142,6 +168,8 @@ ${await today(options.api)}`
     outputAudioTranscription: {},
     // Long conversations keep going: older turns are folded away instead of ending the session.
     contextWindowCompression: { slidingWindow: {} },
+    // Gemini hands out resumption handles, so a dropped connection can carry on where it was.
+    sessionResumption: options.resume ? { handle: options.resume } : {},
     // A breath mid-sentence is not the end of a turn: 700 ms cut Hidde's sentences in half
     // and Jarvis answered the halves.
     realtimeInputConfig: { automaticActivityDetection: { silenceDurationMs: 1200 } }

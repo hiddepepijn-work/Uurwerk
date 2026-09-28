@@ -23,9 +23,9 @@ import type { SecretVault } from '@backend/host.js'
 import { log } from '@backend/log.js'
 
 import brief from '../../../../docs/jarvis.md'
-import { claude, compatible, openai, type Conversation, type Effort, type Provider } from './providers.js'
+import { claude, compatible, openai, usageListeners, type Conversation, type Effort, type Provider } from './providers.js'
 import { effortFor } from './effort.js'
-import { addUsage, liveSession } from './live.js'
+import { addTextUsage, addUsage, liveSession, readSpend } from './live.js'
 import { speak, speakFree, speakGemini } from './speech.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 
@@ -177,6 +177,11 @@ export function createJarvis(
   // connection to drop; the job carries on here and the phone asks how it went.
   const jobs = new Map<string, JarvisJob & { at: number }>()
 
+  // Typed Jarvis counts towards the month as well: every model call reports its tokens.
+  usageListeners.push((entry) => {
+    if (/^gemini/i.test(entry.model)) addTextUsage(usagePath, entry)
+  })
+
   const jarvis: TimeTrackerAPI['jarvis'] = {
     async askStart(input) {
       for (const [id, job] of jobs) if (Date.now() - job.at > 15 * 60_000) jobs.delete(id)
@@ -202,6 +207,7 @@ export function createJarvis(
       const keyPresent = secrets.has(keyName)
       return {
         openingDue: await openingDue(),
+        spend: readSpend(usagePath),
         ready: keyPresent,
         provider: family,
         model,
@@ -273,8 +279,9 @@ export function createJarvis(
         key,
         system: SYSTEM,
         voice,
-        opening: input.moment ? MOMENT[input.moment] : null,
-        usagePath
+        opening: input.moment && !input.resume ? MOMENT[input.moment] : null,
+        usagePath,
+        resume: input.resume ?? null
       })
     },
 

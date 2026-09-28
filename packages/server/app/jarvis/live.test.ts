@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { TOOLS } from '@core/services/jarvis-tools.js'
 
-import { addUsage, readSpend, toSchema } from './live.js'
+import { writeFileSync } from 'node:fs'
+
+import { addTextUsage, addUsage, readSpend, toSchema } from './live.js'
 
 let dir: string
 let path: string
@@ -36,6 +38,20 @@ describe('live spend', () => {
   it('ignores nonsense counts', () => {
     const spend = addUsage(path, { textIn: -5, audioIn: Number.NaN, textOut: 0, audioOut: 0, thoughts: 0 })
     expect(spend.usd).toBe(0)
+  })
+
+  it('counts typed Jarvis too, cached input at a tenth, and keeps the two apart', () => {
+    addUsage(path, { textIn: 1_000_000, audioIn: 0, textOut: 0, audioOut: 0, thoughts: 0 })
+    const spend = addTextUsage(path, { prompt: 2_000_000, cached: 1_000_000, output: 100_000, thoughts: 100_000 })
+    expect(spend.live).toBeCloseTo(0.75)
+    expect(spend.text).toBeCloseTo(0.75 + 0.075 + 0.75)
+    expect(spend.usd).toBeCloseTo(spend.live + spend.text)
+  })
+
+  it('reads a file from before the split as Live spending', () => {
+    const month = new Date().toISOString().slice(0, 7)
+    writeFileSync(path, JSON.stringify({ month, usd: 1.5 }))
+    expect(readSpend(path)).toMatchObject({ usd: 1.5, live: 1.5, text: 0 })
   })
 
   it('takes the cap from the environment', () => {

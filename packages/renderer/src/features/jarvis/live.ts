@@ -1,7 +1,7 @@
 import { GoogleGenAI, type LiveServerMessage, type ModalityTokenCount, type Session } from '@google/genai'
 import type { MutableRefObject } from 'react'
 
-import type { JarvisLiveUsage } from '@core/contract/api.js'
+import type { JarvisLiveSession, JarvisLiveUsage } from '@core/contract/api.js'
 
 import { api } from '../../api/client.js'
 import { SpeechGate } from './gate.js'
@@ -128,6 +128,9 @@ export class LiveCall {
   private turnUsage: JarvisLiveUsage | null = null
   private frame = 0
   private closed = false
+  /** Gemini's latest resumption handle, and how often a dropped connection was picked up. */
+  private handle: string | null = null
+  private resumes = 0
   /** For the trail: loudest the microphone got since the last report, chunks sent. */
   private loudest = 0
   private sentChunks = 0
@@ -188,22 +191,7 @@ export class LiveCall {
     }
     trail(`token voor ${live.model}; microfoon "${track?.label ?? '?'}" (${track?.readyState}), opname ${this.micContext.sampleRate} Hz ${this.micContext.state}`)
 
-    const ai = new GoogleGenAI({ apiKey: live.token, httpOptions: { apiVersion: live.apiVersion } })
-    this.session = await ai.live.connect({
-      model: live.model,
-      config: live.config,
-      callbacks: {
-        onmessage: (message) => void this.receive(message),
-        onerror: (event) => {
-          trail(`verbindingsfout: ${event.message}`)
-          this.finish(event.message || 'De verbinding met Jarvis viel weg.')
-        },
-        onclose: (event) => {
-          trail(`verbinding dicht: ${event.code} ${event.reason}`)
-          this.finish(event.code === 1000 ? null : event.reason || 'De verbinding met Jarvis is gesloten.')
-        }
-      }
-    })
+    await this.connect(live)
 
     const worklet = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }))
     await this.micContext.audioWorklet.addModule(worklet)
@@ -217,10 +205,58 @@ export class LiveCall {
     trail('verbonden, luistert')
     this.animate()
     if (live.opening) {
-      this.session.sendClientContent({ turns: [{ role: 'user', parts: [{ text: live.opening }] }], turnComplete: true })
+      this.session?.sendClientContent({ turns: [{ role: 'user', parts: [{ text: live.opening }] }], turnComplete: true })
     } else {
       this.setPhase('listening')
     }
+  }
+
+  /** Opens the connection to Gemini Live with a token from the server. */
+  private async connect(live: JarvisLiveSession): Promise<void> {
+    const ai = new GoogleGenAI({ apiKey: live.token, httpOptions: { apiVersion: live.apiVersion } })
+    let session: Session | null = null
+    session = await ai.live.connect({
+      model: live.model,
+      config: live.config,
+      callbacks: {
+        onmessage: (message) => void this.receive(message),
+        onerror: (event) => trail(`verbindingsfout: ${event.message}`),
+        onclose: (event) => {
+          // A connection replaced by a resumed one closes quietly.
+          if (session !== null && this.session !== session) return
+          trail(`verbinding dicht door ${this.closed ? 'de app' : 'Google'}: ${event.code} ${event.reason}`)
+          if (this.closed) return
+          void this.resumeOrFinish(event.code === 1000 ? null : event.reason || 'De verbinding met Jarvis is gesloten.')
+        }
+      }
+    })
+    this.session = session
+  }
+
+  /**
+   * The connection dropped while the conversation was going: carry on where it was, with
+   * the resumption handle Gemini gave, instead of vanishing mid-sentence.
+   */
+  private async resumeOrFinish(problem: string | null): Promise<void> {
+    if (this.closed) return
+    if (!this.handle || this.resumes >= 3) {
+      this.finish(problem)
+      return
+    }
+    this.resumes += 1
+    trail(`ik ga verder waar we waren (poging ${this.resumes})`)
+    try {
+      await this.connect(await api.jarvis.liveSession({ moment: null, resume: this.handle }))
+      trail('weer verbonden')
+    } catch (error) {
+      trail(`verder gaan lukt niet: ${error instanceof Error ? error.message : String(error)}`)
+      this.finish(problem ?? 'De verbinding met Jarvis viel weg.')
+    }
+  }
+
+  /** Someone is talking into the microphone right now. */
+  get hearing(): boolean {
+    return this.gate.isOpen
   }
 
   // ------------------------------------------------------------ microphone
@@ -272,6 +308,9 @@ export class LiveCall {
 
   private async receive(message: LiveServerMessage): Promise<void> {
     if (this.closed) return
+    const update = message.sessionResumptionUpdate
+    if (update?.resumable && update.newHandle) this.handle = update.newHandle
+    if (message.goAway) trail(`Google sluit de verbinding zo (nog ${String(message.goAway.timeLeft ?? '?')}); ik ga daarna verder`)
     const content = message.serverContent
 
     if (content?.inputTranscription?.text) {

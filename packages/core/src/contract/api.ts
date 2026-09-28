@@ -660,7 +660,11 @@ export interface TimeTrackerAPI {
      * the realtime voice model, the brief and today's day already inside. Refused once this
      * month's spend reaches the cap.
      */
-    liveSession(input: { moment?: 'morning' | 'evening' | null }): Promise<JarvisLiveSession>
+    liveSession(input: {
+      moment?: 'morning' | 'evening' | null
+      /** Carry on a conversation whose connection dropped: the handle Gemini gave for it. */
+      resume?: string | null
+    }): Promise<JarvisLiveSession>
     /**
      * A device's Jarvis trail ("[jarvis] …" lines) into the server log: the phone has no log
      * anyone can read, and a conversation that fails there must still leave a trace.
@@ -698,8 +702,12 @@ export interface JarvisLiveUsage {
 export interface JarvisLiveSpend {
   /** YYYY-MM. */
   month: string
+  /** Everything this month, estimated from the tokens the models report. */
   usd: number
   capUsd: number
+  /** Of which spoken (Gemini Live) and typed (Gemini Flash). */
+  live: number
+  text: number
 }
 
 export interface JarvisAsk {
@@ -732,6 +740,8 @@ export interface JarvisJob {
 export interface JarvisStatus {
   /** No morning conversation yet today (before 14:00): the first contact opens the day. */
   openingDue: boolean
+  /** What Jarvis cost this month so far. */
+  spend: JarvisLiveSpend
   ready: boolean
   provider: string
   model: string

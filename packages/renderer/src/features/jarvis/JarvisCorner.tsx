@@ -207,6 +207,8 @@ export function JarvisCorner() {
   useEffect(() => {
     const timer = setInterval(() => {
       if (!call.current) return
+      // Someone talking is activity, even before any words come back.
+      if (call.current.hearing) lastActivity.current = Date.now()
       if (phaseRef.current === 'listening' && Date.now() - lastActivity.current > QUIET_MS) {
         const ending = call.current
         call.current = null

@@ -57,6 +57,8 @@ export function JarvisVoice({
   const alive = useRef(false)
   const live = useRef<LiveCall | null>(null)
   const [isLive, setIsLive] = useState(false)
+  /** What Jarvis cost this month, shown in the header so it stays in sight. */
+  const [spent, setSpent] = useState<string | null>(null)
   const bridge = typeof window !== 'undefined' ? window.jarvisListen : undefined
 
   // ------------------------------------------------------------ speaking
@@ -236,6 +238,10 @@ export function JarvisVoice({
     setProblem(null)
     const asked = pendingMoment.current
     pendingMoment.current = null
+    void api.jarvis
+      .status()
+      .then((status) => status.spend && setSpent(`${status.spend.usd.toFixed(2)} / ${status.spend.capUsd} deze maand`))
+      .catch(() => undefined)
     // The first contact of the day opens the day, whatever it was opened for.
     void (asked ? Promise.resolve(asked) : api.jarvis.status().then((status) => (status.openingDue ? 'morning' : null)).catch(() => null))
       .then((moment) => {
@@ -303,7 +309,10 @@ export function JarvisVoice({
         >
           Typen
         </button>
-        <span className="text-[15px] font-semibold text-text">Jarvis</span>
+        <span className="flex flex-col items-center leading-tight">
+          <span className="text-[15px] font-semibold text-text">Jarvis</span>
+          {spent && <span className="text-[11px] text-text-dim tabular-nums">{spent}</span>}
+        </span>
         <button
           onClick={onClose}
           aria-label="Sluiten"

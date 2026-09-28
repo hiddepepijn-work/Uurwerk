@@ -154,7 +154,11 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
           <div className="flex min-w-0 flex-1 flex-col">
             <h2 className="text-[17px] font-semibold">Jarvis</h2>
             <span className="truncate text-[12px] text-text-dim">
-              {status ? (status.ready ? `${status.model}${status.voice ? ' · Orus' : ' · zonder stem'}` : status.problem) : 'Verbinden…'}
+              {status
+                ? status.ready
+                  ? `${status.model}${status.spend ? ` · ${status.spend.usd.toFixed(2)} / ${status.spend.capUsd} deze maand` : ''}`
+                  : status.problem
+                : 'Verbinden…'}
             </span>
           </div>
           <button

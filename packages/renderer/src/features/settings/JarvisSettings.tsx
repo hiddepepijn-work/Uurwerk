@@ -1,10 +1,16 @@
+import { useEffect, useState } from 'react'
+
+import type { JarvisLiveSpend } from '@core/contract/api.js'
 import type { Settings } from '@core/contract/types.js'
 
+import { api } from '../../api/client.js'
 import { SettingRow, SettingsSection, Toggle } from './SettingsSection.js'
 
 /**
- * The laptop's wake word. "Hey Jarvis" is heard by three small models on this machine
- * (openWakeWord); nothing leaves it until you say it. The Jarvis hotkey works either way.
+ * Jarvis: the laptop's wake word, and what he costs. "Hey Jarvis" is heard by three small
+ * models on this machine (openWakeWord); nothing leaves it until you say it. The cost is
+ * the server's own count from the tokens the models report — Google's bill is the truth,
+ * this is close to it.
  */
 export function JarvisSettings({
   settings,
@@ -13,6 +19,18 @@ export function JarvisSettings({
   settings: Settings
   onPatch: (changes: Partial<Settings>) => void
 }) {
+  const [spend, setSpend] = useState<JarvisLiveSpend | null>(null)
+
+  useEffect(() => {
+    void api.jarvis
+      .status()
+      .then((status) => setSpend(status.spend ?? null))
+      .catch(() => setSpend(null))
+  }, [])
+
+  const euro = (usd: number): string => `$${usd.toFixed(2)}`
+  const share = spend ? Math.min(100, (spend.usd / spend.capUsd) * 100) : 0
+
   return (
     <SettingsSection
       title="Jarvis"
@@ -20,6 +38,31 @@ export function JarvisSettings({
     >
       <SettingRow label="Luisteren naar “Hey Jarvis”" hint="Houdt de microfoon open; Windows toont dan het microfoon-icoontje">
         <Toggle checked={settings.jarvisWakeWord} onChange={(next) => onPatch({ jarvisWakeWord: next })} />
+      </SettingRow>
+      <SettingRow
+        label="Verbruik deze maand"
+        hint="Geschat uit wat de modellen melden. De echte rekening staat op aistudio.google.com/spend."
+      >
+        {spend ? (
+          <div className="flex min-w-[220px] flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-3 text-[14px]">
+              <span className="font-semibold text-text tabular-nums">
+                {euro(spend.usd)} <span className="font-normal text-text-dim">van {euro(spend.capUsd)}</span>
+              </span>
+              <span className="text-[12px] text-text-dim tabular-nums">
+                praten {euro(spend.live)} · typen {euro(spend.text)}
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-bg">
+              <div
+                className={`h-full rounded-full ${share > 80 ? 'bg-prio-med' : 'bg-accent'}`}
+                style={{ width: `${share}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <span className="text-[13px] text-text-dim">Niet bereikbaar (server)</span>
+        )}
       </SettingRow>
     </SettingsSection>
   )
