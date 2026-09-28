@@ -248,8 +248,9 @@ function applyContentSecurityPolicy(): void {
   // blob: the audio worklets (live microphone, wake word) are loaded from blob URLs.
   const scriptSrc = devServer ? `'self' 'unsafe-inline' blob: ${devServer}` : `'self' blob:`
   // Jarvis live talks straight to Gemini Live over a WebSocket.
-  const gemini = 'wss://generativelanguage.googleapis.com https://generativelanguage.googleapis.com'
-  const connectSrc = devServer ? `'self' ${devServer} ws://localhost:* ${gemini}` : `'self' ${gemini}`
+  // Our own voice line (the server's WebSocket) and OpenAI Realtime are the other voices.
+  const voices = 'wss://generativelanguage.googleapis.com https://generativelanguage.googleapis.com wss://uurwerk.duckdns.org wss://api.openai.com'
+  const connectSrc = devServer ? `'self' ${devServer} ws://localhost:* ${voices}` : `'self' ${voices}`
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
