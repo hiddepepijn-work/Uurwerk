@@ -194,6 +194,8 @@ export async function speakSentence(text: string): Promise<Buffer> {
 
 /** Words that bridge a slow answer, made once and kept: no waiting for Edge on these. */
 const FILLERS = ['Even kijken.', 'Momentje.', 'Eens zien.']
+/** Off since 28 Sep 2026: Hidde heard "momentje" as talking over him (K6). Silence is fine. */
+const FILLERS_ON = false
 const FILLER_AFTER_MS = 1000
 const fillers = new Map<string, Promise<Buffer | null>>()
 
@@ -358,7 +360,7 @@ class FluxListener {
       .then(
         (terms) =>
           new Promise<boolean>((resolve) => {
-            const query = new URLSearchParams({ model: 'flux-general-multi', language_hint: 'nl', encoding: 'linear16', sample_rate: String(SAMPLE_RATE) })
+            const query = new URLSearchParams({ model: 'flux-general-multi', language_hint: 'nl', encoding: 'linear16', sample_rate: String(SAMPLE_RATE), eot_threshold: '0.85' })
             for (const term of terms) query.append('keyterm', term)
             this.socket = new WebSocketClient(`wss://api.deepgram.com/v2/listen?${query}`, { headers: { Authorization: `Token ${key}` } })
             this.socket.on('open', () => resolve(true))
@@ -660,7 +662,7 @@ class VoiceSession {
     // No words after a second: a short "momentje" in his voice, so silence never feels broken.
     // At most one per turn; the tool rounds use the same one.
     const filler = (): void => {
-      if (saidSomething || turn !== this.turn) return
+      if (!FILLERS_ON || saidSomething || turn !== this.turn) return
       saidSomething = true
       this.sayFiller(turn)
     }

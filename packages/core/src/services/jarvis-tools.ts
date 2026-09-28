@@ -123,6 +123,29 @@ export const TOOLS: ToolSpec[] = [
     writes: false
   },
   {
+    name: 'upcoming',
+    description: 'Wat er de komende weken vastligt: afspraken en hele-dag-items (verjaardagen, vrij, deadlines), zonder de takenplanning. Voor "wat staat er de komende weken" of "belangrijke afspraken".',
+    parameters: object({ weeks: { type: 'integer', minimum: 1, maximum: 8, description: 'Standaard 4' } }),
+    writes: false
+  },
+  {
+    name: 'log_worked_time',
+    description: 'Gewerkte uren invullen die niet getimed zijn, ook achteraf ("ik heb vandaag van 9 tot 5 aan X gewerkt"). Pauzes gaan eraf. Optioneel de taak.' + PROPOSAL,
+    parameters: object(
+      {
+        date,
+        start: clock,
+        end: clock,
+        taskId: { type: 'string', description: 'De taak (t:…), als hij die noemt' },
+        breaks: { type: 'array', items: object({ start: clock, end: clock }, ['start', 'end']), description: 'Pauzes binnen die tijd' },
+        note: { type: 'string' }
+      },
+      ['date', 'start', 'end']
+    ),
+    writes: true,
+    proposes: true
+  },
+  {
     name: 'report_problem',
     description: 'Hidde is niet tevreden over hoe je iets deed ("dat ging fout", "noteer een klacht"): leg het vast, met het gesprek erbij, zodat het verbeterd wordt. Direct, geen voorstel. Zeg daarna kort het nummer.',
     parameters: object(
@@ -164,8 +187,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'create_task',
     description:
-      'Nieuwe taak; zet alles wat je hoorde in notes. Moet hij meteen op een tijd: geef date, start en end mee, dan is aanmaken en inplannen één voorstel.' +
-      PROPOSAL,
+      'Nieuwe taak; zet alles wat je hoorde in notes. Zonder tijd: staat meteen op de lijst, geen ja nodig. Moet hij meteen op een tijd: geef date, start en end mee, dan is aanmaken en inplannen één voorstel (na ja: confirm).',
     parameters: object(
       {
         title: { type: 'string' },
@@ -666,6 +688,8 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
       return `Taak "${await taskTitle(input.taskId)}" uit de planning halen ${input.date ? `op ${String(input.date)}` : 'vanaf nu'}`
     case 'clear_planning':
       return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} wissen (afspraken en wat Hidde zelf zette blijven)`
+    case 'log_worked_time':
+      return `Gewerkt ${String(input.date)} ${String(input.start)}–${String(input.end)}${Array.isArray(input.breaks) && input.breaks.length ? `, ${input.breaks.length} pauze(s) eraf` : ''}`
     case 'create_day_item':
       return `Hele dag: "${String(input.title)}" op ${String(input.date)}${input.endDate && input.endDate !== input.date ? ` t/m ${String(input.endDate)}` : ''}`
     case 'create_appointment':
@@ -917,6 +941,17 @@ async function cancel(api: TimeTrackerAPI, input: Input): Promise<unknown> {
 export async function runTool(api: TimeTrackerAPI, name: string, input: Input): Promise<unknown> {
   const spec = TOOLS.find((tool) => tool.name === name)
   if (!spec) throw new Error(`Onbekende tool: ${name}`)
+  // A to-do without a time goes straight onto the list, like an idea: asking "Zal ik dat zo
+  // doen?" for that annoyed Hidde (K3). Anything with a time is still a proposal.
+  if (name === 'create_task' && !input.date && !input.start && !input.end) {
+    try {
+      const resolved = await resolveRefs(api, input)
+      await precheck(api, name, resolved)
+      return { done: await execute(api, name, resolved), next: 'Staat op de lijst. Zeg het kort; vraag niets meer.' }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) }
+    }
+  }
   if (spec.proposes) return propose(api, name, input)
 
   switch (name) {
@@ -1054,6 +1089,21 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
           notes: event.description
         }))
       }
+    }
+
+    case 'upcoming': {
+      const weeks = Math.min(8, Math.max(1, Number(input.weeks) || 4))
+      const start = dayStart(isoDate(new Date()))
+      const events = (await api.calendar.eventsInRange(start, start + weeks * 7 * 86_400_000))
+        .filter((event) => !event.cancelled && event.kind !== 'travel')
+        .sort((a, b) => a.startsAt - b.startsAt)
+      return events.map((event) => ({
+        date: isoDate(new Date(event.startsAt)),
+        weekday: new Date(event.startsAt).toLocaleDateString('nl-NL', { weekday: 'long' }),
+        when: event.allDay ? 'hele dag' : `${clockOf(event.startsAt)}-${clockOf(event.endsAt)}`,
+        title: event.title,
+        area: event.areaId
+      }))
     }
 
     case 'list_tasks': {
@@ -1308,6 +1358,34 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
       const left = (await Promise.all(days.map((day) => ours(day)))).flat().length
       if (left > 0) throw new Error(`${removed} blokken verwijderd, maar er staan er nog ${left}.`)
       return { removedBlocks: removed, from: days[0], to: days[days.length - 1] }
+    }
+
+    case 'log_worked_time': {
+      const day = String(input.date)
+      const toMin = (value: unknown): number => { const [h, m] = String(value).split(':').map(Number); return (h ?? 0) * 60 + (m ?? 0) }
+      const from = toMin(input.start)
+      const to = toMin(input.end)
+      if (to <= from) throw new Error('Het einde moet na het begin liggen.')
+      // The span minus its breaks, as separate stretches.
+      const breaks = (Array.isArray(input.breaks) ? (input.breaks as Array<{ start: string; end: string }>) : [])
+        .map((pause) => [Math.max(from, toMin(pause.start)), Math.min(to, toMin(pause.end))] as const)
+        .filter(([a, b]) => b > a)
+        .sort((a, b) => a[0] - b[0])
+      const pieces: Array<[number, number]> = []
+      let cursor = from
+      for (const [a, b] of breaks) {
+        if (a > cursor) pieces.push([cursor, a])
+        cursor = Math.max(cursor, b)
+      }
+      if (cursor < to) pieces.push([cursor, to])
+      const shares = typeof input.taskId === 'string' ? [{ taskId: input.taskId, sharePct: 100 }] : []
+      const note = typeof input.note === 'string' ? input.note : 'Ingevuld door Jarvis'
+      let minutes = 0
+      for (const [a, b] of pieces) {
+        await api.attribution.addStretch({ date: day, startMin: a, endMin: b, shares, note })
+        minutes += b - a
+      }
+      return { logged: `${Math.floor(minutes / 60)}u${minutes % 60 ? ` ${minutes % 60}m` : ''}`, date: day, stretches: pieces.length }
     }
 
     case 'create_day_item': {

@@ -126,9 +126,10 @@ terugreis als reisblokken.
 | Mag zonder te vragen | Alleen na bevestiging | Nooit |
 |---|---|---|
 | Agenda, taken, planning en uren lezen | Afspraak aanmaken/verzetten/verwijderen | Iets publiceren naar begeleider/docent |
-| Samenvatten, voorstellen doen | Taak aanmaken/wijzigen/afvinken | Mail versturen |
-| Timer-status noemen | Dagplan accepteren of herplannen | Uren van een eerdere dag aanpassen |
-| | Timer starten/stoppen | Instellingen of koppelingen wijzigen |
+| Samenvatten, voorstellen doen | Taak inplannen/wijzigen/afvinken | Mail versturen |
+| Timer-status noemen | Dagplan accepteren of herplannen | Instellingen of koppelingen wijzigen |
+| To-do op de lijst zetten (zonder tijd) | Gewerkte uren invullen, ook achteraf | |
+| Idee in de ideeënpot | Timer starten/stoppen | |
 
 Regel: bij twijfel vraagt hij. Wat hij veranderd heeft, zegt hij hardop terug.
 

@@ -60,7 +60,7 @@ async function proposeAndConfirm(name: string, input: Record<string, unknown>): 
 
 describe('Jarvis tools', () => {
   it('only proposes: nothing is written before confirm', async () => {
-    const result = (await runTool(api, 'create_task', { title: 'Iets', areaId: 'personal', noDeadline: true })) as Proposed
+    const result = (await runTool(api, 'create_task', { title: 'Iets', areaId: 'personal', noDeadline: true, date: '2026-10-02', start: '10:00', end: '11:00' })) as Proposed
     expect(result.summary).toContain('Iets')
     expect(await api.tasks.list({ status: 'active' })).toHaveLength(0)
   })
@@ -72,7 +72,8 @@ describe('Jarvis tools', () => {
       priority: 'high',
       estimateMinutes: 120,
       dueDate: '2026-10-02',
-      notes: 'Klaar als: ingeleverd in Brightspace\nBelangrijk: ja'
+      notes: 'Klaar als: ingeleverd in Brightspace\nBelangrijk: ja',
+      date: '2026-10-02', start: '10:00', end: '11:00'
     })) as Proposed
     const first = (await runTool(api, 'confirm', {})) as Confirmed
     expect(first.executed).toHaveLength(1)
@@ -92,13 +93,13 @@ describe('Jarvis tools', () => {
   })
 
   it('reports a failure instead of claiming success', async () => {
-    const result = await proposeAndConfirm('create_task', { title: 'X', areaId: 'school', projectName: 'Bestaat niet', noDeadline: true })
+    const result = await proposeAndConfirm('create_task', { title: 'X', areaId: 'school', projectName: 'Bestaat niet', noDeadline: true, date: '2026-10-02', start: '10:00', end: '11:00' })
     expect(result.executed).toHaveLength(0)
     expect(result.failed[0]!.error).toContain('Bestaat niet')
   })
 
   it('drops proposals on cancel', async () => {
-    await runTool(api, 'create_task', { title: 'Nee toch', areaId: 'personal', noDeadline: true })
+    await runTool(api, 'create_task', { title: 'Nee toch', areaId: 'personal', noDeadline: true, date: '2026-10-02', start: '10:00', end: '11:00' })
     expect(await runTool(api, 'cancel', {})).toEqual({ cancelled: 1 })
     expect(await runTool(api, 'confirm', {})).toHaveProperty('error')
     expect(await api.tasks.list({ status: 'active' })).toHaveLength(0)
@@ -485,8 +486,19 @@ describe('Jarvis tools: to-dos and the ideas pot', () => {
   it('asks when a to-do has to be done by, but needs no time', async () => {
     const missing = (await runTool(api, 'create_task', { title: 'Paspoort verlengen', areaId: 'personal' })) as { error?: string }
     expect(missing.error).toContain('Wanneer moet het af zijn')
-    const done = await proposeAndConfirm('create_task', { title: 'Paspoort verlengen', areaId: 'personal', dueDate: next(6) })
+    // With the day it is due, a to-do goes straight onto the list: no proposal, no "ja" (K3).
+    const done = (await runTool(api, 'create_task', { title: 'Paspoort verlengen', areaId: 'personal', dueDate: next(6) })) as { done?: unknown; pendingId?: string }
+    expect(done.pendingId).toBeUndefined()
+    expect(done.done).toBeTruthy()
+    expect(await api.assistant.pendingProposals()).toEqual([])
+    expect((await api.tasks.list({ status: 'active' })).map((task) => task.title)).toContain('Paspoort verlengen')
+  })
+
+  it('fills in worked hours afterwards, without the breaks, after a yes', async () => {
+    const task = await api.tasks.create({ title: 'Architectuur onderzoek', areaId: 'stage' })
+    const done = await proposeAndConfirm('log_worked_time', { date: '2026-09-21', start: '09:00', end: '17:00', taskId: task.id, breaks: [{ start: '12:00', end: '12:30' }] })
     expect(done.failed).toEqual([])
+    expect(done.executed[0]!.result).toMatchObject({ logged: '7u 30m', stretches: 2 })
   })
 
   it('puts an idea in the pot straight away, with the project that fits, and never plans it', async () => {
