@@ -139,7 +139,7 @@ export const CHANNELS = {
     'pendingProposals',
     'settleProposal'
   ],
-  jarvis: ['ask', 'askStart', 'askJob', 'status', 'liveSession', 'liveUsage', 'runTool']
+  jarvis: ['ask', 'askStart', 'askJob', 'status', 'liveSession', 'liveUsage', 'runTool', 'clientLog']
 } as const
 
 export type ChannelDomain = keyof typeof CHANNELS

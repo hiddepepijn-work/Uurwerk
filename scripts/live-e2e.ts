@@ -69,7 +69,7 @@ const api = buildImplementation(createBackend(existsSync(dbCopy) ? dbCopy : ':me
 
 /** Dutch speech as the phone would send it: 16 kHz 16-bit mono PCM. */
 async function voice(key: string, text: string): Promise<Int16Array> {
-  const wav = await speakGemini(text, key, 'Kore', 'gemini-3.8-flash-tts')
+  const wav = await speakGemini(text, key, 'Kore', 'gemini-3.8-flash-lite-tts')
   const pcm24 = new Int16Array(wav.buffer.slice(wav.byteOffset + 44, wav.byteOffset + wav.byteLength))
   const out = new Int16Array(Math.floor((pcm24.length * 2) / 3))
   for (let i = 0; i < out.length; i++) {

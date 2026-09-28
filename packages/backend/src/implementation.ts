@@ -827,6 +827,7 @@ export function buildImplementation(
       ask: async (input) => jarvisHost().ask(input),
       askStart: async (input) => jarvisHost().askStart(input),
       askJob: async (jobId) => jarvisHost().askJob(jobId),
+      clientLog: async (input) => jarvisHost().clientLog(input),
       status: async () => jarvisHost().status(),
       liveSession: async (input) => jarvisHost().liveSession(input),
       liveUsage: async (input) => jarvisHost().liveUsage(input),

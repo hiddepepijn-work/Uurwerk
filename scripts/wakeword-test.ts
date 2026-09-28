@@ -42,7 +42,7 @@ function to16k(wav: Uint8Array): Int16Array {
 async function voiced(text: string, key: string, voice: string): Promise<Uint8Array> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await speakGemini(text, key, voice, 'gemini-3.8-flash-tts')
+      return await speakGemini(text, key, voice, 'gemini-3.8-flash-lite-tts')
     } catch (error) {
       if (attempt >= 4 || !String(error).includes('429')) throw error
       await new Promise((resolve) => setTimeout(resolve, 20_000))

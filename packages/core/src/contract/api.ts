@@ -661,6 +661,11 @@ export interface TimeTrackerAPI {
      * month's spend reaches the cap.
      */
     liveSession(input: { moment?: 'morning' | 'evening' | null }): Promise<JarvisLiveSession>
+    /**
+     * A device's Jarvis trail ("[jarvis] …" lines) into the server log: the phone has no log
+     * anyone can read, and a conversation that fails there must still leave a trace.
+     */
+    clientLog(input: { device: string; lines: string[] }): Promise<void>
     /** What a live conversation used, reported when it ends; it counts towards the cap. */
     liveUsage(input: JarvisLiveUsage): Promise<JarvisLiveSpend>
     /** One of Jarvis's tools, run on this device's copy: what the live model asked for. */

@@ -227,12 +227,30 @@ async function start(): Promise<void> {
 
   await sync.start()
 
+  // Jarvis's trail ("[jarvis] …" lines) goes to the server log every few seconds: the phone
+  // keeps no log anyone can read, and a conversation that fails here must leave a trace.
+  const trail: string[] = []
+  for (const level of ['info', 'warn', 'error'] as const) {
+    const original = console[level].bind(console)
+    console[level] = (...args: unknown[]) => {
+      original(...args)
+      const text = args.map((arg) => (arg instanceof Error ? arg.message : typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' ')
+      if (text.startsWith('[jarvis]')) trail.push(`${new Date().toTimeString().slice(0, 8)} ${text}`)
+    }
+  }
+  setInterval(() => {
+    if (trail.length === 0 || !sync.paired) return
+    const lines = trail.splice(0, trail.length)
+    void window.api!.jarvis.clientLog({ device: 'iphone', lines }).catch(() => trail.unshift(...lines.slice(-30)))
+  }, 4000)
+
   onQuestionTapped((target, moment) => {
     // Jarvis takes the moment when he can; the plain planner and read-out are the fallback
     // for when the server or its keys are not there. A tap on a notification often wakes
     // the phone with no network yet, so he is asked a few times before giving up — and the
     // reason is shown, so a read-out never silently stands in for Jarvis.
     void (async () => {
+      console.info(`[jarvis] melding getikt: ${moment}`)
       let problem = ''
       for (const wait of [0, 1500, 3500, 6000]) {
         if (wait) await new Promise((resolve) => setTimeout(resolve, wait))
@@ -246,8 +264,10 @@ async function start(): Promise<void> {
           break
         } catch (error) {
           problem = error instanceof Error ? error.message : String(error)
+          console.info(`[jarvis] status mislukt: ${problem}`)
         }
       }
+      console.info(`[jarvis] niet bereikbaar, korte versie: ${problem}`)
       emit('notify', { level: 'warn', message: `Jarvis niet bereikbaar (${problem}); de korte versie in plaats daarvan.` })
       emit('ui:open', { target })
       if (moment === 'morning') void speakMorning(window.api!)

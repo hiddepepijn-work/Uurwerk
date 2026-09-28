@@ -235,7 +235,11 @@ export function createJarvis(
         const geminiKey = secrets.get('geminiKey')
         const azureKey = secrets.get('azureSpeechKey')
         const attempts: Array<[string, () => Promise<Uint8Array>]> = []
-        if (geminiKey) attempts.push(['audio/wav', () => speakGemini(turn.text, geminiKey, voice, ttsModel)])
+        if (geminiKey) {
+          attempts.push(['audio/wav', () => speakGemini(turn.text, geminiKey, voice, ttsModel)])
+          // Its own daily quota: the same voice when the first model's hundred a day are used.
+          attempts.push(['audio/wav', () => speakGemini(turn.text, geminiKey, voice, 'gemini-3.8-flash-lite-tts')])
+        }
         if (azureKey) attempts.push(['audio/mpeg', () => speak(turn.text, azureKey, region)])
         attempts.push(['audio/mpeg', () => speakFree(turn.text)])
         for (const [type, attempt] of attempts) {
@@ -268,6 +272,11 @@ export function createJarvis(
 
     async runTool(input) {
       return runTool(api, input.name, input.args)
+    },
+
+    async clientLog(input) {
+      const device = String(input.device ?? '?').slice(0, 20)
+      for (const line of (input.lines ?? []).slice(-40)) log.info(`Jarvis on ${device}: ${String(line).slice(0, 300)}`)
     },
 
     async liveUsage(input) {

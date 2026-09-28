@@ -217,7 +217,9 @@ export function JarvisVoice({
         setIsLive(true)
         return true
       } catch (error) {
-        if (alive.current) setProblem(`Live lukt niet (${error instanceof Error ? error.message : String(error)}), dus even op de oude manier.`)
+        const message = error instanceof Error ? error.message : String(error)
+        console.info(`[jarvis] live lukt niet: ${message}`)
+        if (alive.current) setProblem(`Live lukt niet (${message}), dus even op de oude manier.`)
         return false
       }
     },

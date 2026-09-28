@@ -49,12 +49,13 @@ jobs:
         run: npm run build:mobile
 
       # iOS plays only PCM-style formats as a notification sound; the clips are kept as
-      # MP3 in the repo and converted here, where afconvert comes with the system.
+      # WAV in the repo (Jarvis's voice, scripts/voice-clips.ts) and converted here, where
+      # afconvert comes with the system.
       - name: Voice clips to .caf
         run: |
           mkdir -p packages/mobile/dist/sounds
-          for clip in packages/mobile/sounds/*.mp3; do
-            name=$(basename "$clip" .mp3)
+          for clip in packages/mobile/sounds/*.wav; do
+            name=$(basename "$clip" .wav)
             afconvert -f caff -d LEI16@24000 "$clip" "packages/mobile/dist/sounds/$name.caf"
           done
           ls -la packages/mobile/dist/sounds
