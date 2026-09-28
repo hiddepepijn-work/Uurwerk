@@ -36,10 +36,13 @@ import { invalidatedDomains } from './announce.js'
 import type { Backend } from './create.js'
 import { emitEvent, host, type SecretKey } from './host.js'
 import { log } from './log.js'
+import { watchServer } from '@core/sync/live.js'
 
 const ROUND_EVERY_MS = 30_000
 /** How long after a local edit the next round starts: soon, but not once per keystroke. */
 const SETTLE_MS = 2_000
+/** How long after the server announces a change the pull starts: a burst of edits is one pull. */
+const PULL_MS = 250
 const TIMEOUT_MS = 30_000
 /** Screenshots per round, so a backlog after a week offline does not block the rows. */
 const FILES_PER_ROUND = 40
@@ -54,6 +57,8 @@ interface SyncResponse {
 export class SyncClient {
   private timer: NodeJS.Timeout | null = null
   private settleTimer: NodeJS.Timeout | null = null
+  private pullTimer: NodeJS.Timeout | null = null
+  private stopLive: (() => void) | null = null
   private running: Promise<void> | null = null
   private online = false
   private lastSyncAt: number | null = null
@@ -83,13 +88,28 @@ export class SyncClient {
     if (!this.paired) return
     this.timer = setInterval(() => void this.round(), ROUND_EVERY_MS)
     void this.round()
+    // Instant: pull as soon as the server says something changed (another device, Jarvis).
+    this.stopLive = watchServer(this.serverUrl(), host().secrets.get('deviceToken') ?? '', () => this.pull())
   }
 
   stop(): void {
     if (this.timer) clearInterval(this.timer)
     if (this.settleTimer) clearTimeout(this.settleTimer)
+    if (this.pullTimer) clearTimeout(this.pullTimer)
+    this.stopLive?.()
     this.timer = null
     this.settleTimer = null
+    this.pullTimer = null
+    this.stopLive = null
+  }
+
+  /** The server announced a change: fetch it now, once for a burst. */
+  private pull(): void {
+    if (this.pullTimer) return
+    this.pullTimer = setTimeout(() => {
+      this.pullTimer = null
+      void this.round()
+    }, PULL_MS)
   }
 
   /** Something changed locally: sync soon. Cheap to call on every write. */

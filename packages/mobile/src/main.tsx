@@ -340,9 +340,11 @@ async function start(): Promise<void> {
   void Capacitor.addListener('pause', () => {
     void database.flush()
     void sync.round()
+    sync.quiet()
   })
   void Capacitor.addListener('resume', () => {
     void sync.round()
+    sync.listen()
     void scheduleNotifications(reminders).catch(() => undefined)
     refreshLive()
     refreshWidgets()

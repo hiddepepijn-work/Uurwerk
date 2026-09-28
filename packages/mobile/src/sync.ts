@@ -24,9 +24,12 @@ import {
 } from '@core/sync/engine.js'
 
 import { stageIncoming } from './database.js'
+import { watchServer } from '@core/sync/live.js'
 
 const ROUND_EVERY_MS = 30_000
 const SETTLE_MS = 2_000
+/** How long after the server announces a change the pull starts: a burst of edits is one pull. */
+const PULL_MS = 250
 const TIMEOUT_MS = 30_000
 
 const KEY_URL = 'serverUrl'
@@ -36,6 +39,8 @@ const KEY_ADOPT = 'adoptAfterSwap'
 export class PhoneSync {
   private timer: ReturnType<typeof setInterval> | null = null
   private settle: ReturnType<typeof setTimeout> | null = null
+  private pullTimer: ReturnType<typeof setTimeout> | null = null
+  private stopLive: (() => void) | null = null
   private running: Promise<void> | null = null
   private online = false
   private lastSyncAt: number | null = null
@@ -63,6 +68,27 @@ export class PhoneSync {
     if (!this.paired) return
     this.timer = setInterval(() => void this.round(), ROUND_EVERY_MS)
     void this.round()
+    this.listen()
+  }
+
+  /**
+   * Instant: pull as soon as the server says something changed. iOS cuts the connection when
+   * the app goes to the background, so main.tsx calls quiet() on pause and listen() on resume.
+   */
+  listen(): void {
+    if (!this.paired || this.stopLive) return
+    this.stopLive = watchServer(this.url, this.token, () => {
+      if (this.pullTimer) return
+      this.pullTimer = setTimeout(() => {
+        this.pullTimer = null
+        void this.round()
+      }, PULL_MS)
+    })
+  }
+
+  quiet(): void {
+    this.stopLive?.()
+    this.stopLive = null
   }
 
   get paired(): boolean {
@@ -156,6 +182,7 @@ export class PhoneSync {
   async unpair(): Promise<SyncStatus> {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
+    this.quiet()
     this.url = ''
     this.token = ''
     await Preferences.remove({ key: KEY_URL })

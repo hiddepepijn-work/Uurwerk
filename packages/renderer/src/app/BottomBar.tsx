@@ -7,7 +7,7 @@ import { useSlidingThumb } from '../ui/useSlidingThumb.js'
 const PRIMARY: Screen[] = ['today', 'week', 'tasks']
 
 /** Diameter of the soft green glow that follows the active tab. */
-const GLOW = 50
+const PILL = 54
 
 /**
  * The phone's navigation: a pill floating along the bottom instead of the rail down the
@@ -74,13 +74,14 @@ export function BottomBar({
       >
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-0 rounded-full bg-rail-active"
+          className="pointer-events-none absolute top-0 left-0 rounded-[22px] bg-text"
           style={{
-            width: GLOW,
-            height: GLOW,
+            // A white block behind the page you are on, like the sidebar on the laptop.
+            width: rect ? rect.width + 6 : 0,
+            height: PILL,
             opacity: rect ? 1 : 0,
             transform: rect
-              ? `translate(${rect.x + rect.width / 2 - GLOW / 2}px, ${rect.y + rect.height / 2 - GLOW / 2}px)`
+              ? `translate(${rect.x - 3}px, ${rect.y + rect.height / 2 - PILL / 2}px)`
               : undefined,
             // The hook's transition: instant on first placement, a spring after.
             transition: thumbStyle.transition
@@ -126,7 +127,7 @@ function Tab({
       aria-current={active ? 'page' : undefined}
       data-active={active}
       className={`relative z-[1] flex w-[62px] flex-col items-center gap-0.5 text-[11px] font-bold transition-colors duration-300 ${
-        active ? 'text-text' : 'text-text-faint'
+        active ? 'text-bg' : 'text-text-faint'
       }`}
     >
       {/* The icon pops as its tab becomes active. */}
