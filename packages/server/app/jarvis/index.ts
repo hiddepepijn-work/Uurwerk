@@ -27,7 +27,7 @@ import { briefForModel } from './brief.js'
 import { claude, compatible, openai, usageListeners, type Conversation, type Effort, type Provider } from './providers.js'
 import { effortFor } from './effort.js'
 import { addTextUsage, addUsage, liveSession, openaiSession, readSpend } from './live.js'
-import { configureVoice, VOICE_PATH, voiceTicket } from './voice.js'
+import { BUSY_MESSAGE, configureVoice, VOICE_PATH, voiceBusy, voiceTicket } from './voice.js'
 import { speak, speakFree, speakGemini } from './speech.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 
@@ -296,6 +296,8 @@ export function createJarvis(
     },
 
     async liveSession(input) {
+      // One conversation at a time, whatever the device or the voice (see voice.ts).
+      if (voiceBusy()) throw new Error(BUSY_MESSAGE)
       if (input.provider === 'cascade') {
         if (!secrets.get('geminiKey') || !secrets.get('openaiKey')) throw new Error('Voor de eigen lijn zijn geminiKey en openaiKey nodig op de server.')
         const spend = readSpend(usagePath)

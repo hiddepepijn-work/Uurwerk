@@ -48,6 +48,22 @@ export interface VoiceDeps {
 let deps: VoiceDeps | null = null
 
 /**
+ * Talks going on right now, with when each last heard anything. One at a time: on 28 Sep
+ * 2026 "Goed Jarvis" on the phone woke the laptop too, which heard the phone's voice say
+ * "Zal ik dat zo doen?" and his "ja", and made an appointment nobody asked for.
+ */
+const talking = new Map<object, number>()
+const BUSY_MS = 90_000
+
+/** Is Jarvis already in a conversation (on some device) that is still alive? */
+export function voiceBusy(now = Date.now()): boolean {
+  for (const last of talking.values()) if (now - last < BUSY_MS) return true
+  return false
+}
+
+export const BUSY_MESSAGE = 'Jarvis is al in gesprek op je andere apparaat.'
+
+/**
  * The last conversation, so a new one within half an hour (the same day) carries on from it:
  * "weet je nog waar we het over hadden" got a blank. One person, so one memory.
  */
@@ -417,7 +433,9 @@ class VoiceSession {
       history: carried
     })
 
+    talking.set(this, Date.now())
     ws.on('message', (data, isBinary) => {
+      talking.set(this, Date.now())
       if (isBinary) {
         const pcm = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer)
         this.utterance.push(pcm)
@@ -639,6 +657,7 @@ class VoiceSession {
   private async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    talking.delete(this)
     for (const resolve of this.tools.values()) resolve({ error: 'Het gesprek is gesloten.' })
     this.tools.clear()
     recent = { history: this.brain.conversation, endedAt: Date.now(), day: dayKey() }

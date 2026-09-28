@@ -653,6 +653,8 @@ export class LiveCall {
     try {
       return await api.jarvis.liveSession({ moment, provider: chosen })
     } catch (error) {
+      // Busy on another device: no second conversation, not even through Gemini.
+      if (error instanceof Error && /al in gesprek/.test(error.message)) throw error
       trail(`${chosen} start niet (${error instanceof Error ? error.message : String(error)}); dan Gemini`)
       return api.jarvis.liveSession({ moment, provider: 'gemini' })
     }

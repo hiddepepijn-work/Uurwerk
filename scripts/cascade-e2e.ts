@@ -24,7 +24,7 @@ import type { TimeTrackerAPI } from '@core/contract/api.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 
 import { SYSTEM } from '../packages/server/app/jarvis/index.js'
-import { configureVoice, handleVoiceUpgrade, VOICE_PATH, voiceTicket } from '../packages/server/app/jarvis/voice.js'
+import { configureVoice, handleVoiceUpgrade, VOICE_PATH, voiceBusy, voiceTicket } from '../packages/server/app/jarvis/voice.js'
 import { speakGemini } from '../packages/server/app/jarvis/speech.js'
 
 function key(name: string): string {
@@ -168,6 +168,9 @@ async function main(): Promise<void> {
   }
 
   await connect()
+  await sleep(300)
+  // A second device may not start a conversation now.
+  const busyWhileTalking = voiceBusy()
 
   const say = async (text: string): Promise<Turn> => {
     const pcm = await clip(text)
@@ -212,6 +215,9 @@ ${remembers ? '✓' : '✗'} nieuw gesprek, "Wat hebben we net samen ingepland?"
    Jarvis: ${again.reply.trim()}`)
   socket.close(1000)
   await sleep(3000)
+  const freeAfter = !voiceBusy()
+  if (!busyWhileTalking || !freeAfter) problems += 1
+  console.log(`\n${busyWhileTalking && freeAfter ? '✓' : '✗'} één gesprek tegelijk: bezet tijdens het gesprek ${busyWhileTalking}, vrij erna ${freeAfter}`)
   console.log(`\nkosten (server-teller): ${existsSync(usagePath) ? readFileSync(usagePath, 'utf8') : '–'}`)
   const blocks = (await api.plans.day(new Date(Date.now() + 86_400_000).toISOString().slice(0, 10))).blocks.filter((block) => /kast/i.test(block.taskTitle ?? ''))
   console.log(`kast fixen in de planning van morgen: ${blocks.map((block) => `${block.startMin / 60}:00`).join(', ') || 'niet'}`)
