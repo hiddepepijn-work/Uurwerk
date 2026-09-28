@@ -7,6 +7,8 @@ import {
   FolderIcon,
   GearIcon
 } from '../ui/icons.js'
+import mark from '../assets/uurwerk-mark.png'
+import wordmark from '../assets/uurwerk-wordmark.png'
 import { HotkeyLegend } from './HotkeyLegend.js'
 
 export type Screen =
@@ -48,13 +50,8 @@ export function IconRail({
   return (
     <nav className="flex w-[232px] shrink-0 flex-col gap-1 overflow-y-auto bg-sidebar px-4 py-[22px]">
       <div className="flex items-center gap-2.5 px-2 pt-1 pb-6">
-        <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-accent text-accent-ink">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="8" />
-            <path d="M12 8v4l3 2" />
-          </svg>
-        </span>
-        <span className="font-display text-[22px] font-bold tracking-[-0.4px] text-text">Uurwerk</span>
+        <img src={mark} alt="" className="h-[30px] w-[30px]" draggable={false} />
+        <img src={wordmark} alt="Uurwerk" className="h-[19px] w-auto" draggable={false} />
       </div>
 
       {ITEMS.map(({ id, label, Icon }) => {

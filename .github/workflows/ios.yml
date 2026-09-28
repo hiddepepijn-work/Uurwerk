@@ -82,10 +82,24 @@ jobs:
         run: |
           set -e
           ICONSET=packages/mobile/ios/App/App/Assets.xcassets/AppIcon.appiconset
-          # Through JPEG and back: iOS wants an icon without transparency, and that round
-          # trip is the simplest way to drop the alpha channel with what macOS ships.
-          sips -s format jpeg -z 1024 1024 resources/icon-source.png --out /tmp/icon.jpg >/dev/null
-          sips -s format png /tmp/icon.jpg --out "$ICONSET/AppIcon-512@2x.png" >/dev/null
+          # icon-ios.png is the tile edge to edge (iOS rounds the corners), icon-ios-tinted.png the
+          # grey mark on black that iOS 18 colours for a tinted home screen. Through JPEG and back
+          # to be sure there is no alpha channel: iOS refuses an icon with transparency.
+          for pair in "icon-ios:AppIcon-512@2x" "icon-ios:AppIcon-dark" "icon-ios-tinted:AppIcon-tinted"; do
+            src=${pair%%:*}; dst=${pair##*:}
+            sips -s format jpeg -z 1024 1024 "resources/$src.png" --out /tmp/icon.jpg >/dev/null
+            sips -s format png /tmp/icon.jpg --out "$ICONSET/$dst.png" >/dev/null
+          done
+          cat > "$ICONSET/Contents.json" <<'JSON'
+          {
+            "images": [
+              { "filename": "AppIcon-512@2x.png", "idiom": "universal", "platform": "ios", "size": "1024x1024" },
+              { "appearances": [{ "appearance": "luminosity", "value": "dark" }], "filename": "AppIcon-dark.png", "idiom": "universal", "platform": "ios", "size": "1024x1024" },
+              { "appearances": [{ "appearance": "luminosity", "value": "tinted" }], "filename": "AppIcon-tinted.png", "idiom": "universal", "platform": "ios", "size": "1024x1024" }
+            ],
+            "info": { "author": "xcode", "version": 1 }
+          }
+          JSON
           ls "$ICONSET"
 
       - name: Name, version and background behaviour
