@@ -70,11 +70,15 @@ const MAX_ROUNDS = 10
 // Every request sends the whole history again, so what stays in it is paid for over and
 // over. Three things keep it flat: the state of the day (the snapshot) rides only on the
 // newest message, a tool result is cut to one line once the model has answered with it,
-// and only the last WINDOW messages go along at all. The database is the memory; the chat
+// and only the last TURNS exchanges go along at all. The database is the memory; the chat
 // is not.
 
-/** Messages of history sent along: the exchange at hand, not the whole day. */
-export const WINDOW = 10
+/**
+ * Exchanges of history sent along, counted in Hidde's messages: a question that took four
+ * tool rounds is still one exchange. (Counting raw messages let one busy answer push
+ * everything he said before out of the window, and Jarvis forgot it.)
+ */
+export const TURNS = 8
 
 const STATE_OPEN = '[stand]'
 const STATE_CLOSE = '[/stand]'
@@ -112,17 +116,18 @@ export function condense(content: string): string {
 }
 
 /**
- * Where the window starts: the oldest plain user message (not a tool result) that still
- * leaves at most WINDOW messages. Never in the middle of a tool exchange, which the APIs
- * refuse. `first` skips what always stays, like the system message.
+ * Where the window starts: at the TURNS-th most recent plain user message (not a tool
+ * result), so a window never begins in the middle of a tool exchange, which the APIs refuse.
+ * `first` skips what always stays, like the system message.
  */
 export function windowStart<T>(messages: T[], first: number, isPlainUser: (message: T) => boolean): number {
-  // The newest question always stays, however long its exchange; older ones while they fit.
   let start = -1
+  let questions = 0
   for (let index = messages.length - 1; index >= first; index--) {
     if (!isPlainUser(messages[index]!)) continue
-    if (start === -1 || messages.length - index <= WINDOW) start = index
-    else break
+    start = index
+    questions += 1
+    if (questions === TURNS) break
   }
   return start === -1 ? first : start
 }

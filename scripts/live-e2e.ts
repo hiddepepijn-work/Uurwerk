@@ -109,7 +109,7 @@ function judge(outcome: Outcome, expectTool: string | null): void {
   const dutch = outcome.reply.match(DUTCH)?.length ?? 0
   const english = outcome.reply.match(ENGLISH)?.length ?? 0
   if (!outcome.reply.trim()) outcome.problems.push('geen antwoord')
-  else if (dutch <= english) outcome.problems.push(`niet Nederlands (nl ${dutch} / en ${english})`)
+  else if (outcome.reply.trim().split(/\s+/).length >= 4 && dutch <= english) outcome.problems.push(`niet Nederlands (nl ${dutch} / en ${english})`)
   if (PROMISE.test(outcome.reply)) outcome.problems.push('belooft later terug te komen')
   if (expectTool && !outcome.tools.includes(expectTool)) outcome.problems.push(`tool ${expectTool} niet gebruikt`)
 }
@@ -139,6 +139,11 @@ function exchange(session: Session, inbox: { handler: ((message: LiveServerMessa
 
     inbox.handler = (message) => {
       const content = message.serverContent
+      if (content?.interrupted) {
+        // Cut off because Hidde was still talking: nothing of it was heard.
+        heardAudio = false
+        outcome.reply = ''
+      }
       if (content?.modelTurn?.parts?.some((part) => part.inlineData?.data)) {
         heardAudio = true
         if (outcome.firstAudioMs === null && sentAt) outcome.firstAudioMs = Date.now() - sentAt
@@ -240,14 +245,14 @@ async function main(): Promise<void> {
     return { session, inbox, opening: live.opening, closed }
   }
 
-  const speakInto = async (session: Session, pcm: Int16Array): Promise<void> => {
+  const speakInto = async (session: Session, pcm: Int16Array, realtime = false): Promise<void> => {
     // 40 ms chunks, then the 1.5 s of quiet the app's gate lets through, then "microphone
     // paused" — as the app does. Silence goes at real time: the model measures it.
     const chunk = (samples: Int16Array): void =>
       session.sendRealtimeInput({ audio: { data: Buffer.from(samples.buffer).toString('base64'), mimeType: 'audio/pcm;rate=16000' } })
     for (let at = 0; at < pcm.length; at += 640) {
       chunk(pcm.slice(at, at + 640))
-      await sleep(10)
+      await sleep(realtime ? 40 : 10)
     }
     for (let quiet = 0; quiet < 1500; quiet += 40) {
       chunk(new Int16Array(640))
@@ -299,6 +304,59 @@ async function main(): Promise<void> {
     if (!(await placedAt(dayAfter(1)))) done.problems.push('staat na het ja niet in de planning')
     for (const problem of closed) done.problems.push(problem)
     outcomes.push(done)
+    session.close()
+  }
+
+  // 4b: one sentence with a breath in the middle is one turn, and one answer.
+  if (voiceToo) {
+    const [firstHalf, secondHalf] = await Promise.all([
+      voice(key, 'Ik wil vandaag BO afmaken.'),
+      voice(key, 'En daarna de financiën regelen. Hoe laat kan dat?')
+    ])
+    // The TTS pads its own quiet around each line; cut that, so the pause is the breath alone.
+    const trim = (pcm: Int16Array): Int16Array => {
+      let from = 0
+      let to = pcm.length
+      while (from < to && Math.abs(pcm[from]!) < 400) from += 1
+      while (to > from && Math.abs(pcm[to - 1]!) < 400) to -= 1
+      return pcm.slice(from, to)
+    }
+    const one = trim(firstHalf)
+    const two = trim(secondHalf)
+    const breath = new Int16Array(Math.round(16000 * 0.9))
+    const sentence = new Int16Array(one.length + breath.length + two.length)
+    sentence.set(one, 0)
+    sentence.set(breath, one.length)
+    sentence.set(two, one.length + breath.length)
+    const { session, inbox, closed } = await connect(null)
+    let answers = 0
+    let wasInterrupted = false
+    const counting = (message: LiveServerMessage): void => {
+      if (message.serverContent?.interrupted) wasInterrupted = true
+      if (process.env.LIVE_DEBUG) {
+        const c = message.serverContent
+        const kind = c?.inputTranscription ? `in:"${c.inputTranscription.text}"` : c?.outputTranscription ? `out:"${c.outputTranscription.text}"` : c?.turnComplete ? `turnComplete ${String(c.interactionStatus)}` : c?.interrupted ? 'interrupted' : message.toolCall ? 'toolCall' : (message as { voiceActivity?: { type?: string } }).voiceActivity ? `vad ${(message as { voiceActivity?: { type?: string } }).voiceActivity?.type}` : c?.modelTurn ? 'audio' : Object.keys(message).join(',')
+        if (kind !== 'audio') console.log('   [pauze]', new Date().toISOString().slice(17, 23), kind)
+      }
+      if (message.serverContent?.turnComplete && String(message.serverContent.interactionStatus ?? 'IDLE') !== 'IN_PROGRESS') {
+        if (!wasInterrupted) answers += 1
+        wasInterrupted = false
+      }
+    }
+    const run = exchange(session, inbox, usage, () => speakInto(session, sentence, true), 'gesproken: zin met pauze')
+    const handler = inbox.handler
+    inbox.handler = (message) => {
+      counting(message)
+      handler?.(message)
+    }
+    const outcome = await run
+    judge(outcome, null)
+    if (!/fin/i.test(outcome.reply)) outcome.problems.push('antwoordt alleen op de eerste helft')
+    // Give a split turn the chance to show itself as a second answer.
+    await sleep(4000)
+    if (answers > 1) outcome.problems.push(`${answers} antwoorden op één zin`)
+    for (const problem of closed) outcome.problems.push(problem)
+    outcomes.push(outcome)
     session.close()
   }
 
@@ -435,6 +493,39 @@ async function main(): Promise<void> {
         const to = Math.round((event.endsAt - at(tomorrowDay, '00:00')) / 60_000)
         if (entry.startMin < to && entry.endMin > from) r3b.outcome.problems.push(`${entry.taskTitle} overlapt met ${event.title}`)
       }
+    }
+
+    // 6. Memory: something said early is still known after an answer that took many tools.
+    {
+      const told = await ask('geheugen: vertellen', 'Onthoud even: mijn project deze week noem ik Operatie Kast. Zeg alleen oké.', null)
+      let conversationId = told.conversationId
+      conversationId = (await ask('geheugen: drukke vraag', 'Wat staat er de komende drie dagen allemaal op de planning, en welke taken zijn te laat?', conversationId)).conversationId
+      conversationId = (await ask('geheugen: tussendoor', 'En hoeveel stage-uren zijn dat ongeveer?', conversationId)).conversationId
+      const recall = await ask('geheugen: terugvragen', 'Hoe noemde ik mijn project deze week?', conversationId)
+      if (!/operatie kast/i.test(recall.outcome.reply)) recall.outcome.problems.push('weet de projectnaam niet meer')
+    }
+
+    // 7. An appointment is an appointment, a task is a task — also when a time comes with it.
+    {
+      const kast = await test.tasks.create({ title: 'Kast fixen', areaId: 'personal', estimateMin: 60 })
+      const day = dayAfter(2)
+      const eventsOn = async () =>
+        (await test.calendar.eventsInRange(at(day, '00:00'), at(day, '23:59'))).filter((event) => event.kind === 'appointment')
+      const eventsBefore = (await eventsOn()).length
+
+      const dentist = await ask('afspraak: tandarts', 'Zet de tandarts overmorgen om 11:00, een half uur, in Zevenaar. Geen reistijd.', null)
+      const dentistYes = await ask('afspraak: ja', 'Ja.', dentist.conversationId)
+      const events = await eventsOn()
+      if (!events.some((event) => /tandarts/i.test(event.title))) dentistYes.outcome.problems.push('de tandarts staat niet als afspraak in de agenda')
+      if ((await test.tasks.list({ status: 'active' })).some((task) => /tandarts/i.test(task.title))) {
+        dentistYes.outcome.problems.push('van de tandarts is een taak gemaakt')
+      }
+
+      const task = await ask('taak: kast op een tijd', 'Zet Kast fixen overmorgen om 20:00, een uur.', dentistYes.conversationId)
+      const taskYes = await ask('taak: ja', 'Ja.', task.conversationId)
+      const blocks = (await test.plans.day(day)).blocks.filter((block) => block.taskId === kast.id)
+      if (!blocks.some((block) => block.startMin === 20 * 60)) taskYes.outcome.problems.push('Kast fixen staat niet als taakblok om 20:00')
+      if ((await eventsOn()).length !== eventsBefore + 1) taskYes.outcome.problems.push('van de taak is (ook) een afspraak gemaakt')
     }
 
     // 5. Twenty messages: the prompt per request stays about flat.

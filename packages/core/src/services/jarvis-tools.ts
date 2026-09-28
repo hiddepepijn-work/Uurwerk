@@ -185,7 +185,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'schedule_task',
     description:
-      'Een taak op een vast tijdstip in de planning zetten (een blok, geen afspraak). Taken plan je altijd hiermee of met plan_range, nooit met create_appointment. Weigert overlap met afspraken en met blokken die met de hand zijn gezet; blokken van de planner op die plek maken plaats.' +
+      'Een taak op een vast tijdstip in de planning zetten (een blok, geen afspraak). Taken plan je altijd hiermee of met plan_range, nooit met create_appointment. Taken mogen over andere taken heen staan (dat meld je dan). Een afspraak op die tijd is een muur: dat weigert hij. Blokken die de planner zelf zette maken plaats.' +
       PROPOSAL,
     parameters: object({ taskId: { type: 'string' }, date, start: clock, end: clock }, ['taskId', 'date', 'start', 'end']),
     writes: true,
@@ -932,6 +932,8 @@ async function slotFor(
   areaId: string | null
   title: string
   replaces: Array<{ id: string; title: string }>
+  /** Other tasks at that time: tasks may overlap, but it is worth saying. */
+  alongside: string[]
 }> {
   const day = String(input.date)
   const startMin = minuteOf(String(input.start))
@@ -944,12 +946,16 @@ async function slotFor(
   const plan = await api.plans.day(day)
   const overlaps = (from: number, to: number): boolean => from < endMin && to > startMin
   const walls: string[] = []
+  const alongside: string[] = []
   const replaces: Array<{ id: string; title: string }> = []
   for (const block of plan.blocks) {
     if (!overlaps(block.startMin, block.endMin)) continue
     const title = block.taskTitle ?? block.title ?? block.kind
+    const span = `${title} ${hm(block.startMin)}–${hm(block.endMin)}`
     if (block.source === 'planner' && !block.locked && !block.fixed) replaces.push({ id: block.id, title })
-    else walls.push(`${title} ${hm(block.startMin)}–${hm(block.endMin)}`)
+    // Tasks may run through each other; a fixed meeting or blocked time may not be planned over.
+    else if (block.kind === 'task') alongside.push(span)
+    else walls.push(span)
   }
   const events = await api.calendar.eventsInRange(dayStart(day), dayStart(day) + 86_400_000)
   for (const event of events) {
@@ -959,7 +965,7 @@ async function slotFor(
     if (overlaps(from, to)) walls.push(`${event.title} ${clockOf(event.startsAt)}–${clockOf(event.endsAt)}`)
   }
   if (walls.length > 0) throw new Error(`Overlapt met ${walls.join(', ')}`)
-  return { day, startMin, endMin, areaId: task.areaId, title: task.title, replaces }
+  return { day, startMin, endMin, areaId: task.areaId, title: task.title, replaces, alongside }
 }
 
 /** The planner's own blocks on a day: what plan_range replaces and clear_planning removes. */
@@ -1039,6 +1045,7 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
       return {
         task: slot.title,
         placed: `${slot.day} ${hm(slot.startMin)}–${hm(slot.endMin)}`,
+        ...(slot.alongside.length > 0 ? { alongside: slot.alongside } : {}),
         madeWayFor: slot.replaces.map((entry) => entry.title)
       }
     }

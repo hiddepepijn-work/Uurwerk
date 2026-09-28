@@ -4,6 +4,7 @@ import type { MutableRefObject } from 'react'
 import type { JarvisLiveUsage } from '@core/contract/api.js'
 
 import { api } from '../../api/client.js'
+import { SpeechGate } from './gate.js'
 import type { OrbState } from './JarvisOrb.js'
 
 /**
@@ -38,17 +39,24 @@ const PREROLL_CHUNKS = 8
  * after it has heard about 0.7 s of real silence — "microphone paused" alone does not
  * end it — so the silence has to be sent, with room to spare.
  */
-const HANGOVER_MS = 1500
+
 
 /** Runs off the main thread: 16 kHz mono float in, 40 ms of 16-bit PCM plus its loudness out. */
 const WORKLET = `
 class Capture extends AudioWorkletProcessor {
-  constructor() { super(); this.buffer = new Int16Array(${CHUNK}); this.fill = 0; this.sum = 0 }
+  // A quiet microphone (a laptop's built-in array) is brought up to speaking level: the
+  // gain follows the loudness of the last seconds, at most fourfold.
+  constructor() { super(); this.buffer = new Int16Array(${CHUNK}); this.fill = 0; this.sum = 0; this.level = 0.03; this.gain = 1 }
   process(inputs) {
     const channel = inputs[0] && inputs[0][0]
     if (!channel) return true
+    let block = 0
+    for (let i = 0; i < channel.length; i++) block += channel[i] * channel[i]
+    const blockRms = Math.sqrt(block / channel.length)
+    if (blockRms > 0.004) this.level = this.level * 0.995 + blockRms * 0.005
+    this.gain = Math.min(4, Math.max(1, 0.05 / Math.max(this.level, 0.0125)))
     for (let i = 0; i < channel.length; i++) {
-      const sample = Math.max(-1, Math.min(1, channel[i]))
+      const sample = Math.max(-1, Math.min(1, channel[i] * this.gain))
       this.buffer[this.fill++] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
       this.sum += sample * sample
       if (this.fill === ${CHUNK}) {
@@ -106,9 +114,7 @@ export class LiveCall {
   private playing = new Set<AudioBufferSourceNode>()
   private playUntil = 0
   private preroll: ArrayBuffer[] = []
-  private gateOpen = false
-  private lastVoice = 0
-  private noise = 0.01
+  private gate = new SpeechGate()
   private micLevel = 0
   private phase: OrbState = 'idle'
   private heard = ''
@@ -219,22 +225,17 @@ export class LiveCall {
     const now = performance.now()
     this.loudest = Math.max(this.loudest, rms)
     if (now - this.lastReport > 10_000) {
-      if (this.lastReport > 0 && !this.gateOpen) {
-        trail(`microfoon: hardste ${this.loudest.toFixed(3)}, drempel ${Math.max(0.006, this.noise * 2.5).toFixed(3)}, ${this.sentChunks} stukjes verstuurd`)
+      if (this.lastReport > 0 && !this.gate.isOpen) {
+        trail(`microfoon: hardste ${this.loudest.toFixed(3)}, ${this.sentChunks} stukjes verstuurd`)
       }
       this.loudest = 0
       this.lastReport = now
     }
-    // The noise floor follows the room slowly; speech is well above it.
-    if (!this.gateOpen) this.noise = this.noise * 0.98 + Math.min(rms, 0.05) * 0.02
-    // A laptop's built-in array comes in quiet: the floor is low, the room decides the rest.
-    const threshold = Math.max(0.006, this.noise * 2.5)
-    const voiced = rms > threshold
-
-    if (voiced) this.lastVoice = now
-    if (!this.gateOpen && voiced) {
-      this.gateOpen = true
-      trail(`je praat (${rms.toFixed(3)} boven ${threshold.toFixed(3)})`)
+    // His own voice is in the air while it plays, and a little after: see gate.ts.
+    const speaking = !!this.voiceContext && this.playUntil + 0.3 > this.voiceContext.currentTime
+    const decision = this.gate.hear(rms, now, speaking)
+    if (decision.opened) {
+      trail(`je praat (${rms.toFixed(3)} boven ${decision.threshold.toFixed(3)}${speaking ? ', door Jarvis heen' : ''})`)
       for (const chunk of this.preroll) this.send(chunk)
       this.preroll = []
       if (this.phase !== 'speaking') {
@@ -242,10 +243,9 @@ export class LiveCall {
         this.setPhase('listening')
       }
     }
-    if (this.gateOpen) {
+    if (decision.send) {
       this.send(pcm)
-      if (now - this.lastVoice > HANGOVER_MS) {
-        this.gateOpen = false
+      if (decision.closed) {
         trail(`stil; verstuurd tot nu: ${this.sentChunks} stukjes, gehoord: "${this.heard.trim().slice(0, 80)}"`)
         // Tells the model the microphone paused, so it answers instead of waiting.
         this.session.sendRealtimeInput({ audioStreamEnd: true })

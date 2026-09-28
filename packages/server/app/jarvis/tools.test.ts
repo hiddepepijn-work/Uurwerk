@@ -161,6 +161,18 @@ describe('Jarvis tools', () => {
     expect(plan.blocks.find((block) => block.taskId === task.id)).toMatchObject({ startMin: 900, endMin: 960, source: 'manual' })
   })
 
+  it('lets tasks run through each other, and says so', async () => {
+    const day = next(4)
+    const bo = await api.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 60 })
+    const kast = await api.tasks.create({ title: 'Kast fixen', areaId: 'personal', estimateMin: 60 })
+    await proposeAndConfirm('schedule_task', { taskId: bo.id, date: day, start: '19:00', end: '20:00' })
+    const second = await proposeAndConfirm('schedule_task', { taskId: kast.id, date: day, start: '19:30', end: '20:30' })
+    expect(second.failed).toEqual([])
+    expect(second.executed[0]!.result).toMatchObject({ alongside: ['BO afmaken 19:00–20:00'] })
+    const blocks = (await api.plans.day(day)).blocks.filter((block) => block.kind === 'task')
+    expect(blocks.map((block) => block.taskTitle).sort()).toEqual(['BO afmaken', 'Kast fixen'])
+  })
+
   it('replans a range around what was set by hand, and never puts stage work at the weekend', async () => {
     const saturday = next(6)
     const sunday = next(7)

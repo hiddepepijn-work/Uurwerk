@@ -142,7 +142,9 @@ ${await today(options.api)}`
     outputAudioTranscription: {},
     // Long conversations keep going: older turns are folded away instead of ending the session.
     contextWindowCompression: { slidingWindow: {} },
-    realtimeInputConfig: { automaticActivityDetection: { silenceDurationMs: 700 } }
+    // A breath mid-sentence is not the end of a turn: 700 ms cut Hidde's sentences in half
+    // and Jarvis answered the halves.
+    realtimeInputConfig: { automaticActivityDetection: { silenceDurationMs: 1200 } }
   }
 
   const ai = new GoogleGenAI({ apiKey: options.key, httpOptions: { apiVersion: API_VERSION } })
