@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { PlannedBlock } from '@core/contract/types.js'
 import { EmptyState } from '../../ui/EmptyState.js'
 import { CalendarIcon } from '../../ui/icons.js'
@@ -31,7 +32,11 @@ export function NextWeekPlan({ blocks }: { blocks: PlannedBlock[] }) {
       {[...byDay.entries()].map(([date, dayBlocks], index) => {
         const minutes = dayBlocks.reduce((sum, block) => sum + (block.endMin - block.startMin), 0)
         return (
-          <div key={date} className="flex flex-col wide:gap-1.5">
+          <div
+            key={date}
+            className="animate-rise flex flex-col wide:gap-1.5"
+            style={{ '--i': Math.min(index, 12) } as CSSProperties}
+          >
             <div
               className={`flex items-baseline justify-between pt-2 pb-1.5 wide:border-b wide:border-border wide:pt-0 wide:pb-1 ${
                 index > 0 ? 'mt-1 border-t border-border wide:mt-0 wide:border-t-0' : ''

@@ -233,5 +233,18 @@ export function JarvisOrb({
     return () => cancelAnimationFrame(frame)
   }, [size, level])
 
-  return <canvas ref={canvas} aria-hidden="true" style={{ width: size, height: size }} />
+  // Idle breathing lives in the drawing; listening also swells the whole orb on a bouncy
+  // spring, so the moment it starts to hear you reads at a glance. Transform only: no redraw.
+  return (
+    <canvas
+      ref={canvas}
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        transform: state === 'listening' ? 'scale(1.1)' : 'scale(1)',
+        transition: 'transform 0.6s var(--spring-bouncy)'
+      }}
+    />
+  )
 }

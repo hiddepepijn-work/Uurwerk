@@ -8,6 +8,7 @@ import { useLiveQuery } from '../../hooks/useLiveQuery.js'
 import { useToday } from '../../hooks/useToday.js'
 import { Button } from '../../ui/Button.js'
 import { StatCard } from '../../ui/StatCard.js'
+import { useSlidingThumb } from '../../ui/useSlidingThumb.js'
 import { BarChartIcon, CalendarIcon, ClockIcon, TrendingUpIcon } from '../../ui/icons.js'
 import { formatDuration } from '../../lib/format.js'
 import { DayPlanner } from '../planner/DayPlanner.js'
@@ -39,6 +40,7 @@ const BANNER_BUTTON = 'h-10! px-[18px]! text-[14px]! shrink-0'
 export function WeekScreen() {
   const [week, setWeek] = useState(() => toIsoWeek(Date.now()))
   const [mode, setMode] = useState<WeekMode>('plan')
+  const modeSwitch = useSlidingThumb<HTMLDivElement>(mode)
   const [planningDate, setPlanningDate] = useState<string | null>(null)
   /** null when closed; 1 or 2 for the horizon being planned. */
   const [rangeWeeks, setRangeWeeks] = useState<1 | 2 | null>(null)
@@ -213,14 +215,17 @@ export function WeekScreen() {
         {/* On desktop the mode switch and the week arrows share the top row and the actions
             sit below them; only the visual placement moves, the DOM (and tab) order does not. */}
         <div className="flex flex-wrap items-center gap-3 wide:max-w-[780px] wide:justify-end wide:gap-y-2.5">
-          <div className="flex rounded-button bg-card p-1 wide:order-1">
+          <div ref={modeSwitch.containerRef} className="relative flex rounded-button bg-card p-1 wide:order-1">
+            {/* The light thumb slides to the chosen mode and takes its width. */}
+            <span aria-hidden className="rounded-[10px] bg-text" style={modeSwitch.thumbStyle} />
             {MODES.map((option) => (
               <button
                 key={option.id}
+                data-active={mode === option.id}
                 onClick={() => setMode(option.id)}
                 title={option.hint}
-                className={`h-[34px] rounded-[10px] px-4 text-[14px] font-bold transition-colors ${
-                  mode === option.id ? 'bg-text text-bg' : 'text-text-dim hover:text-text'
+                className={`relative z-[1] h-[34px] rounded-[10px] px-4 text-[14px] font-bold transition-colors duration-[250ms] ${
+                  mode === option.id ? 'text-bg' : 'text-text-dim hover:text-text'
                 }`}
               >
                 {option.label}

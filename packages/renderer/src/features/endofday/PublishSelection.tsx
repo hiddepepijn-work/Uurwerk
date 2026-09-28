@@ -60,7 +60,7 @@ export function PublishSelection({ flags, onChange, counts }: Props) {
                       ${checked ? 'border-accent bg-accent text-accent-ink' : 'border-border-strong bg-transparent'}`}
                   >
                     {checked && (
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
+                      <svg className="animate-pop" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M20 6 9 17l-5-5" />
                       </svg>
                     )}

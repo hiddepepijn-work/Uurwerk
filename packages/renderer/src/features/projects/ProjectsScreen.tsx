@@ -194,7 +194,8 @@ export function ProjectsScreen() {
                 </span>
               </div>
             </div>
-            <div role="rowgroup">
+            {/* Rows rise in lightly, one after the other (the first twelve). */}
+            <div role="rowgroup" className="stagger-children">
               {overview.tasks.map((row, index) => (
                 <Row
                   key={row.taskId}

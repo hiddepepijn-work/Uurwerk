@@ -33,6 +33,10 @@ type DragState =
 
 const snap = (minute: number): number => Math.round(minute / SNAP_MIN) * SNAP_MIN
 
+/** A held block: the old gap-and-ring, plus a shadow under it. Rest is the same list at zero, so it fades. */
+const LIFT_SHADOW = '0 0 0 3px var(--color-card), 0 0 0 5px var(--color-text), 0 16px 30px rgba(0,0,0,0.5)'
+const REST_SHADOW = '0 0 0 0 transparent, 0 0 0 0 transparent, 0 0 0 transparent'
+
 /**
  * How a block is drawn: a task is its area's fill with ink text; a meeting is a commitment,
  * dashed amber; a break a quiet grey slab; a buffer only an outline.
@@ -228,9 +232,20 @@ export function DayGrid({
               // is a block you end up deleting instead of understanding.
               title={block.explanation ?? undefined}
               className={`group absolute right-1 left-1 overflow-hidden rounded-input px-3 py-1.5 select-none
-                ${immovable ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}
-                ${live ? 'z-10 shadow-[0_0_0_3px_var(--color-card),0_0_0_5px_var(--color-text)]' : ''}`}
-              style={{ ...look.style, top: toY(from) + 1, height: Math.max(22, minutes * PX_PER_MIN - 3) }}
+                ${immovable ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}`}
+              style={{
+                ...look.style,
+                top: toY(from) + 1,
+                height: Math.max(22, minutes * PX_PER_MIN - 3),
+                // Held: it comes forward (250 ms). Let go: it drops back into its quarter with
+                // a spring, and stays on top until it has landed (the step-end z-index).
+                transform: live ? 'scale(1.03)' : undefined,
+                boxShadow: live ? LIFT_SHADOW : REST_SHADOW,
+                zIndex: live ? 10 : 1,
+                transition: live
+                  ? 'transform 250ms var(--ease-out), box-shadow 300ms var(--ease-out)'
+                  : 'transform 550ms var(--spring-bouncy), box-shadow 300ms var(--ease-out), z-index 550ms step-end'
+              }}
               onPointerDown={(event) => {
                 if (immovable) return
                 if ((event.target as HTMLElement).dataset['handle']) return

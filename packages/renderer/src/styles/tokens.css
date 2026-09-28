@@ -108,3 +108,17 @@
   /* For the rare string that really is code — an app password, a raw preview. */
   --font-code: 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
 }
+
+/*
+ * Motion. Plain custom properties (not @theme) so they are always emitted, whether or not a
+ * utility uses them. Use as `transition-timing-function: var(--spring-bouncy)` or the
+ * `ease-[var(--spring-soft)]` arbitrary utility.
+ *   --spring-soft    settles with a small overshoot (~550 ms): sheets, modals, screen enter, bars
+ *   --spring-bouncy  a real overshoot and a second swing (~550 ms): pills, thumbs, toasts, pops
+ *   --ease-out       for small things (200–400 ms): presses, fades, ripples
+ */
+:root {
+  --spring-soft: linear(0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%, 0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%, 1.001 85.9%, 1);
+  --spring-bouncy: linear(0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.975 57.1%, 0.997 69.8%, 1.003 76.9%, 1);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}

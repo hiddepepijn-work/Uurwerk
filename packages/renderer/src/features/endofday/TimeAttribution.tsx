@@ -6,6 +6,7 @@ import { Button } from '../../ui/Button.js'
 import { Card } from '../../ui/Card.js'
 import { EmptyState } from '../../ui/EmptyState.js'
 import { CheckIcon, ClockIcon, DocumentIcon, ShieldIcon } from '../../ui/icons.js'
+import { useCountUp } from '../../ui/useCountUp.js'
 import { formatDuration } from '../../lib/format.js'
 import { TaskShareList, minutesFor, sameShares } from '../attribution/TaskShareList.js'
 
@@ -192,13 +193,14 @@ function Figure({
 }) {
   const valueTone =
     tone === 'accent' ? 'text-accent-soft' : tone === 'warn' ? 'text-warn' : 'text-text'
+  const shown = useCountUp(value)
   return (
     <div className="rounded-card border border-border p-4">
       <div className="mb-2 flex items-center gap-2">
         <span className="text-accent-soft">{icon}</span>
         <span className="label-caps">{label}</span>
       </div>
-      <div className={`font-display text-[28px] leading-none font-bold tabular-nums ${valueTone}`}>{value}</div>
+      <div className={`font-display text-[28px] leading-none font-bold tabular-nums ${valueTone}`}>{shown}</div>
       <div className="mt-2 text-[13px] text-text-dim">{sub}</div>
     </div>
   )

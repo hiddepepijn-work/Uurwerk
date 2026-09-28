@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { IsoDate } from '@core/contract/types.js'
 import { fromIsoDate, toIsoDate, toIsoWeek, weekRange } from '@core/util/time.js'
 import { useLiveQuery } from '../../hooks/useLiveQuery.js'
+import { useSlidingThumb } from '../../ui/useSlidingThumb.js'
 import { EventComposer } from '../calendar/EventComposer.js'
 import { ItemSheet, SlotSheet } from './AgendaSheets.js'
 import { agendaFor, colorFor, hhmm, OVERLAY_MIN, type AgendaItem, type AllDayItem } from './agenda-model.js'
 import { edgePx } from './drag.js'
+import { play } from './motion.js'
 import { useTimelineDrag, type DragPreview } from './useTimelineDrag.js'
 
 /**
@@ -39,6 +41,7 @@ export function PhoneAgenda() {
   const [date, setDate] = useState<IsoDate>(today)
   const [composing, setComposing] = useState(false)
   const [minute, setMinute] = useState(nowMinute)
+  const viewSwitch = useSlidingThumb<HTMLDivElement>(view)
 
   // The red line moves with the clock.
   useEffect(() => {
@@ -74,13 +77,16 @@ export function PhoneAgenda() {
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 flex-col gap-3 px-4 pt-4 pb-3">
         <div className="flex items-center gap-2">
-          <div className="flex rounded-button bg-tabbar p-[3px]">
+          <div ref={viewSwitch.containerRef} className="relative flex rounded-button bg-tabbar p-[3px]">
+            {/* The selection slides between Dag and Week instead of jumping. */}
+            <span aria-hidden className="rounded-[11px] bg-rail-active" style={viewSwitch.thumbStyle} />
             {(['day', 'week'] as View[]).map((option) => (
               <button
                 key={option}
+                data-active={view === option}
                 onClick={() => setView(option)}
-                className={`h-[38px] rounded-[11px] px-3.5 text-[14px] font-bold transition-colors ${
-                  view === option ? 'bg-rail-active text-accent-soft' : 'text-text-dim'
+                className={`relative z-[1] h-[38px] rounded-[11px] px-3.5 text-[14px] font-bold transition-colors duration-[250ms] ${
+                  view === option ? 'text-accent-soft' : 'text-text-dim'
                 }`}
               >
                 {option === 'day' ? 'Dag' : 'Week'}
@@ -180,6 +186,7 @@ export function DayTimeline({
     onEmpty: (_, minute) => setSlot(minute)
   })
   const ghost = drag ? ghostOf(drag) : null
+  const settled = useSettled(drag)
 
   return (
     <div ref={scroller} className={`overflow-y-auto ${className}`}>
@@ -198,6 +205,7 @@ export function DayTimeline({
               hourPx={DAY_HOUR_PX}
               detailed
               dimmed={drag?.item.id === item.id}
+              settling={settled === item.id}
               onPointerDown={date ? (event) => pointerDown(event, item, date) : undefined}
             />
           ))}
@@ -253,6 +261,7 @@ export function WeekTimeline({
     onEmpty: (date) => onOpenDay(date)
   })
   const ghost = drag ? ghostOf(drag) : null
+  const settled = useSettled(drag)
 
   return (
     <div className={`flex flex-col ${className}`}>
@@ -319,6 +328,7 @@ export function WeekTimeline({
                       item={item}
                       hourPx={WEEK_HOUR_PX}
                       dimmed={drag?.item.id === item.id}
+                      settling={settled === item.id}
                       onPointerDown={interactive ? (event) => pointerDown(event, item, day.date) : undefined}
                     />
                   ))}
@@ -394,12 +404,39 @@ function HourLines({
   )
 }
 
+/** A picked-up block: a ring in the text colour and a deep shadow under it. */
+const LIFT_SHADOW = '0 0 0 2px var(--color-text), 0 12px 28px rgba(0,0,0,0.55)'
+const REST_SHADOW = '0 0 0 0 transparent, 0 0 0 transparent'
+
+/**
+ * The id of the block that was just let go, for a moment after, so it can settle into its
+ * quarter. A cancelled drag (Esc) settles back where it came from the same way.
+ */
+function useSettled(drag: DragPreview | null): string | null {
+  const [settled, setSettled] = useState<string | null>(null)
+  const held = useRef<string | null>(null)
+  useEffect(() => {
+    if (drag) {
+      held.current = drag.item.id
+      return
+    }
+    const id = held.current
+    if (!id) return
+    held.current = null
+    setSettled(id)
+    const clear = window.setTimeout(() => setSettled(null), 700)
+    return () => window.clearTimeout(clear)
+  }, [drag])
+  return settled
+}
+
 function Block({
   item,
   hourPx,
   detailed = false,
   dimmed = false,
   lifted = false,
+  settling = false,
   onPointerDown
 }: {
   item: AgendaItem
@@ -409,8 +446,24 @@ function Block({
   dimmed?: boolean
   /** The ghost itself, following the pointer. */
   lifted?: boolean
+  /** Just let go: it drops from lifted into place with a spring. */
+  settling?: boolean
   onPointerDown?: (event: React.PointerEvent) => void
 }) {
+  const self = useRef<HTMLDivElement>(null)
+  // Picked up: it rises out of the timeline rather than appearing lifted.
+  useLayoutEffect(() => {
+    if (lifted) play(self.current, [{ transform: 'scale(1)', boxShadow: REST_SHADOW, offset: 0 }], { duration: 250, easing: '--ease-out' })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Let go: back from lifted to flat, overshooting a touch, so it clicks into its quarter.
+  useLayoutEffect(() => {
+    if (settling)
+      play(self.current, [{ transform: 'scale(1.03)', boxShadow: LIFT_SHADOW, zIndex: 20 }, { transform: 'scale(1)', boxShadow: REST_SHADOW, zIndex: 20 }], {
+        duration: 550,
+        easing: '--spring-bouncy'
+      })
+  }, [settling])
+
   const top = (item.startMin / 60) * hourPx + 1
   // A quarter of an hour is 15 px at day scale: too small to read. Short items get a floor
   // and a single line; they may overhang the next slot, which beats being illegible.
@@ -461,6 +514,7 @@ function Block({
 
   return (
     <div
+      ref={self}
       onPointerDown={handling.onPointerDown}
       className={`absolute overflow-hidden text-left ${
         detailed
@@ -482,7 +536,7 @@ function Block({
         // Appointments sit above planned work.
         zIndex: lifted ? 20 : item.overlay ? 3 : planned ? 1 : 2,
         paddingTop: coveredPx || undefined,
-        boxShadow: lifted ? '0 0 0 2px var(--color-text), 0 12px 28px rgba(0,0,0,0.55)' : undefined,
+        boxShadow: lifted ? LIFT_SHADOW : undefined,
         // Tasks are the area's fill with its ink; an appointment is its tint inside a line of
         // the fill (solid, so an overlay hides what it covers); travel is a dashed outline.
         background: planned ? color.fill : travel ? 'transparent' : color.tint,
@@ -567,7 +621,8 @@ function NowLine({ top, thin = false }: { top: number; thin?: boolean }) {
   return (
     <div className="pointer-events-none absolute right-0 left-0 z-10 flex items-center" style={{ top }}>
       <span
-        className={`shrink-0 -translate-y-1/2 rounded-full bg-danger ${thin ? '-ml-[3px] h-2 w-2' : '-ml-[5px] h-2.5 w-2.5'}`}
+        // A soft ring breathes out of the dot: where you are in the day, at a glance.
+        className={`shrink-0 -translate-y-1/2 animate-nowpulse rounded-full bg-danger ${thin ? '-ml-[3px] h-2 w-2' : '-ml-[5px] h-2.5 w-2.5'}`}
       />
       <span className="-ml-px h-0.5 flex-1 -translate-y-1/2 bg-danger" />
     </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Idea, Project } from '@core/contract/types.js'
 
@@ -14,6 +14,7 @@ export function IdeasPanel({ projects }: { projects: Project[] }) {
   const { data: ideas } = useLiveQuery((client) => client.ideas.list(), ['tasks'], [])
   const [text, setText] = useState('')
   const [projectId, setProjectId] = useState('')
+  const fresh = useFreshIds(ideas)
 
   const groups = useMemo(() => {
     const byProject = new Map<string, Idea[]>()
@@ -75,7 +76,10 @@ export function IdeasPanel({ projects }: { projects: Project[] }) {
                 {group.list.map((idea) => (
                   <li
                     key={idea.id}
-                    className="group flex items-center gap-2.5 border-t border-border py-[9px] wide:gap-3 wide:border-t-0 wide:py-1"
+                    // Just added (by you or by Jarvis): it drops in with a spring and flashes green once.
+                    className={`group flex items-center gap-2.5 border-t border-border py-[9px] wide:gap-3 wide:border-t-0 wide:py-1 ${
+                      fresh.has(idea.id) ? 'animate-flash' : ''
+                    }`}
                   >
                     <span className="flex-1 text-[15px] leading-snug font-medium text-text wide:text-[14px] wide:font-normal">
                       {idea.text}
@@ -105,4 +109,33 @@ export function IdeasPanel({ projects }: { projects: Project[] }) {
       )}
     </Card>
   )
+}
+
+/**
+ * Ideas that arrived after the panel first showed its list, for as long as their entrance
+ * plays (1.4 s). The first load is not "new": opening the screen does not flash everything.
+ */
+function useFreshIds(ideas: Idea[] | null | undefined): Set<string> {
+  const seen = useRef<Set<string> | null>(null)
+  const [fresh, setFresh] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    if (!ideas) return
+    if (!seen.current) {
+      seen.current = new Set(ideas.map((idea) => idea.id))
+      return
+    }
+    const added = ideas.map((idea) => idea.id).filter((id) => !seen.current!.has(id))
+    if (added.length === 0) return
+    added.forEach((id) => seen.current!.add(id))
+    setFresh((current) => new Set([...current, ...added]))
+    // Not cleared on a later render: the class has to outlive the next list update, or the
+    // flash is cut off. The timer is left to run even if the list changes again.
+    window.setTimeout(
+      () => setFresh((current) => new Set([...current].filter((id) => !added.includes(id)))),
+      1500
+    )
+  }, [ideas])
+
+  return fresh
 }

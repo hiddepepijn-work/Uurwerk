@@ -64,8 +64,10 @@ export function ReportScreenshots({ screenshots, timelapse, onToggle, onOpen }: 
                       onClick={() => toggle(shot)}
                       onDoubleClick={() => setZoomed(shot)}
                       title={`${shot.taskTitle ?? 'No task'} · ${formatClock(shot.capturedAt)}\nClick to include or exclude, double-click to enlarge`}
-                      className={`block overflow-hidden rounded-input bg-input transition-opacity
-                        ${isIncluded(shot) ? '' : 'opacity-40 hover:opacity-80'}`}
+                      className={`block overflow-hidden rounded-input bg-input
+                        ${isIncluded(shot) ? '' : 'scale-[0.97] opacity-40 hover:opacity-80'}`}
+                      // Toggling springs the frame back to full size, or lets it sink a little.
+                      style={{ transition: 'opacity 0.25s var(--ease-out), transform 0.45s var(--spring-bouncy)' }}
                     >
                       <img
                         src={`file://${shot.path}`}
@@ -75,7 +77,8 @@ export function ReportScreenshots({ screenshots, timelapse, onToggle, onOpen }: 
                       />
                     </button>
                     <span
-                      className={`pointer-events-none absolute top-1.5 right-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full
+                      key={String(isIncluded(shot))}
+                      className={`animate-pop pointer-events-none absolute top-1.5 right-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full
                         ${isIncluded(shot) ? 'bg-accent text-accent-ink' : 'bg-track text-text-dim'}`}
                     >
                       {isIncluded(shot) ? <CheckIcon size={12} /> : <CloseIcon size={11} />}
@@ -118,9 +121,9 @@ export function ReportScreenshots({ screenshots, timelapse, onToggle, onOpen }: 
       {zoomed && (
         <button
           onClick={() => setZoomed(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-8"
+          className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-8"
         >
-          <img src={`file://${zoomed.path}`} alt="" className="max-h-full max-w-full rounded-input" />
+          <img src={`file://${zoomed.path}`} alt="" className="animate-modal-in max-h-full max-w-full rounded-input" />
         </button>
       )}
     </div>

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import type { BreakdownFilter, RangePreset, StatisticsOverview } from '@core/contract/types.js'
 import { useLiveQuery } from '../../hooks/useLiveQuery.js'
 import { Card, CardAction } from '../../ui/Card.js'
+import { useCountUp } from '../../ui/useCountUp.js'
+import { useSlidingThumb } from '../../ui/useSlidingThumb.js'
 import { formatDuration } from '../../lib/format.js'
 import {
   BarChartIcon,
@@ -103,21 +105,7 @@ export function StatisticsScreen() {
 
         {/* Filters in one row above the charts, so what you changed is next to what changed. */}
         <div className="flex flex-col gap-2.5 wide:flex-row wide:flex-wrap wide:items-center">
-          <div className="flex gap-1 rounded-[16px] bg-card p-1 wide:gap-0 wide:rounded-button">
-            {RANGES.map((range) => (
-              <button
-                key={range.id}
-                onClick={() => setPreset(range.id)}
-                className={`h-10 flex-1 rounded-input px-3.5 text-[14px] font-bold transition-colors wide:h-9 wide:flex-none wide:rounded-[11px] ${
-                  preset === range.id
-                    ? 'bg-rail-active text-accent-soft wide:bg-text wide:text-bg'
-                    : 'text-text-dim hover:text-text'
-                }`}
-              >
-                {range.label}
-              </button>
-            ))}
-          </div>
+          <RangeControl preset={preset} onChange={setPreset} />
 
           {/* Area and organization are independent filters, deliberately: the same employer
               hosts internship work and work that is not. */}
@@ -270,7 +258,7 @@ export function StatisticsScreen() {
             <p className="text-[13px] text-text-faint">Nothing tracked in this period.</p>
           ) : (
             <ul className="flex flex-col gap-3.5">
-              {data.projects.slice(0, 6).map((project) => {
+              {data.projects.slice(0, 6).map((project, index) => {
                 const widest = data.projects[0]?.minutes ?? 1
                 return (
                   <li key={project.projectId ?? 'none'} className="flex items-center gap-3">
@@ -289,10 +277,13 @@ export function StatisticsScreen() {
                     </span>
                     <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-input">
                       <span
-                        className={`block h-full rounded-full ${
+                        className={`animate-grow-x block h-full rounded-full ${
                           project.countsAsStageHours ? 'bg-accent' : 'bg-text-dim'
                         }`}
-                        style={{ width: `${Math.max(2, (project.minutes / widest) * 100)}%` }}
+                        style={{
+                          animationDelay: `${index * 50}ms`,
+                          width: `${Math.max(2, (project.minutes / widest) * 100)}%`
+                        }}
                       />
                     </span>
                     <span className="w-[66px] shrink-0 text-right font-mono text-[14px] font-bold text-text tabular-nums">
@@ -321,10 +312,14 @@ export function StatisticsScreen() {
                 </tr>
               </thead>
               <tbody>
-                {data.workTypes.slice(0, 6).map((row) => {
+                {data.workTypes.slice(0, 6).map((row, index) => {
                   const delta = row.actualMin - row.plannedMin
                   return (
-                    <tr key={row.workTypeId ?? 'none'} className="h-10 border-t border-border">
+                    <tr
+                      key={row.workTypeId ?? 'none'}
+                      className="animate-rise h-10 border-t border-border"
+                      style={{ '--i': index } as React.CSSProperties}
+                    >
                       <td className="font-semibold text-text">{row.name}</td>
                       <td className="text-right font-mono text-text-dim tabular-nums">
                         {formatDuration(row.plannedMin)}
@@ -374,6 +369,38 @@ export function StatisticsScreen() {
 }
 
 // -------------------------------------------------------------------- tiles
+
+/** The range switch; its own component so the sliding thumb measures once it is on screen. */
+function RangeControl({ preset, onChange }: { preset: RangePreset; onChange: (preset: RangePreset) => void }) {
+  const rangeThumb = useSlidingThumb<HTMLDivElement>(preset)
+  return (
+    <div
+      ref={rangeThumb.containerRef}
+      className="relative flex gap-1 rounded-[16px] bg-card p-1 wide:gap-0 wide:rounded-button"
+    >
+      {/* The highlight slides to the chosen range instead of jumping. */}
+      <span
+        aria-hidden
+        className="rounded-input bg-rail-active wide:rounded-[11px] wide:bg-text"
+        style={rangeThumb.thumbStyle}
+      />
+      {RANGES.map((range) => (
+        <button
+          key={range.id}
+          data-active={preset === range.id}
+          onClick={() => onChange(range.id)}
+          className={`relative z-[1] h-10 flex-1 rounded-input px-3.5 text-[14px] font-bold transition-colors wide:h-9 wide:flex-none wide:rounded-[11px] ${
+            preset === range.id
+              ? 'text-accent-soft wide:text-bg'
+              : 'text-text-dim hover:text-text'
+          }`}
+        >
+          {range.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 function Tile({
   icon,
@@ -449,6 +476,7 @@ function Shell({
   value: string
   children: React.ReactNode
 }) {
+  const shown = useCountUp(value)
   return (
     // The same tile as ui/StatCard, so Statistics, Projects and Report read as one family.
     <div className="flex flex-col gap-2 rounded-card bg-card p-4">
@@ -457,7 +485,7 @@ function Shell({
         <span className="text-[13px] font-bold text-text-dim">{label}</span>
       </div>
       <div className="font-display text-[30px] leading-none font-bold tracking-[-0.6px] text-text tabular-nums">
-        {value}
+        {shown}
       </div>
       <div className="text-[13px] leading-snug font-semibold text-text-faint wide:font-normal">{children}</div>
     </div>

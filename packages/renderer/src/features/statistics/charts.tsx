@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { AreaShare, Bucket } from '@core/contract/types.js'
 import { formatDuration } from '../../lib/format.js'
 import { areaFill } from '../agenda/agenda-model.js'
@@ -76,7 +76,7 @@ export function GroupedBars({
           ))}
 
           <div className="absolute inset-0 flex items-end justify-between gap-2">
-            {buckets.map((bucket) => (
+            {buckets.map((bucket, index) => (
               <div key={bucket.key} className="flex h-full min-w-0 flex-1 items-end justify-center gap-[2px]">
                 {series.map((entry) => {
                   const minutes =
@@ -97,8 +97,10 @@ export function GroupedBars({
                       className="group relative flex h-full w-full max-w-[26px] cursor-default items-end"
                     >
                       <span
-                        className="w-full rounded-t-[4px] rounded-b-[1px] transition-[filter]"
+                        // Grows from the bottom on mount, one column after the other, left to right.
+                        className="animate-grow w-full rounded-t-[4px] rounded-b-[1px] transition-[filter]"
                         style={{
+                          animationDelay: `${index * 50}ms`,
                           height: `${Math.max(minutes > 0 ? 2 : 0, height)}%`,
                           background: entry.color,
                           // Screen time is context, so it sits behind the areas visually.
@@ -152,7 +154,7 @@ export function ShareBars({ areas }: { areas: AreaShare[] }) {
 
   return (
     <ul className="flex flex-col gap-3.5">
-      {areas.map((area) => (
+      {areas.map((area, index) => (
         <li key={area.areaId} className="flex items-center gap-3">
           <span
             className="h-2 w-2 shrink-0 rounded-full"
@@ -162,8 +164,13 @@ export function ShareBars({ areas }: { areas: AreaShare[] }) {
 
           <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-input">
             <span
-              className="block h-full rounded-full"
-              style={{ width: `${Math.max(2, area.fraction * 100)}%`, background: areaFill({ id: area.areaId, color: area.color }) }}
+              // The share fills in from the left, lightly staggered down the list.
+              className="animate-grow-x block h-full rounded-full"
+              style={{
+                animationDelay: `${index * 50}ms`,
+                width: `${Math.max(2, area.fraction * 100)}%`,
+                background: areaFill({ id: area.areaId, color: area.color })
+              }}
             />
           </span>
 
@@ -202,8 +209,12 @@ export function BucketTable({ buckets, series }: { buckets: Bucket[]; series: Se
           </tr>
         </thead>
         <tbody>
-          {buckets.map((bucket) => (
-            <tr key={bucket.key} className="border-t border-border">
+          {buckets.map((bucket, index) => (
+            <tr
+              key={bucket.key}
+              className="animate-rise border-t border-border"
+              style={{ '--i': Math.min(index, 12) } as CSSProperties}
+            >
               <td className="px-3 py-2 font-semibold text-text">
                 {bucket.label}
                 <span className="ml-2 text-text-faint">{bucket.sublabel}</span>

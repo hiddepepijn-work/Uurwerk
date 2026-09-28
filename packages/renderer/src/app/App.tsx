@@ -31,7 +31,7 @@ export function App() {
   /** Same idea, for the morning notification asking you to plan the day. */
   const [planDayRequest, setPlanDayRequest] = useState(0)
   const tracking = useTracking()
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ id: number; message: string; leaving: boolean } | null>(null)
   /** The evening question — "anything to add to the agenda?" — opens this. */
   const [composerOpen, setComposerOpen] = useState(false)
   const [jarvisOpen, setJarvisOpen] = useState(false)
@@ -44,11 +44,21 @@ export function App() {
   const openSwitcher = useCallback(() => setSwitcherOpen(true), [])
 
   useEffect(() => {
+    let leave: ReturnType<typeof setTimeout> | undefined
+    let remove: ReturnType<typeof setTimeout> | undefined
     const off = events.on('notify', ({ message }) => {
-      setToast(message)
-      setTimeout(() => setToast(null), 6000)
+      clearTimeout(leave)
+      clearTimeout(remove)
+      setToast({ id: Date.now(), message, leaving: false })
+      // Six seconds on screen, then it sinks out; unmounted once the exit has played.
+      leave = setTimeout(() => setToast((current) => (current ? { ...current, leaving: true } : null)), 6000)
+      remove = setTimeout(() => setToast(null), 6450)
     })
-    return off
+    return () => {
+      off()
+      clearTimeout(leave)
+      clearTimeout(remove)
+    }
   }, [])
 
   /**
@@ -96,7 +106,8 @@ export function App() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {!compact && <TopBar running={tracking.running} onJarvis={() => setVoiceOpen(true)} />}
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        {/* Keyed by screen: each screen mounts fresh and its sections rise in one by one. */}
+        <main key={screen} className="screen-enter min-h-0 flex-1 overflow-y-auto">
           {screen === 'today' && (
             <TodayScreen
               tracking={tracking}
@@ -143,8 +154,11 @@ export function App() {
       />
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[16px] border border-border bg-card px-5 py-3 text-sm font-semibold shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
-          {toast}
+        <div
+          key={toast.id}
+          className={`${toast.leaving ? 'toast-out' : 'animate-toast-in'} fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[16px] border border-border bg-card px-5 py-3 text-sm font-semibold shadow-[0_20px_60px_rgba(0,0,0,0.5)]`}
+        >
+          {toast.message}
         </div>
       )}
     </div>

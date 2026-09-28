@@ -352,6 +352,9 @@ export function EndOfDayWizard({ date, open, onClose }: Props) {
 
 // ------------------------------------------------------------------- pieces
 
+const STEP_TRANSITION =
+  'background-color 300ms, border-color 300ms, color 300ms, transform 500ms var(--spring-bouncy)'
+
 function Steps({
   steps,
   current,
@@ -372,15 +375,20 @@ function Steps({
               onClick={() => onSelect(index)}
               className="flex items-center gap-2 whitespace-nowrap"
             >
+              {/* The new step pops green once the line into it has filled (after 300 ms). */}
               <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-[1.5px] text-[13px] font-bold
                   ${
                     state === 'active'
-                      ? 'bg-accent text-accent-ink'
+                      ? 'scale-[1.12] border-accent bg-accent text-accent-ink'
                       : state === 'done'
-                        ? 'bg-rail-active text-accent-soft'
-                        : 'border-[1.5px] border-border-strong text-text-faint'
+                        ? 'border-rail-active bg-rail-active text-accent-soft'
+                        : 'border-border-strong text-text-faint'
                   }`}
+                style={{
+                  transition: STEP_TRANSITION,
+                  transitionDelay: state === 'active' && index > 0 ? '300ms' : '0ms'
+                }}
               >
                 {state === 'done' ? <CheckIcon size={14} /> : index + 1}
               </span>
@@ -397,7 +405,16 @@ function Steps({
               </span>
             </button>
             {index < steps.length - 1 && (
-              <span className={`h-0.5 min-w-4 flex-1 rounded-full ${index < current ? 'bg-accent' : 'bg-border'}`} />
+              // The connector fills from the left as the step before it is finished.
+              <span className="relative h-0.5 min-w-4 flex-1 overflow-hidden rounded-full bg-border">
+                <span
+                  className="absolute inset-0 origin-left rounded-full bg-accent"
+                  style={{
+                    transform: index < current ? 'scaleX(1)' : 'scaleX(0)',
+                    transition: 'transform 450ms var(--ease-out)'
+                  }}
+                />
+              </span>
             )}
           </li>
         )

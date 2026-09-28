@@ -5,6 +5,7 @@ import { useLiveQuery } from '../../hooks/useLiveQuery.js'
 import type { Tracking } from '../../hooks/useTracking.js'
 import { Button } from '../../ui/Button.js'
 import { FilterIcon, PlusIcon, SearchIcon } from '../../ui/icons.js'
+import { useCountUp } from '../../ui/useCountUp.js'
 import { CurrentQueue } from './CurrentQueue.js'
 import { IdeasPanel } from './IdeasPanel.js'
 import { PriorityView } from './PriorityView.js'
@@ -203,12 +204,13 @@ function CountTile({
   tone?: 'plain' | 'warn' | 'accent'
 }) {
   const color = tone === 'warn' ? 'text-warn' : tone === 'accent' ? 'text-accent-soft' : 'text-text'
+  const shown = useCountUp(String(value))
   return (
     <div className="flex flex-col gap-1 rounded-card bg-card p-3.5 wide:gap-1.5 wide:p-4">
       <span className="text-[12px] font-bold tracking-[0.6px] text-text-faint wide:text-[13px] wide:tracking-normal wide:text-text-dim">
         {label}
       </span>
-      <span className={`display-title text-[30px] tabular-nums leading-[1.05] ${color}`}>{String(value)}</span>
+      <span className={`display-title text-[30px] tabular-nums leading-[1.05] ${color}`}>{shown}</span>
       <span className="text-[13px] font-semibold text-text-dim wide:font-normal wide:text-text-faint">tasks</span>
     </div>
   )

@@ -10,7 +10,12 @@ interface Props {
   width?: number
 }
 
-/** Centred dialog on a dimmed backdrop. Escape always closes it. */
+/**
+ * Centred dialog on a dimmed backdrop. Escape always closes it.
+ *
+ * Motion (globals.css, modal-enter): on a phone the dialog slides up as a sheet; from `wide`
+ * up the scrim fades in and the panel scales .94 → 1 with an 8px rise.
+ */
 export function Modal({ open, title, subtitle, onClose, children, footer, width = 860 }: Props) {
   useEffect(() => {
     if (!open) return
@@ -26,13 +31,13 @@ export function Modal({ open, title, subtitle, onClose, children, footer, width 
   return (
     <div
       // On a phone the dialog is the whole screen, above the tab bar, clear of the notch.
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] wide:bg-scrim wide:p-6"
+      className="modal-enter fixed inset-0 z-[60] flex items-center justify-center bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] wide:bg-scrim wide:p-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
     >
       <div
-        className="flex h-full max-h-full w-full flex-col overflow-hidden bg-bg wide:h-auto wide:rounded-modal wide:bg-card wide:shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
+        className="modal-panel flex h-full max-h-full w-full flex-col overflow-hidden bg-bg wide:h-auto wide:rounded-modal wide:bg-card wide:shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
         style={{ maxWidth: width }}
       >
         <header className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 wide:px-7 wide:pt-7 wide:pb-5">

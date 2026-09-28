@@ -276,6 +276,8 @@ struct AgendaView: View {
                 Text("\(hhmm(windowStart)) – \(hhmm(windowEnd))")
                     .font(.system(size: 19, weight: .bold, design: .rounded))
                     .monospacedDigit()
+                    // ▲ ▼ roll the hours instead of swapping them.
+                    .contentTransition(.numericText())
                     .foregroundColor(Palette.text)
             }
             Spacer()

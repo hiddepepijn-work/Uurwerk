@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { ProgressBar } from './ProgressBar.js'
+import { useCountUp } from './useCountUp.js'
 
 interface Props {
   icon: ReactNode
@@ -11,6 +12,7 @@ interface Props {
 
 /** The stat tile reused on Today, Week and in the end-of-day wizard. */
 export function StatCard({ icon, label, value, sub, progress }: Props) {
+  const shown = useCountUp(value)
   return (
     <div className="flex flex-col gap-2 rounded-card bg-card p-4">
       <div className="flex items-center gap-[7px]">
@@ -18,7 +20,7 @@ export function StatCard({ icon, label, value, sub, progress }: Props) {
         <span className="text-[12px] font-bold tracking-[0.8px] text-text-faint uppercase">{label}</span>
       </div>
       <div className="font-display text-[30px] leading-none font-bold tracking-[-0.6px] text-text tabular-nums">
-        {value}
+        {shown}
       </div>
       {sub && <div className="text-[13px] text-text-faint">{sub}</div>}
       {progress && <ProgressBar value={progress.value} max={progress.max} />}

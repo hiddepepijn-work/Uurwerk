@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { WeekReport } from '@core/contract/types.js'
 import { formatDuration } from '../../lib/format.js'
 import { EmptyState } from '../../ui/EmptyState.js'
@@ -88,14 +89,16 @@ export function HoursTable({ report }: { report: WeekReport }) {
         <span role="columnheader">Status</span>
       </div>
 
-      {report.rows.map((row) => {
+      {report.rows.map((row, index) => {
         const delta = row.actualMin - row.plannedMin
         const replanned = row.baselineMin !== row.plannedMin
         return (
           <div
             role="row"
             key={`${row.taskTitle}-${row.projectName ?? ''}`}
-            className={`flex flex-col gap-2.5 border-b border-border px-4 py-3.5 wide:h-[46px] wide:items-center wide:border-border/60 wide:px-3 wide:py-0 ${grid}`}
+            // Rows rise in lightly one after the other; the total row stays put as the anchor.
+            style={{ '--i': Math.min(index, 12) } as CSSProperties}
+            className={`animate-rise flex flex-col gap-2.5 border-b border-border px-4 py-3.5 wide:h-[46px] wide:items-center wide:border-border/60 wide:px-3 wide:py-0 ${grid}`}
           >
             <div className="flex items-start justify-between gap-2.5 wide:contents">
               <div className="flex min-w-0 flex-col gap-0.5 wide:contents">

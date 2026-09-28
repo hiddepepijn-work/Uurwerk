@@ -111,3 +111,270 @@ textarea,
 .animate-pulse-dot {
   animation: pulse-dot 2s ease-in-out infinite;
 }
+
+/* ---------------------------------------------------------------------------------------
+ * Motion — shared keyframes and utilities. Easings live in tokens.css (--spring-soft,
+ * --spring-bouncy, --ease-out). Animate transform/opacity only where possible.
+ * ------------------------------------------------------------------------------------- */
+
+/* Rise in: 12px up + fade, soft spring, 600 ms. Stagger with an index:
+   style={{ '--i': n }} → delay n × 40 ms. `backwards` so it waits invisibly. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+.animate-rise {
+  animation: rise 0.6s var(--spring-soft) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+/* Staggers the direct children of a container without per-child indices (first 12). */
+.stagger-children > * {
+  animation: rise 0.6s var(--spring-soft) backwards;
+}
+.stagger-children > :nth-child(2) { animation-delay: 40ms; }
+.stagger-children > :nth-child(3) { animation-delay: 80ms; }
+.stagger-children > :nth-child(4) { animation-delay: 120ms; }
+.stagger-children > :nth-child(5) { animation-delay: 160ms; }
+.stagger-children > :nth-child(6) { animation-delay: 200ms; }
+.stagger-children > :nth-child(7) { animation-delay: 240ms; }
+.stagger-children > :nth-child(8) { animation-delay: 280ms; }
+.stagger-children > :nth-child(9) { animation-delay: 320ms; }
+.stagger-children > :nth-child(10) { animation-delay: 360ms; }
+.stagger-children > :nth-child(11) { animation-delay: 400ms; }
+.stagger-children > :nth-child(n + 12) { animation-delay: 440ms; }
+
+/* Pop: an icon or tile lands with a bounce. Also staggerable via --i. */
+@keyframes pop {
+  0% {
+    transform: scale(0.7);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: pop 0.5s var(--spring-bouncy) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+/* Pop-in: pop that also fades (for things appearing, not re-selecting). */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+.animate-pop-in {
+  animation: pop-in 0.5s var(--spring-bouncy) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+/* Small scale-in for popovers and menus. */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}
+.animate-scale-in {
+  animation: scale-in 0.35s var(--spring-soft) backwards;
+}
+
+/* Plain fade (scrims). */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.3s var(--ease-out) backwards;
+}
+
+/* Press: every tappable thing sinks to .95 while held. Hover-lift only on devices with a
+   real pointer, so a tap on the phone never leaves a button floating. */
+.motion-press {
+  transition:
+    transform 0.35s var(--spring-bouncy),
+    box-shadow 0.3s var(--ease-out),
+    background-color 0.2s,
+    color 0.2s,
+    filter 0.2s;
+}
+.motion-press:active:not(:disabled) {
+  transform: scale(0.95);
+  transition-duration: 0.1s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .motion-lift:hover:not(:disabled):not(:active) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgb(0 0 0 / 0.35);
+  }
+}
+
+/* Breathe: a slow scale pulse for glows behind a running timer (3.2 s). */
+@keyframes breathe {
+  50% {
+    transform: scale(1.08);
+  }
+}
+.animate-breathe {
+  animation: breathe 3.2s ease-in-out infinite;
+}
+
+/* Now-line dot: a soft ring pulses out every 2 s. */
+@keyframes nowpulse {
+  50% {
+    box-shadow: 0 0 0 7px rgb(204 111 98 / 0.18);
+  }
+}
+.animate-nowpulse {
+  animation: nowpulse 2s ease-in-out infinite;
+}
+
+/* A new row slides in from above and flashes green once. */
+@keyframes slidein {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.96);
+  }
+}
+@keyframes flash {
+  0%,
+  30% {
+    background-color: var(--color-rail-active);
+    box-shadow: inset 0 0 0 1.5px var(--color-accent);
+  }
+}
+.animate-flash {
+  animation:
+    slidein 0.6s var(--spring-bouncy),
+    flash 1.4s ease;
+}
+
+/* Bars in a chart grow from the bottom (set transform-origin via the class). Stagger with --i. */
+@keyframes grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+.animate-grow {
+  transform-origin: bottom;
+  animation: grow 0.8s var(--spring-soft) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+/* Horizontal variant (progress fills, links between steps). */
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+.animate-grow-x {
+  transform-origin: left;
+  animation: grow-x 0.8s var(--spring-soft) backwards;
+}
+
+/* Ripple: a ring bursts out of a button (START). Put on an absolutely positioned inset span. */
+@keyframes ripple {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5, 2.1);
+  }
+}
+.animate-ripple {
+  animation: ripple 0.8s var(--ease-out);
+}
+
+/* Sheet from below (phone) and toast from below. */
+@keyframes sheet-up {
+  from {
+    transform: translateY(105%);
+  }
+}
+.animate-sheet-up {
+  animation: sheet-up 0.6s var(--spring-soft) backwards;
+}
+
+/* Modal on desktop: scale .94 → 1 with an 8px rise. */
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(8px);
+  }
+}
+.animate-modal-in {
+  animation: modal-in 0.5s var(--spring-soft) backwards;
+}
+
+/* Screen enter: <main key={screen}> re-mounts per screen and the sections/cards directly inside
+   the screen's root rise one after another. Fixed overlays (modals) are left alone. */
+.screen-enter > * > :not(.fixed) {
+  animation: rise 0.6s var(--spring-soft) backwards;
+}
+.screen-enter > * > :nth-child(2) { animation-delay: 40ms; }
+.screen-enter > * > :nth-child(3) { animation-delay: 80ms; }
+.screen-enter > * > :nth-child(4) { animation-delay: 120ms; }
+.screen-enter > * > :nth-child(5) { animation-delay: 160ms; }
+.screen-enter > * > :nth-child(6) { animation-delay: 200ms; }
+.screen-enter > * > :nth-child(7) { animation-delay: 240ms; }
+.screen-enter > * > :nth-child(n + 8) { animation-delay: 280ms; }
+
+/* Toast: springs up from below, sinks back out. The element keeps Tailwind's `translate`
+   for centring; these animate `transform`, which composes with it. */
+@keyframes toast-up {
+  from {
+    opacity: 0;
+    transform: translateY(160%);
+  }
+}
+.animate-toast-in {
+  animation: toast-up 0.6s var(--spring-bouncy) backwards;
+}
+.toast-out {
+  opacity: 0;
+  transform: translateY(160%);
+  transition:
+    transform 0.4s var(--ease-out),
+    opacity 0.3s var(--ease-out);
+}
+
+/* Modal: on a phone the whole dialog slides up as a sheet; from `wide` up the scrim fades in
+   and the panel scales .94 → 1 with an 8px rise. */
+.modal-enter {
+  animation: sheet-up 0.6s var(--spring-soft) backwards;
+}
+@media (min-width: 701px) {
+  .modal-enter {
+    animation: fade-in 0.3s var(--ease-out) backwards;
+  }
+  .modal-enter > .modal-panel {
+    animation: modal-in 0.5s var(--spring-soft) backwards;
+  }
+}
+
+/* Side rail: the active icon tilts and grows a little as the pill lands on it. */
+.rail-icon {
+  display: inline-flex;
+  transition: transform 0.45s var(--spring-bouncy);
+}
+[aria-current='page'] > .rail-icon {
+  transform: rotate(-8deg) scale(1.12);
+}
+
+/* Reduced motion: everything lands at once. JS-driven motion (count-ups) checks
+   matchMedia('(prefers-reduced-motion: reduce)') itself. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}

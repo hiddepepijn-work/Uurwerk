@@ -80,8 +80,10 @@ export function Toggle({
       className={`relative h-[26px] w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40
         ${checked ? 'bg-accent' : 'bg-track'}`}
     >
+      {/* The knob slides with a bounce; transform only, so nothing re-lays out. */}
       <span
-        className={`absolute top-[3px] h-5 w-5 rounded-full bg-white transition-all ${checked ? 'left-[21px]' : 'left-[3px]'}`}
+        className={`absolute top-[3px] left-[3px] h-5 w-5 rounded-full bg-white ${checked ? 'translate-x-[18px]' : 'translate-x-0'}`}
+        style={{ transition: 'transform 450ms var(--spring-bouncy)' }}
       />
     </button>
   )

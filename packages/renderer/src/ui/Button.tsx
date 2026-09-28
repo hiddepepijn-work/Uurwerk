@@ -36,10 +36,12 @@ export function Button({
   className = '',
   ...rest
 }: Props) {
+  // Presses sink to .95; filled buttons also lift 2px on hover where there is a real pointer
+  // (globals.css: motion-press / motion-lift). Ghost buttons stay flat — a shadow under text reads as a bug.
   return (
     <button
       {...rest}
-      className={`no-drag inline-flex items-center justify-center ${size === 'lg' ? 'rounded-[16px]' : 'rounded-button'} transition-colors
+      className={`no-drag inline-flex items-center justify-center ${size === 'lg' ? 'rounded-[16px]' : 'rounded-button'} motion-press ${variant === 'ghost' ? '' : 'motion-lift'}
         disabled:cursor-not-allowed disabled:opacity-40
         ${variants[variant]} ${sizes[size]} ${full ? 'w-full' : ''} ${className}`}
     >

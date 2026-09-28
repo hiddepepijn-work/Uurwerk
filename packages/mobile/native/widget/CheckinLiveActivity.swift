@@ -297,9 +297,13 @@ struct CheckinLockView: View {
                             .padding(.vertical, 3)
                             .background(phase.fill, in: Capsule())
                             .lineLimit(1)
+                            // Words cross-fade and numbers roll when iOS redraws: the only motion
+                            // a Live Activity allows.
+                            .contentTransition(.opacity)
                         Text("\(clock(state.start))–\(clock(state.end))")
                             .font(.system(size: 12, weight: .semibold))
                             .monospacedDigit()
+                            .contentTransition(.numericText())
                             .foregroundStyle(Palette.dim)
                             .lineLimit(1)
                     }

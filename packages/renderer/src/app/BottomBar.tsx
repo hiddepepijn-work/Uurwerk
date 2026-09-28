@@ -1,9 +1,13 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { MicIcon } from '../ui/icons.js'
 import { ITEMS, type Screen } from './IconRail.js'
+import { useSlidingThumb } from '../ui/useSlidingThumb.js'
 
 /** The four a phone needs within reach of a thumb; the rest sit behind "More". */
 const PRIMARY: Screen[] = ['today', 'week', 'tasks']
+
+/** Diameter of the soft green glow that follows the active tab. */
+const GLOW = 50
 
 /**
  * The phone's navigation: a pill floating along the bottom instead of the rail down the
@@ -25,6 +29,9 @@ export function BottomBar({
   const primary = ITEMS.filter((item) => PRIMARY.includes(item.id))
   const rest = ITEMS.filter((item) => !PRIMARY.includes(item.id))
   const inRest = rest.some((item) => item.id === active)
+  // A soft green glow springs to the active tab: measured from the tab, drawn as a circle on it.
+  const activeTab = moreOpen || inRest ? 'more' : active
+  const { containerRef, rect, thumbStyle } = useSlidingThumb<HTMLElement>(activeTab, { duration: 550 })
 
   const go = (screen: Screen): void => {
     setMoreOpen(false)
@@ -34,7 +41,7 @@ export function BottomBar({
   return (
     <>
       {moreOpen && (
-        <div className="fixed inset-0 z-40 bg-scrim" onClick={() => setMoreOpen(false)}>
+        <div className="animate-fade-in fixed inset-0 z-40 bg-scrim" onClick={() => setMoreOpen(false)}>
           <div
             role="dialog"
             aria-label="More"
@@ -42,11 +49,13 @@ export function BottomBar({
             className="absolute right-3.5 bottom-[calc(82px+max(14px,calc(env(safe-area-inset-bottom)-8px)))] left-3.5 grid grid-cols-2 gap-2 rounded-[24px] border border-border bg-card p-2.5"
             onClick={(event) => event.stopPropagation()}
           >
-            {rest.map(({ id, label, Icon }) => (
+            {rest.map(({ id, label, Icon }, index) => (
               <button
                 key={id}
                 onClick={() => go(id)}
-                className={`flex h-16 items-center gap-3 rounded-[16px] px-4 text-[15px] font-bold ${
+                // The tiles pop in one after another.
+                style={{ '--i': index } as CSSProperties}
+                className={`animate-pop-in motion-press flex h-16 items-center gap-3 rounded-[16px] px-4 text-[15px] font-bold ${
                   id === active ? 'bg-rail-active text-accent-soft' : 'bg-input text-text'
                 }`}
               >
@@ -59,9 +68,24 @@ export function BottomBar({
       )}
 
       <nav
+        ref={containerRef}
         aria-label="Main"
-        className="z-50 mx-3.5 mt-2 mb-[max(14px,calc(env(safe-area-inset-bottom)-8px))] flex h-[66px] shrink-0 items-center justify-around rounded-[33px] bg-tabbar px-2"
+        className="relative z-50 mx-3.5 mt-2 mb-[max(14px,calc(env(safe-area-inset-bottom)-8px))] flex h-[66px] shrink-0 items-center justify-around rounded-[33px] bg-tabbar px-2"
       >
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 left-0 rounded-full bg-rail-active"
+          style={{
+            width: GLOW,
+            height: GLOW,
+            opacity: rect ? 1 : 0,
+            transform: rect
+              ? `translate(${rect.x + rect.width / 2 - GLOW / 2}px, ${rect.y + rect.height / 2 - GLOW / 2}px)`
+              : undefined,
+            // The hook's transition: instant on first placement, a spring after.
+            transition: thumbStyle.transition
+          }}
+        />
         {primary.map(({ id, label, Icon }) => (
           <Tab key={id} label={id === 'week' ? 'Agenda' : label} active={id === active && !moreOpen} onClick={() => go(id)}>
             <Icon size={22} />
@@ -100,11 +124,13 @@ function Tab({
     <button
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`flex w-[62px] flex-col items-center gap-0.5 text-[11px] font-bold transition-colors ${
+      data-active={active}
+      className={`relative z-[1] flex w-[62px] flex-col items-center gap-0.5 text-[11px] font-bold transition-colors duration-300 ${
         active ? 'text-text' : 'text-text-faint'
       }`}
     >
-      {children}
+      {/* The icon pops as its tab becomes active. */}
+      <span className={`flex ${active ? 'animate-pop' : ''}`}>{children}</span>
       <span>{label}</span>
     </button>
   )

@@ -5,6 +5,9 @@ import { EmptyState } from '../../ui/EmptyState.js'
 import { CameraIcon, CheckIcon, CloseIcon, TrashIcon } from '../../ui/icons.js'
 import { formatClock } from '../../lib/format.js'
 
+const TILE_TRANSITION =
+  'opacity 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out), transform 0.45s var(--spring-bouncy)'
+
 interface Props {
   screenshots: Artifact[]
   onToggle: (id: string, included: boolean) => void
@@ -62,8 +65,10 @@ export function ScreenshotGrid({ screenshots, onToggle, onApproveAll, onDelete }
         {screenshots.map((shot) => (
           <div
             key={shot.id}
-            className={`group relative overflow-hidden rounded-button bg-input transition-[opacity,box-shadow]
-              ${shot.included ? 'ring-[1.5px] ring-accent' : 'opacity-55 hover:opacity-90'}`}
+            className={`group relative overflow-hidden rounded-button bg-input
+              ${shot.included ? 'ring-[1.5px] ring-accent' : 'scale-[0.97] opacity-55 hover:opacity-90'}`}
+            // Toggling springs the tile back to full size, or lets it sink a little.
+            style={{ transition: TILE_TRANSITION }}
           >
             <button onClick={() => onToggle(shot.id, !shot.included)} className="block w-full text-left">
               <img
@@ -73,7 +78,8 @@ export function ScreenshotGrid({ screenshots, onToggle, onApproveAll, onDelete }
                 className="aspect-video w-full bg-bg object-cover"
               />
               <span
-                className={`absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full
+                key={String(shot.included)}
+                className={`animate-pop absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full
                   ${shot.included ? 'bg-accent text-accent-ink' : 'bg-secondary text-text-dim'}`}
               >
                 {shot.included ? <CheckIcon size={13} /> : <CloseIcon size={13} />}
@@ -110,9 +116,9 @@ export function ScreenshotGrid({ screenshots, onToggle, onApproveAll, onDelete }
       {zoomed && (
         <button
           onClick={() => setZoomed(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-8"
+          className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-scrim p-8"
         >
-          <img src={`file://${zoomed.path}`} alt="" className="max-h-full max-w-full rounded-card" />
+          <img src={`file://${zoomed.path}`} alt="" className="animate-modal-in max-h-full max-w-full rounded-card" />
         </button>
       )}
     </div>

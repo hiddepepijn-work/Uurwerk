@@ -4,6 +4,8 @@ import { EmptyState } from '../../ui/EmptyState.js'
 import { PriorityDot, PRIORITY_LABEL } from '../../ui/PriorityDot.js'
 import { GearIcon } from '../../ui/icons.js'
 import { formatDuration } from '../../lib/format.js'
+import { colorFor } from '../agenda/agenda-model.js'
+import { DrawnCheck, Sparks, strikeStyle, useCompletion } from './completion.js'
 
 const ORDER: Priority[] = ['high', 'medium', 'low']
 
@@ -69,54 +71,17 @@ export function PriorityView({
                     const overdue = Boolean(task.dueDate && task.dueDate < today && task.status !== 'done')
 
                     return (
-                      <li
+                      <PriorityRow
                         key={task.id}
-                        className={`flex items-center gap-2.5 border-t border-border py-2.5 pr-1.5 pl-4
-                          wide:gap-3 wide:rounded-input wide:border-t-0 wide:px-1 wide:py-2
-                          ${task.id === activeTaskId ? 'bg-rail-active' : ''}`}
-                      >
-                        <button
-                          onClick={() => onToggleComplete(task)}
-                          aria-label="Toggle complete"
-                          className={`h-[18px] w-[18px] shrink-0 rounded-full border-2 transition-colors
-                            ${task.status === 'done' ? 'border-accent bg-accent' : 'border-text-faint/70 hover:border-accent'}`}
-                        />
-                        <button onClick={() => onStart(task)} className="min-w-0 flex-1 text-left">
-                          <div className="text-[14px] leading-tight font-bold text-text wide:truncate wide:text-[15px]">
-                            {task.title}
-                          </div>
-                          <div className="mt-0.5 truncate text-[12px] font-semibold text-text-dim wide:text-[13px] wide:font-normal">
-                            {[task.projectName, area?.name].filter(Boolean).join(' · ')}
-                            {waitingOn > 0 && task.status !== 'done' && (
-                              <span title="The planner leaves this out until its prerequisites are finished.">
-                                {task.projectName || area ? ' · ' : ''}waits for {waitingOn}
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                        <span
-                          className={`w-[52px] shrink-0 font-mono text-[13px] font-bold wide:w-16 wide:text-right wide:text-[14px] wide:font-semibold ${
-                            !task.dueDate
-                              ? 'text-text-faint'
-                              : overdue
-                                ? 'text-danger-text'
-                                : 'text-text wide:text-text-dim'
-                          }`}
-                        >
-                          {task.dueDate ? formatDue(task.dueDate) : '—'}
-                        </span>
-                        <span className="w-[66px] shrink-0 font-mono text-[12px] font-semibold text-text-dim wide:w-[92px] wide:text-right wide:text-[14px]">
-                          {formatDuration(task.loggedMin)} logged
-                        </span>
-                        <button
-                          onClick={() => onEdit(task)}
-                          aria-label="Edit task"
-                          title="Edit task"
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] text-text-faint transition-colors hover:bg-input hover:text-text wide:h-8 wide:w-8"
-                        >
-                          <GearIcon size={16} />
-                        </button>
-                      </li>
+                        task={task}
+                        active={task.id === activeTaskId}
+                        area={area ?? null}
+                        waitingOn={waitingOn}
+                        overdue={overdue}
+                        onToggleComplete={onToggleComplete}
+                        onStart={onStart}
+                        onEdit={onEdit}
+                      />
                     )
                   })}
                 </ul>
@@ -126,6 +91,89 @@ export function PriorityView({
         )}
       </div>
     </Card>
+  )
+}
+
+/** One task in the priority view. Its own component so each row can play its completion. */
+function PriorityRow({
+  task,
+  active,
+  area,
+  waitingOn,
+  overdue,
+  onToggleComplete,
+  onStart,
+  onEdit
+}: {
+  task: Task
+  active: boolean
+  area: Area | null
+  waitingOn: number
+  overdue: boolean
+  onToggleComplete: (task: Task) => void
+  onStart: (task: Task) => void
+  onEdit: (task: Task) => void
+}) {
+  const completion = useCompletion<HTMLLIElement>(task, onToggleComplete)
+  const done = task.status === 'done'
+
+  return (
+    <li
+      ref={completion.row}
+      className={`flex items-center gap-2.5 border-t border-border py-2.5 pr-1.5 pl-4
+        wide:gap-3 wide:rounded-input wide:border-t-0 wide:px-1 wide:py-2
+        ${active ? 'bg-rail-active' : ''}`}
+    >
+      <button
+        onClick={completion.toggle}
+        aria-label="Toggle complete"
+        className={`relative flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 text-accent-ink transition-colors duration-[250ms]
+          ${done || completion.checked ? 'border-accent bg-accent' : 'border-text-faint/70 hover:border-accent'}`}
+      >
+        {/* Drawn only while it is being ticked: a saved done task keeps its plain filled circle. */}
+        <DrawnCheck drawn={completion.checked} size={10} />
+        {completion.checked && <Sparks color={colorFor(task.areaId).soft} />}
+      </button>
+      <button onClick={() => onStart(task)} className="min-w-0 flex-1 text-left">
+        <div
+          className={`text-[14px] leading-tight font-bold transition-colors wide:truncate wide:text-[15px] ${
+            completion.checked ? 'text-text-dim' : 'text-text'
+          }`}
+        >
+          <span style={strikeStyle(completion.checked)}>{task.title}</span>
+        </div>
+        <div className="mt-0.5 truncate text-[12px] font-semibold text-text-dim wide:text-[13px] wide:font-normal">
+          {[task.projectName, area?.name].filter(Boolean).join(' · ')}
+          {waitingOn > 0 && task.status !== 'done' && (
+            <span title="The planner leaves this out until its prerequisites are finished.">
+              {task.projectName || area ? ' · ' : ''}waits for {waitingOn}
+            </span>
+          )}
+        </div>
+      </button>
+      <span
+        className={`w-[52px] shrink-0 font-mono text-[13px] font-bold wide:w-16 wide:text-right wide:text-[14px] wide:font-semibold ${
+          !task.dueDate
+            ? 'text-text-faint'
+            : overdue
+              ? 'text-danger-text'
+              : 'text-text wide:text-text-dim'
+        }`}
+      >
+        {task.dueDate ? formatDue(task.dueDate) : '—'}
+      </span>
+      <span className="w-[66px] shrink-0 font-mono text-[12px] font-semibold text-text-dim wide:w-[92px] wide:text-right wide:text-[14px]">
+        {formatDuration(task.loggedMin)} logged
+      </span>
+      <button
+        onClick={() => onEdit(task)}
+        aria-label="Edit task"
+        title="Edit task"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] text-text-faint transition-colors hover:bg-input hover:text-text wide:h-8 wide:w-8"
+      >
+        <GearIcon size={16} />
+      </button>
+    </li>
   )
 }
 

@@ -1,8 +1,10 @@
+import { useEffect, useRef, useState } from 'react'
 import type { Area, TimeSegment } from '@core/contract/types.js'
 import { Button } from '../../ui/Button.js'
 import { PlayIcon, StopIcon } from '../../ui/icons.js'
 import { formatClock, formatDuration, formatStopwatch } from '../../lib/format.js'
 import { AREA_COLORS } from '../agenda/agenda-model.js'
+import { SwapIn } from './SwapIn.js'
 
 interface Props {
   segment: TimeSegment | null
@@ -56,14 +58,41 @@ export function TimerHero({
   // The four system areas wear their own tint; an area the user added stays grey.
   const areaColor = area ? AREA_COLORS[area.id] : undefined
 
+  // START: a green ring bursts out of the button. Only on the change to running, so opening
+  // the app on a running timer does not fire it.
+  const [burst, setBurst] = useState(0)
+  const wasRunning = useRef(running)
+  useEffect(() => {
+    if (running && !wasRunning.current) setBurst((count) => count + 1)
+    wasRunning.current = running
+  }, [running])
+
+  // The halo breathes while running. After STOP it keeps breathing through its 800 ms fade
+  // and then stops, so an idle screen runs no animation at all.
+  const [glowing, setGlowing] = useState(running)
+  useEffect(() => {
+    if (running) return setGlowing(true)
+    const off = window.setTimeout(() => setGlowing(false), 800)
+    return () => window.clearTimeout(off)
+  }, [running])
+
   return (
     <section
-      className="flex flex-col gap-3.5 rounded-modal bg-card px-[18px] pt-5 pb-[18px]
+      className="relative isolate flex flex-col gap-3.5 rounded-modal bg-card px-[18px] pt-5 pb-[18px]
         wide:justify-between wide:gap-6 wide:px-8 wide:py-[28px]"
     >
+      {/* A soft green glow behind the clock while it runs; clipped to the card. */}
+      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit]">
+        <span
+          className={`absolute top-[-111px] left-[-17px] h-[320px] w-[320px] rounded-full transition-opacity duration-[800ms]
+            wide:top-[-96px] wide:left-[37px] ${running ? 'opacity-100' : 'opacity-0'} ${glowing ? 'animate-breathe' : ''}`}
+          style={{ background: 'radial-gradient(circle, rgb(93 174 134 / 0.22), rgb(93 174 134 / 0) 65%)' }}
+        />
+      </span>
+
       <div className="flex flex-col gap-1 wide:gap-[18px]">
         <div
-          className={`font-display text-[58px] leading-none font-bold tracking-[-1.6px] tabular-nums
+          className={`font-display text-[58px] leading-none font-bold tracking-[-1.6px] tabular-nums transition-colors duration-[400ms]
             wide:text-[76px] wide:leading-[0.95] wide:tracking-[-2px]
             ${running ? 'text-text' : 'text-text-faint'}`}
         >
@@ -82,6 +111,8 @@ export function TimerHero({
         )}
       </div>
 
+      {/* Switch task: the current task slides out, the new one slides in. */}
+      <SwapIn swapKey={running ? (segment!.taskId ?? 'untasked') : null}>
       <div className="flex flex-col gap-2 border-l-[3px] border-accent py-0.5 pl-3 wide:gap-3 wide:pl-3.5">
         <div className="text-[20px] leading-tight font-bold text-text wide:text-[24px] wide:tracking-[-0.2px]">
           {/* An untasked run is not an unnamed one: the clock is running and the reason it
@@ -126,19 +157,31 @@ export function TimerHero({
           )}
         </div>
       </div>
+      </SwapIn>
 
       <div className="flex items-center gap-2 wide:gap-2.5">
         {running ? (
           <>
-            <Button
-              size="lg"
-              variant="primary"
-              icon={<StopIcon size={16} />}
-              onClick={onStop}
-              className="w-auto flex-1 basis-0 tracking-[0.6px] wide:w-[260px] wide:flex-none wide:basis-auto"
-            >
-              STOP
-            </Button>
+            {/* STOP takes START's place, so the ring bursts from where the press was. The
+                wrapper carries the button's sizing; the ring is its inset outline. */}
+            <span className="relative flex flex-1 basis-0 wide:w-[260px] wide:flex-none wide:basis-auto">
+              <Button
+                size="lg"
+                variant="primary"
+                icon={<StopIcon size={16} />}
+                onClick={onStop}
+                className="w-full tracking-[0.6px]"
+              >
+                STOP
+              </Button>
+              {burst > 0 && (
+                <span
+                  key={burst}
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 animate-ripple rounded-[16px] border-2 border-accent opacity-0"
+                />
+              )}
+            </span>
             <Button
               size="lg"
               variant="secondary"

@@ -2,7 +2,9 @@ import type { Area, Task } from '@core/contract/types.js'
 import { PriorityDot } from '../../ui/PriorityDot.js'
 import { FolderIcon, GearIcon } from '../../ui/icons.js'
 import { formatDuration } from '../../lib/format.js'
+import { colorFor } from '../agenda/agenda-model.js'
 import { AreaChip } from './AreaChip.js'
+import { DrawnCheck, Sparks, strikeStyle, useCompletion } from './completion.js'
 
 interface Props {
   task: Task
@@ -35,10 +37,14 @@ export function TaskRow({
   onEdit
 }: Props) {
   const done = task.status === 'done'
+  const completion = useCompletion<HTMLDivElement>(task, onToggleComplete)
+  // Ticked a moment ago and not saved yet: it already looks done.
+  const ticked = done || completion.checked
 
   return (
     // Phone: full-width rows split by hairlines. Wide: separate rounded rows inside the card.
     <div
+      ref={completion.row}
       className={`relative flex items-start gap-3 border-t border-border py-3 pr-3.5 pl-4 transition-colors
         wide:items-center wide:rounded-button wide:border-t-0 wide:py-2.5 wide:pr-2.5
         ${active ? 'bg-rail-active' : 'hover:bg-card-hover'}`}
@@ -48,25 +54,13 @@ export function TaskRow({
       )}
 
       <button
-        onClick={() => onToggleComplete(task)}
+        onClick={completion.toggle}
         aria-label={done ? 'Reopen task' : 'Complete task'}
-        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors wide:mt-0 wide:h-[18px] wide:w-[18px]
-          ${done ? 'border-accent bg-accent text-accent-ink' : 'border-text-faint/70 hover:border-accent'}`}
+        className={`relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-[250ms] wide:mt-0 wide:h-[18px] wide:w-[18px]
+          ${ticked ? 'border-accent bg-accent text-accent-ink' : 'border-text-faint/70 hover:border-accent'}`}
       >
-        {done && (
-          <svg
-            width="11"
-            height="11"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
-        )}
+        <DrawnCheck drawn={ticked} />
+        {completion.checked && <Sparks color={colorFor(task.areaId).soft} />}
       </button>
 
       {showDot && (
@@ -77,11 +71,12 @@ export function TaskRow({
 
       <button onClick={() => onStart(task)} className="group min-w-0 flex-1 text-left">
         <div
-          className={`text-[16px] leading-tight font-bold wide:truncate wide:text-[15px] ${
-            done ? 'text-text-faint line-through' : 'text-text'
+          className={`text-[16px] leading-tight font-bold transition-colors wide:truncate wide:text-[15px] ${
+            done ? 'text-text-faint line-through' : completion.checked ? 'text-text-dim' : 'text-text'
           }`}
         >
-          {task.title}
+          {/* Just ticked: the strike draws itself across; a saved done task keeps its plain line-through. */}
+          <span style={done ? undefined : strikeStyle(completion.checked)}>{task.title}</span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[13px] text-text-dim">
           {task.projectName && (
