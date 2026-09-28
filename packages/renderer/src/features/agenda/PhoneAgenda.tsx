@@ -293,14 +293,7 @@ export function WeekTimeline({
               {day.allDay && day.allDay.length > 0 && (
                 <span
                   // Outlined on the phone, a tinted chip on the desktop's roomier week.
-                  className="max-w-full truncate rounded-pill border border-[var(--chip-fill)] px-1 py-px text-[9px] leading-[13px] font-bold wide:border-transparent wide:bg-[var(--chip-tint)] wide:px-2 wide:text-[11px] wide:leading-4"
-                  style={
-                    {
-                      '--chip-fill': colorFor(day.allDay[0]!.areaId).fill,
-                      '--chip-tint': colorFor(day.allDay[0]!.areaId).tint,
-                      color: colorFor(day.allDay[0]!.areaId).soft
-                    } as React.CSSProperties
-                  }
+                  className="max-w-full truncate rounded-pill bg-area-work-tint px-1.5 py-0.5 text-[10px] leading-[14px] font-bold text-area-work-soft ring-1 ring-area-work/50 wide:px-2.5 wide:py-1 wide:text-[12.5px] wide:leading-4"
                   title={day.allDay.map((item) => item.title).join(', ')}
                 >
                   {day.allDay[0]!.title}
@@ -318,7 +311,11 @@ export function WeekTimeline({
           <div ref={area} className="absolute top-[6px] right-0 bottom-0 flex gap-[3px] wide:gap-1.5" style={{ left: GUTTER - 8 }}>
             {days.map((day) => {
               const column = `relative h-full min-w-0 flex-1 rounded-[10px] wide:rounded-[14px] ${
-                day.date === today ? 'bg-accent/[0.06]' : 'bg-card/50'
+                day.allDay && day.allDay.length > 0
+                  ? 'bg-area-work/[0.11] ring-1 ring-area-work/25 ring-inset'
+                  : day.date === today
+                    ? 'bg-accent/[0.06]'
+                    : 'bg-card/50'
               }`
               const blocks = (
                 <>
@@ -632,13 +629,13 @@ function NowLine({ top, thin = false }: { top: number; thin?: boolean }) {
 /** The day's all-day items, above its timeline: a birthday, a holiday, "vrij". */
 export function AllDayRow({ items }: { items: AllDayItem[] }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-2">
       {items.map((item) => (
         <span
           key={item.id}
-          className="rounded-pill border-[1.5px] px-[11px] py-[5px] text-[13px] font-bold"
-          style={{ borderColor: colorFor(item.areaId).fill, color: colorFor(item.areaId).soft }}
+          className="inline-flex items-center gap-2 rounded-pill border-[1.5px] border-area-work/60 bg-area-work-tint px-3.5 py-[7px] text-[14px] font-bold text-area-work-soft wide:text-[15px]"
         >
+          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-area-work" />
           {item.title}
         </span>
       ))}
