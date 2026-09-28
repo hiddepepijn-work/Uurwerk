@@ -23,6 +23,14 @@ export interface AgendaItem {
   lane: number
   lanes: number
   /**
+   * How many lanes wide it is drawn: it reaches right until a lane that overlaps it is in
+   * the way, so an item that only touches a crowded moment is not squeezed for its whole
+   * length.
+   */
+  span: number
+  /** What it is in the database: a plan block (with its task) or a calendar event. */
+  source: { type: 'block'; blockId: string; taskId: string | null } | { type: 'event'; eventId: string; parentId: string | null }
+  /**
    * A short appointment (half an hour or less): drawn at least half an hour tall so it can
    * be read, beside whatever it overlaps.
    */
@@ -62,7 +70,7 @@ export function agendaFor(
   events: CalendarEvent[]
 ): { items: AgendaItem[]; allDay: AllDayItem[] } {
   const midnight = fromIsoDate(date).getTime()
-  const items: Omit<AgendaItem, 'lane' | 'lanes' | 'overlay' | 'coveredMin'>[] = []
+  const items: Omit<AgendaItem, 'lane' | 'lanes' | 'span' | 'overlay' | 'coveredMin'>[] = []
   const allDay: AllDayItem[] = []
 
   for (const block of blocks) {
@@ -80,7 +88,8 @@ export function agendaFor(
         block.projectName ?? colorFor(block.areaId).label
       ].join(' · '),
       kind,
-      areaId: block.areaId
+      areaId: block.areaId,
+      source: { type: 'block', blockId: block.id, taskId: block.taskId }
     })
   }
 
@@ -110,7 +119,8 @@ export function agendaFor(
         : event.title,
       meta: [`${hhmm(start)}–${hhmm(end)}`, travel ? null : event.location].filter(Boolean).join(' · '),
       kind: travel ? 'travel' : 'appointment',
-      areaId: event.areaId
+      areaId: event.areaId,
+      source: { type: 'event', eventId: event.id, parentId: event.parentEventId }
     })
   }
 
@@ -121,16 +131,35 @@ export function agendaFor(
  * Greedy lanes within each cluster of overlapping items. Breaks never take a lane of their
  * own: a pause under an appointment is not worth halving the appointment's width for.
  */
-function placeInLanes(items: Omit<AgendaItem, 'lane' | 'lanes' | 'overlay' | 'coveredMin'>[]): AgendaItem[] {
+function placeInLanes(items: Omit<AgendaItem, 'lane' | 'lanes' | 'span' | 'overlay' | 'coveredMin'>[]): AgendaItem[] {
   const sorted = [...items].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin)
   const placed: AgendaItem[] = []
   let cluster: AgendaItem[] = []
   let clusterEnd = -1
   let laneEnds: number[] = []
 
+  /** Where an item is drawn to: a short appointment reserves its enlarged height. */
+  const drawnEnd = (item: AgendaItem): number =>
+    item.overlay ? Math.max(item.endMin, item.startMin + OVERLAY_MIN) : item.endMin
+
   const close = (): void => {
     const lanes = Math.max(1, laneEnds.length)
-    for (const item of cluster) item.lanes = item.kind === 'break' ? 1 : lanes
+    for (const item of cluster) {
+      item.lanes = item.kind === 'break' ? 1 : lanes
+      if (item.kind === 'break') continue
+      // Stretch right up to the first lane further along that overlaps it in time.
+      const blocking = cluster
+        .filter(
+          (other) =>
+            other !== item &&
+            other.kind !== 'break' &&
+            other.lane > item.lane &&
+            other.startMin < drawnEnd(item) &&
+            drawnEnd(other) > item.startMin
+        )
+        .map((other) => other.lane)
+      item.span = (blocking.length > 0 ? Math.min(...blocking) : lanes) - item.lane
+    }
     cluster = []
     laneEnds = []
   }
@@ -139,7 +168,7 @@ function placeInLanes(items: Omit<AgendaItem, 'lane' | 'lanes' | 'overlay' | 'co
     if (raw.startMin >= clusterEnd) close()
     const overlay =
       (raw.kind === 'appointment' || raw.kind === 'travel') && raw.endMin - raw.startMin <= OVERLAY_MIN
-    const item: AgendaItem = { ...raw, lane: 0, lanes: 1, overlay, coveredMin: 0 }
+    const item: AgendaItem = { ...raw, lane: 0, lanes: 1, span: 1, overlay, coveredMin: 0 }
     // Breaks never take a lane. A short appointment does, and reserves the height it is
     // drawn at, so nothing is placed under its enlarged box.
     if (item.kind !== 'break') {

@@ -44,11 +44,14 @@ const at = (date: string, minute: number): number => {
  */
 export function EventComposer({
   initialDate,
+  initialStartMin = 10 * 60,
   onCreated,
   onClose
 }: {
   /** The day that was clicked, so the common case needs no date picking. */
   initialDate: string
+  /** The time that was clicked in the agenda; an hour long to begin with. */
+  initialStartMin?: number
   /** Handed the new event so the caller can go straight on to classifying it. */
   onCreated: (event: CalendarEvent) => void
   onClose: () => void
@@ -56,8 +59,8 @@ export function EventComposer({
   const [title, setTitle] = useState('')
   const [location, setLocation] = useState('')
   const [date, setDate] = useState(initialDate)
-  const [startMin, setStartMin] = useState(10 * 60)
-  const [endMin, setEndMin] = useState(11 * 60)
+  const [startMin, setStartMin] = useState(initialStartMin)
+  const [endMin, setEndMin] = useState(Math.min(24 * 60 - 1, initialStartMin + 60))
   const [areaId, setAreaId] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
   const [travelMin, setTravelMin] = useState(0)

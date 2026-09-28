@@ -3,7 +3,10 @@ import type { IsoDate } from '@core/contract/types.js'
 import { fromIsoDate, toIsoDate, toIsoWeek, weekRange } from '@core/util/time.js'
 import { useLiveQuery } from '../../hooks/useLiveQuery.js'
 import { EventComposer } from '../calendar/EventComposer.js'
+import { moveBlock } from './actions.js'
+import { ItemSheet, SlotSheet } from './AgendaSheets.js'
 import { agendaFor, colorFor, hhmm, OVERLAY_MIN, type AgendaItem, type AllDayItem } from './agenda-model.js'
+import { HOLD_MS, PressTracker, snapMinute, type PointerKind, type PressEvent } from './press.js'
 
 /**
  * The phone's Agenda tab, in the widget's look: a day timeline as the main view and a
@@ -109,6 +112,7 @@ export function PhoneAgenda() {
       {view === 'day' ? (
         <DayTimeline
           key={date}
+          date={date}
           items={selected.items}
           nowMinute={date === today ? minute : null}
         />
@@ -138,32 +142,186 @@ export function PhoneAgenda() {
 
 // ------------------------------------------------------------------ day
 
-/** One day in the widget's look. Shared with the desktop's Today screen. */
+/**
+ * One day in the widget's look. Shared with the desktop's Today screen.
+ *
+ * With a `date` it is also where you plan by hand: tap an empty moment to put something
+ * there, tap an item to see what it is, and move a task by dragging it — with the mouse by
+ * pulling it, on the phone by holding it a moment first (press.ts), so scrolling through the
+ * day never moves anything.
+ */
 export function DayTimeline({
   items,
   nowMinute,
+  date,
   hourPx = DAY_HOUR_PX,
   className = 'min-h-0 flex-1 px-4 pb-6'
 }: {
   items: AgendaItem[]
   nowMinute: number | null
+  /** The day shown; without it the timeline only shows. */
+  date?: IsoDate
   hourPx?: number
   className?: string
 }) {
   const scroller = useScrollToNow(hourPx, nowMinute)
   const DAY_HOUR_PX = hourPx
+  const area = useRef<HTMLDivElement>(null)
+  const press = useRef(new PressTracker())
+  const gesture = useRef<{ item: AgendaItem | null; grab: number; draggable: boolean; timer: number | null } | null>(null)
+  const dragging = useRef(false)
+  const [drag, setDrag] = useState<{ item: AgendaItem; startMin: number } | null>(null)
+  const [slot, setSlot] = useState<number | null>(null)
+  const [opened, setOpened] = useState<AgendaItem | null>(null)
+  const [problem, setProblem] = useState<string | null>(null)
+  const interactive = date !== undefined
+
+  // A finger dragging a block must not scroll the day underneath it.
+  useEffect(() => {
+    const element = scroller.current
+    if (!element) return
+    const hold = (event: TouchEvent): void => {
+      if (dragging.current) event.preventDefault()
+    }
+    element.addEventListener('touchmove', hold, { passive: false })
+    return () => element.removeEventListener('touchmove', hold)
+  }, [scroller])
+
+  const minuteAt = (clientY: number): number => {
+    const rect = area.current?.getBoundingClientRect()
+    return rect ? ((clientY - rect.top) / DAY_HOUR_PX) * 60 : 0
+  }
+
+  const finish = (): void => {
+    if (gesture.current?.timer) window.clearTimeout(gesture.current.timer)
+    gesture.current = null
+    dragging.current = false
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onCancel)
+  }
+
+  const handle = (event: PressEvent, clientY: number): void => {
+    const current = gesture.current
+    if (!current) return
+    if (event.type === 'click') {
+      finish()
+      if (current.item) setOpened(current.item)
+      else setSlot(Math.min(23 * 60 + 45, Math.floor(minuteAt(clientY) / 15) * 15))
+      return
+    }
+    if (event.type === 'drag-start') {
+      if (!current.draggable || !current.item) return
+      dragging.current = true
+      navigator.vibrate?.(12)
+      setDrag({ item: current.item, startMin: current.item.startMin })
+      return
+    }
+    if (event.type === 'drag-move' && current.draggable && current.item) {
+      const length = current.item.endMin - current.item.startMin
+      const start = Math.min(snapMinute(minuteAt(clientY) - current.grab), 24 * 60 - length)
+      setDrag({ item: current.item, startMin: Math.max(0, start) })
+      return
+    }
+    if (event.type === 'drag-end' && current.draggable && current.item) {
+      const item = current.item
+      const length = item.endMin - item.startMin
+      const start = Math.max(0, Math.min(snapMinute(minuteAt(clientY) - current.grab), 24 * 60 - length))
+      finish()
+      if (start === item.startMin || item.source.type !== 'block') {
+        setDrag(null)
+        return
+      }
+      void moveBlock(item.source.blockId, start, start + length)
+        .catch((error: unknown) => setProblem(error instanceof Error ? error.message : String(error)))
+        .finally(() => setDrag(null))
+      return
+    }
+    if (event.type === 'cancel' || event.type === 'drag-end') {
+      finish()
+      setDrag(null)
+    }
+  }
+
+  function onMove(event: PointerEvent): void {
+    handle(press.current.move(event.clientX, event.clientY, performance.now()), event.clientY)
+  }
+  function onUp(event: PointerEvent): void {
+    handle(press.current.up(event.clientX, event.clientY, performance.now()), event.clientY)
+    finish()
+  }
+  function onCancel(): void {
+    press.current.cancel()
+    finish()
+    setDrag(null)
+  }
+
+  const start = (event: React.PointerEvent, item: AgendaItem | null): void => {
+    if (!interactive || event.button !== 0 || gesture.current) return
+    event.stopPropagation()
+    const pointer = (event.pointerType === 'touch' || event.pointerType === 'pen' ? event.pointerType : 'mouse') as PointerKind
+    press.current.down(pointer, event.clientX, event.clientY, performance.now())
+    const draggable = !!item && item.kind === 'task' && item.source.type === 'block'
+    const y = event.clientY
+    gesture.current = {
+      item,
+      grab: item ? minuteAt(y) - item.startMin : 0,
+      draggable,
+      timer:
+        draggable && pointer !== 'mouse'
+          ? window.setTimeout(() => handle(press.current.hold(performance.now()), y), HOLD_MS)
+          : null
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+  }
+
+  const ghost = drag
+    ? {
+        ...drag.item,
+        startMin: drag.startMin,
+        endMin: drag.startMin + (drag.item.endMin - drag.item.startMin),
+        lane: 0,
+        lanes: 1,
+        span: 1
+      }
+    : null
 
   return (
     <div ref={scroller} className={`overflow-y-auto ${className}`}>
       <div className="relative" style={{ height: 24 * DAY_HOUR_PX + 12 }}>
         <HourLines hourPx={DAY_HOUR_PX} labels />
-        <div className="absolute top-[6px] right-0 bottom-0" style={{ left: GUTTER }}>
+        <div
+          ref={area}
+          className="absolute top-[6px] right-0 bottom-0"
+          style={{ left: GUTTER }}
+          onPointerDown={interactive ? (event) => start(event, null) : undefined}
+        >
           {items.map((item) => (
-            <Block key={item.id} item={item} hourPx={DAY_HOUR_PX} detailed />
+            <Block
+              key={item.id}
+              item={item}
+              hourPx={DAY_HOUR_PX}
+              detailed
+              dimmed={drag?.item.id === item.id}
+              onPointerDown={interactive ? (event) => start(event, item) : undefined}
+            />
           ))}
+          {ghost && <Block item={ghost} hourPx={DAY_HOUR_PX} detailed lifted />}
           {nowMinute !== null && <NowLine top={(nowMinute / 60) * DAY_HOUR_PX} />}
         </div>
       </div>
+      {problem && (
+        <button
+          onClick={() => setProblem(null)}
+          className="fixed right-4 bottom-24 left-4 z-40 rounded-[12px] border border-prio-med/40 bg-card px-4 py-3 text-left text-[13px] text-prio-med"
+        >
+          {problem}
+        </button>
+      )}
+      {slot !== null && date && <SlotSheet date={date} minute={slot} onClose={() => setSlot(null)} />}
+      {opened && <ItemSheet item={opened} onClose={() => setOpened(null)} />}
     </div>
   )
 }
@@ -281,22 +439,49 @@ function HourLines({
   )
 }
 
-function Block({ item, hourPx, detailed = false }: { item: AgendaItem; hourPx: number; detailed?: boolean }) {
+function Block({
+  item,
+  hourPx,
+  detailed = false,
+  dimmed = false,
+  lifted = false,
+  onPointerDown
+}: {
+  item: AgendaItem
+  hourPx: number
+  detailed?: boolean
+  /** Its ghost is being dragged elsewhere. */
+  dimmed?: boolean
+  /** The ghost itself, following the pointer. */
+  lifted?: boolean
+  onPointerDown?: (event: React.PointerEvent) => void
+}) {
   const top = (item.startMin / 60) * hourPx + 1
   // A quarter of an hour is 15 px at day scale: too small to read. Short items get a floor
   // and a single line; they may overhang the next slot, which beats being illegible.
   const minutes = item.overlay ? Math.max(item.endMin - item.startMin, OVERLAY_MIN) : item.endMin - item.startMin
   const height = Math.max((minutes / 60) * hourPx - 3, detailed ? 30 : 8)
-  const width = 100 / item.lanes
+  const lane = 100 / item.lanes
   // A clear gap between side-by-side items, so a split reads as a split.
   const gap = item.lanes > 1 ? (detailed ? 8 : 3) : detailed ? 4 : 2
-  const position = { top, height, left: `${item.lane * width}%`, width: `calc(${width}% - ${gap}px)` }
+  const position = {
+    top,
+    height,
+    left: `${item.lane * lane}%`,
+    width: `calc(${lane * (item.span ?? 1)}% - ${gap}px)`
+  }
+  const handling = onPointerDown
+    ? {
+        onPointerDown,
+        style: { cursor: item.kind === 'task' ? 'grab' : 'pointer', WebkitTouchCallout: 'none' as const, userSelect: 'none' as const }
+      }
+    : {}
   const color = colorFor(item.areaId)
 
   if (item.kind === 'break') {
     return (
       <div
-        className="absolute flex items-center border-l-2 border-dotted border-border pl-2.5 text-[10px] text-text-faint"
+        className="pointer-events-none absolute flex items-center border-l-2 border-dotted border-border pl-2.5 text-[10px] text-text-faint"
         style={position}
       >
         {detailed && height >= 12 ? 'Pauze' : ''}
@@ -314,15 +499,24 @@ function Block({ item, hourPx, detailed = false }: { item: AgendaItem; hourPx: n
 
   return (
     <div
+      onPointerDown={handling.onPointerDown}
       className={`absolute overflow-hidden text-left ${
         detailed ? (tall ? 'rounded-[10px] px-2.5 py-1.5' : 'flex items-center rounded-[9px] px-2.5') : 'rounded-[5px] px-1 py-0.5'
-      } ${travel ? 'border border-dashed' : planned ? '' : 'border-[1.5px]'}`}
+      } ${travel ? 'border border-dashed' : planned ? '' : 'border-[1.5px]'} ${
+        lifted ? 'pointer-events-none' : ''
+      }`}
       style={{
         ...position,
+        ...handling.style,
+        opacity: dimmed ? 0.35 : undefined,
+        transform: lifted ? 'scale(1.03)' : undefined,
+        transition: 'opacity 150ms ease',
         // Appointments sit above planned work, with a ring of background so the edge shows.
-        zIndex: item.overlay ? 3 : planned ? 1 : 2,
+        zIndex: lifted ? 20 : item.overlay ? 3 : planned ? 1 : 2,
         paddingTop: coveredPx || undefined,
-        boxShadow: '0 0 0 2px var(--color-bg, #0b0d0f)',
+        boxShadow: lifted
+          ? '0 0 0 2px var(--color-bg, #0b0d0f), 0 12px 28px rgba(0,0,0,0.5)'
+          : '0 0 0 2px var(--color-bg, #0b0d0f)',
         // Appointments are tinted over solid background, so an overlay hides what it covers.
         background: planned ? color.fill : `linear-gradient(${color.fill}26, ${color.fill}26), var(--color-bg, #0b0d0f)`,
         borderColor: color.fill,
@@ -333,12 +527,18 @@ function Block({ item, hourPx, detailed = false }: { item: AgendaItem; hourPx: n
         className={`truncate font-semibold ${detailed ? 'text-[13px] leading-tight' : 'text-[9px] leading-[11px]'}`}
       >
         {item.title}
-        {/* The time beside the title only when there is room; half a column needs it for the title. */}
-        {detailed && !tall && item.lanes === 1 && (
-          <span className="ml-1.5 font-normal opacity-75">{hhmm(item.startMin)}–{hhmm(item.endMin)}</span>
+        {/* Short items still say when: the whole span when there is room, the start otherwise. */}
+        {detailed && !tall && (
+          <span className="ml-1.5 font-normal opacity-75">
+            {item.lanes === 1 || item.span === item.lanes ? `${hhmm(item.startMin)}–${hhmm(item.endMin)}` : hhmm(item.startMin)}
+          </span>
         )}
       </div>
-      {detailed && tall && <div className="mt-0.5 truncate text-[11px] opacity-80">{item.meta}</div>}
+      {detailed && tall && (
+        <div className="mt-0.5 truncate text-[11px] opacity-80">
+          {lifted ? `${hhmm(item.startMin)}–${hhmm(item.endMin)}` : item.meta}
+        </div>
+      )}
     </div>
   )
 }
