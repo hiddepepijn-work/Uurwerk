@@ -105,6 +105,18 @@ export const TOOLS: ToolSpec[] = [
     proposes: true
   },
   {
+    name: 'report_problem',
+    description: 'Hidde is niet tevreden over hoe je iets deed ("dat ging fout", "noteer een klacht"): leg het vast, met het gesprek erbij, zodat het verbeterd wordt. Direct, geen voorstel. Zeg daarna kort het nummer.',
+    parameters: object(
+      {
+        complaint: { type: 'string', description: 'Wat Hidde zegt dat er mis is, in zijn woorden' },
+        whatWentWrong: { type: 'string', description: 'Jouw eigen korte uitleg van wat je fout deed, als je dat ziet' }
+      },
+      ['complaint']
+    ),
+    writes: false
+  },
+  {
     name: 'note_day_summary',
     description: 'Twee of drie zinnen over de dag, aan het eind van de dagafsluiting. Direct.',
     parameters: object({ summary: { type: 'string' } }, ['summary']),
@@ -900,6 +912,10 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
         type: rule.type,
         description: rule.description
       }))
+
+    case 'report_problem':
+      // Kept by the voice line, which has the whole conversation (app/jarvis/voice.ts).
+      return { saved: false, error: 'Klachten vastleggen kan in een gesprek via de eigen lijn; zeg Hidde dat hij het daar nog eens zegt.' }
 
     case 'note_day_summary': {
       const summary = String(input.summary ?? '').trim()

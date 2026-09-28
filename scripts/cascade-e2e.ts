@@ -213,6 +213,14 @@ async function main(): Promise<void> {
   console.log(`
 ${remembers ? '✓' : '✗'} nieuw gesprek, "Wat hebben we net samen ingepland?"
    Jarvis: ${again.reply.trim()}`)
+  // A complaint: kept with this conversation and the one before it.
+  const complaint = await say('Noteer een klacht: je noemde net de verkeerde tijd voor kast fixen.')
+  const feedbackFile = join(work, 'jarvis-feedback.jsonl')
+  const saved = existsSync(feedbackFile) ? (JSON.parse(readFileSync(feedbackFile, 'utf8').trim().split('\n').pop()!) as { number: string; turns: unknown[]; previous: { turns: unknown[] } | null }) : null
+  const complaintOk = !!saved && /K\d+/.test(complaint.reply) && saved.turns.length >= 1 && (saved.previous?.turns.length ?? 0) >= 3
+  if (!complaintOk) problems += 1
+  console.log(`\n${complaintOk ? '✓' : '✗'} klacht vastgelegd: ${saved?.number ?? 'niet'}, ${saved?.turns.length ?? 0} beurten van dit gesprek, ${saved?.previous?.turns.length ?? 0} van het vorige\n   Jarvis: ${complaint.reply.trim()}`)
+
   socket.close(1000)
   await sleep(3000)
   const freeAfter = !voiceBusy()

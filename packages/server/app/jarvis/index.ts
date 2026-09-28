@@ -73,6 +73,7 @@ Regels voor elk antwoord:
        opties kort, met precies de tijden die terugkomen, en bied het berichtje aan. Zegt X ja op een optie → create_appointment.
      "voortaan / nooit meer" → add_rule
      een vraag → antwoord uit de stand; een andere dag: get_snapshot
+     "dat ging fout / noteer een klacht / dat moet beter" → report_problem (direct, zeg het nummer)
   3. Alle voorstellen in één beurt, samengevat in één of twee zinnen, één keer "Zal ik dat zo doen?".
   4. Ja: één confirm voor alles. Nee: cancel.
 - Na confirm vertel je precies wat confirm teruggeeft: wat gelukt is, met de echte aantallen,

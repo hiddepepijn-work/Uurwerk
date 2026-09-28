@@ -16,7 +16,9 @@
  * tool_result.
  */
 
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { IncomingMessage } from 'node:http'
 import type { Duplex } from 'node:stream'
 
@@ -67,7 +69,29 @@ export const BUSY_MESSAGE = 'Jarvis is al in gesprek op je andere apparaat.'
  * The last conversation, so a new one within half an hour (the same day) carries on from it:
  * "weet je nog waar we het over hadden" got a blank. One person, so one memory.
  */
-let recent: { history: unknown[]; endedAt: number; day: string } | null = null
+let recent: { history: unknown[]; endedAt: number; day: string; id: string; turns: TurnRecord[] } | null = null
+
+/** One exchange as it happened, for complaints: what he heard, said and did. */
+interface TurnRecord {
+  at: string
+  heard: string
+  reply: string
+  tools: Array<{ name: string; args: Record<string, unknown>; result: string }>
+  cut: boolean
+}
+
+/**
+ * Hidde's complaints about Jarvis, one JSON line each in the data directory
+ * (jarvis-feedback.jsonl): his words, Jarvis's own account, and the conversation (and the one
+ * before it, if it was just now), so a mistake can be read back and fixed.
+ */
+function saveComplaint(usagePath: string, entry: Record<string, unknown>): string {
+  const file = join(dirname(usagePath), 'jarvis-feedback.jsonl')
+  const count = existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean).length : 0
+  const number = `K${count + 1}`
+  appendFileSync(file, `${JSON.stringify({ number, ...entry })}\n`, { mode: 0o600 })
+  return number
+}
 const CARRY_ON_MS = 30 * 60_000
 const dayKey = (): string => new Date().toDateString()
 const tickets = new Map<string, { expires: number; opening: string | null }>()
@@ -408,6 +432,13 @@ class VoiceSession {
   private ignoreFluxUntil = 0
   /** Tools of the running turn, for the log. */
   private toolNames: string[] = []
+  /** Tools of the running turn with their results, for the record of this talk. */
+  private toolCalls: TurnRecord['tools'] = []
+  /** This conversation, turn by turn; and the one it carried on from. */
+  private readonly id = randomUUID()
+  private turns: TurnRecord[] = []
+  private previous: { id: string; turns: TurnRecord[] } | null = null
+  private lastComplaint: { number: string; at: number } | null = null
   private fillers = 0
   /** The turn that may still speak; older ones finish quietly. */
   private turn = 0
@@ -426,7 +457,9 @@ class VoiceSession {
     const key = deps.secret('geminiKey')
     if (!key) throw new Error('Geen geminiKey op de server.')
     this.parts = instructionParts({ api: deps.api, system: deps.system, opening })
-    const carried = recent && recent.day === dayKey() && Date.now() - recent.endedAt < CARRY_ON_MS ? recent.history : undefined
+    const carriedOn = recent && recent.day === dayKey() && Date.now() - recent.endedAt < CARRY_ON_MS ? recent : null
+    this.previous = carriedOn
+    const carried = carriedOn?.history
     this.brain = new Brain({
       key,
       model: process.env.JARVIS_CASCADE_MODEL?.trim() || 'gemini-3.8-flash',
@@ -542,6 +575,37 @@ class VoiceSession {
 
   /** Runs a tool on the device and waits for its answer. */
   private callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+    if (name === 'report_problem') {
+      const result = this.complain(args)
+      this.toolCalls.push({ name, args, result: JSON.stringify(result) })
+      return Promise.resolve(result)
+    }
+    return this.deviceTool(name, args).then((result) => {
+      this.toolCalls.push({ name, args, result: JSON.stringify(result).slice(0, 600) })
+      return result
+    })
+  }
+
+  /** A complaint, kept with this conversation and the one just before it. */
+  private complain(args: Record<string, unknown>): Record<string, unknown> {
+    // The model sometimes calls it again in the next round of the same answer: once is enough.
+    if (this.lastComplaint && Date.now() - this.lastComplaint.at < 60_000) {
+      return { saved: true, number: this.lastComplaint.number, next: `Al vastgelegd als ${this.lastComplaint.number}. Zeg dat kort, één keer.` }
+    }
+    const number = saveComplaint(this.deps.usagePath, {
+      at: new Date().toISOString(),
+      complaint: String(args.complaint ?? ''),
+      whatWentWrong: args.whatWentWrong ? String(args.whatWentWrong) : null,
+      conversation: this.id,
+      turns: this.turns,
+      previous: this.previous ? { conversation: this.previous.id, turns: this.previous.turns } : null
+    })
+    this.lastComplaint = { number, at: Date.now() }
+    log.info('Jarvis complaint.', { number, complaint: args.complaint })
+    return { saved: true, number, next: `Vastgelegd als ${number}. Zeg dat kort, met het nummer.` }
+  }
+
+  private deviceTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     const id = `c${++this.toolCount}`
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -624,6 +688,8 @@ class VoiceSession {
       this.spent += result.usd
       // The whole exchange, so a conversation can be read back when something went wrong.
       log.info('Jarvis cascade turn.', { heard: text, reply: result.text, tools: this.toolNames, cut: turn !== this.turn })
+      this.turns.push({ at: new Date().toISOString(), heard: text, reply: result.text, tools: this.toolCalls, cut: turn !== this.turn })
+      this.toolCalls = []
       this.toolNames = []
       if (turn === this.turn) {
         chunker.flush()
@@ -664,7 +730,7 @@ class VoiceSession {
     talking.delete(this)
     for (const resolve of this.tools.values()) resolve({ error: 'Het gesprek is gesloten.' })
     this.tools.clear()
-    recent = { history: this.brain.conversation, endedAt: Date.now(), day: dayKey() }
+    recent = { history: this.brain.conversation, endedAt: Date.now(), day: dayKey(), id: this.id, turns: this.turns }
     this.listener?.close()
     this.flux?.close()
     if (this.flux) this.spent += (this.flux.bytes / (SAMPLE_RATE * 2) / 60) * FLUX_PER_MINUTE
