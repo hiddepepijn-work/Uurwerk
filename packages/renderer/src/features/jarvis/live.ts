@@ -422,9 +422,12 @@ class OpenAIWire implements Wire {
  */
 class CascadeWire implements Wire {
   private socket: WebSocket | null = null
-  /** An answer is on its way (thinking or speaking): talking now means cutting it off. */
-  private replying = false
-  /** Set by the call: what cutting him off means on this side (stop the voice, say how much was heard). */
+  /** The gate is open: this audio belongs to one sentence, from its first chunk to the pause. */
+  private streaming = false
+  /**
+   * Set by the call: a new sentence starts. If an answer is still coming or playing, that
+   * answer stops (the call knows what is playing; the server may be done already).
+   */
   bargeIn: () => void = () => undefined
 
   static open(live: JarvisLiveSession, events: WireEvents): Promise<CascadeWire> {
@@ -459,7 +462,6 @@ class CascadeWire implements Wire {
             events.heard(event.text ?? '')
             break
           case 'reply_start':
-            wire.replying = true
             events.replyStart()
             break
           case 'reply_text':
@@ -474,12 +476,10 @@ class CascadeWire implements Wire {
             break
           }
           case 'turn_done':
-            wire.replying = false
             events.turnDone(false)
             break
           case 'error':
             trail(`eigen lijn: ${event.message ?? '?'}`)
-            wire.replying = false
             events.replyStart()
             events.replyText(event.message ?? 'Er ging iets mis.')
             events.turnDone(false)
@@ -494,15 +494,17 @@ class CascadeWire implements Wire {
   }
 
   audio(pcm: ArrayBuffer): void {
-    if (this.replying) {
-      // He talks while an answer is coming: that answer stops, this is a new question.
-      this.replying = false
+    // A new sentence while an answer is coming: that answer stops, this is a new question.
+    // Not the tail of the sentence just heard: Flux often answers before the gate closes.
+    if (!this.streaming) {
+      this.streaming = true
       this.bargeIn()
     }
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(pcm)
   }
 
   paused(): void {
+    this.streaming = false
     this.send({ type: 'end' })
   }
 
@@ -511,7 +513,6 @@ class CascadeWire implements Wire {
   }
 
   cutOff(playedMs: number): void {
-    this.replying = false
     this.send({ type: 'cutoff', ms: Math.max(0, Math.round(playedMs)) })
   }
 
@@ -716,8 +717,10 @@ export class LiveCall {
       // Talking over him: stop his voice here and tell the server how much was heard.
       cascade.bargeIn = () => {
         this.heard = ''
-        this.cutOff()
-        this.setPhase('listening')
+        if (this.playing.size > 0 || !this.replyDone) {
+          this.cutOff()
+          this.setPhase('listening')
+        }
       }
       // The end of a turn is decided here: a short pause is enough, the line waits for nothing.
       this.gate.hangoverMs = 900

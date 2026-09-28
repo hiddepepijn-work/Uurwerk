@@ -17,7 +17,7 @@ import { join } from 'node:path'
 
 import { readConfig } from '../src/config.js'
 
-const KNOWN = ['geminiKey', 'mistralKey', 'openaiKey', 'anthropicKey', 'azureSpeechKey']
+const KNOWN = ['geminiKey', 'mistralKey', 'openaiKey', 'anthropicKey', 'azureSpeechKey', 'deepgramKey']
 const file = join(readConfig().dataDir, 'secrets.json')
 const [command, key] = process.argv.slice(2)
 

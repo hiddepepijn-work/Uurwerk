@@ -57,9 +57,14 @@ installHost({
 } satisfies Host)
 const api = buildImplementation(createBackend(dbCopy)) as unknown as TimeTrackerAPI
 
-const keys = { geminiKey: key('GEMINI_API_KEY'), openaiKey: key('OPENAI_API_KEY') }
+const keys: Record<string, string | null> = {
+  geminiKey: key('GEMINI_API_KEY'),
+  openaiKey: key('OPENAI_API_KEY'),
+  // FLUX=0 runs the line without Deepgram (the OpenAI listener and the gate's pause).
+  deepgramKey: process.env.FLUX === '0' ? null : key('DEEPGRAM_API_KEY')
+}
 const usagePath = join(work, 'spend.json')
-configureVoice({ api, secret: (name) => keys[name], usagePath, system: SYSTEM })
+configureVoice({ api, secret: (name) => keys[name] ?? null, usagePath, system: SYSTEM })
 
 const PORT = 8799
 const server = createServer((request, response) => {
@@ -81,7 +86,7 @@ async function clip(text: string): Promise<Buffer> {
   const { createHash } = await import('node:crypto')
   const file = join('node_modules', '.cache', 'uurwerk', 'bench-voice', `${createHash('sha1').update(text).digest('hex').slice(0, 12)}.pcm`)
   if (existsSync(file)) return readFileSync(file)
-  const wavBytes = await speakGemini(text, keys.geminiKey, 'Kore', 'gemini-3.8-flash-lite-tts')
+  const wavBytes = await speakGemini(text, keys.geminiKey!, 'Kore', 'gemini-3.8-flash-lite-tts')
   const pcm = Buffer.from(wavBytes.buffer, wavBytes.byteOffset + 44, wavBytes.byteLength - 44)
   writeFileSync(file, pcm)
   return pcm
@@ -164,15 +169,16 @@ async function main(): Promise<void> {
     turn = { said: text, heard: '', reply: '', tools: [], heardMs: null, firstTextMs: null, firstAudioMs: null, doneMs: null, sentences: 0 }
     for (let at = 0; at < pcm.length; at += 1920) {
       socket.send(pcm.subarray(at, at + 1920))
-      await sleep(5)
+      await sleep(40)
     }
-    // The app's gate: the end of the turn after 0.9 s of quiet (sent as silence meanwhile).
+    // Timed from his last word. The app's gate then sends 0.9 s of quiet and says 'end';
+    // with Flux the answer is already under way by then.
+    ended = Date.now()
+    const finished = new Promise<void>((resolve) => (done = resolve))
     for (let quiet = 0; quiet < 900; quiet += 40) {
       socket.send(Buffer.alloc(1920))
       await sleep(40)
     }
-    ended = Date.now()
-    const finished = new Promise<void>((resolve) => (done = resolve))
     socket.send(JSON.stringify({ type: 'end' }))
     await Promise.race([finished, sleep(40_000)])
     return turn

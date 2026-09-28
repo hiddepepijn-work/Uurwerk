@@ -31,6 +31,8 @@ export type SecretKey =
   | 'geminiKey'
   | 'mistralKey'
   | 'azureSpeechKey'
+  // Jarvis's ear on the voice line: Deepgram Flux.
+  | 'deepgramKey'
   | `ics:${string}`
   | `icloud:${string}`
 

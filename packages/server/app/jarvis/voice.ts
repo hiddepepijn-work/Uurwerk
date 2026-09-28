@@ -40,7 +40,7 @@ const TOOL_TIMEOUT_MS = 20_000
 
 export interface VoiceDeps {
   api: TimeTrackerAPI
-  secret(name: 'geminiKey' | 'openaiKey'): string | null
+  secret(name: 'geminiKey' | 'openaiKey' | 'deepgramKey'): string | null
   usagePath: string
   system: string
 }
@@ -142,6 +142,23 @@ export async function speakSentence(text: string): Promise<Buffer> {
   } finally {
     tts.close()
   }
+}
+
+/** Words that bridge a slow answer, made once and kept: no waiting for Edge on these. */
+const FILLERS = ['Even kijken.', 'Momentje.', 'Eens zien.']
+const FILLER_AFTER_MS = 1000
+const fillers = new Map<string, Promise<Buffer | null>>()
+
+export function fillerAudio(text: string): Promise<Buffer | null> {
+  let made = fillers.get(text)
+  if (!made) {
+    made = speakSentence(text).catch(() => {
+      fillers.delete(text)
+      return null
+    })
+    fillers.set(text, made)
+  }
+  return made
 }
 
 /** Seconds of speech in an MP3 at 48 kbit/s: what the device will play. */
@@ -271,6 +288,55 @@ class LiveListener {
   }
 }
 
+/**
+ * Deepgram Flux: hears Dutch and knows when Hidde is done, 50 to 300 ms after his last word
+ * (measured 28 Sep 2026), with the words ready. That replaces waiting for a pause on the
+ * device and transcribing afterwards, which took about 1.6 s together.
+ */
+class FluxListener {
+  private socket: WebSocket
+  private ready: Promise<boolean>
+  /** Audio streamed, in bytes: Flux bills by the minute of audio. */
+  bytes = 0
+
+  constructor(key: string, onTurn: (text: string) => void) {
+    const query = new URLSearchParams({ model: 'flux-general-multi', language_hint: 'nl', encoding: 'linear16', sample_rate: String(SAMPLE_RATE) })
+    this.socket = new WebSocketClient(`wss://api.deepgram.com/v2/listen?${query}`, { headers: { Authorization: `Token ${key}` } })
+    this.ready = new Promise((resolve) => {
+      this.socket.on('open', () => resolve(true))
+      this.socket.on('error', (error) => {
+        log.warn('Jarvis cascade: Flux did not connect.', error)
+        resolve(false)
+      })
+    })
+    this.socket.on('message', (data) => {
+      let event: { type?: string; event?: string; transcript?: string }
+      try {
+        event = JSON.parse(String(data)) as typeof event
+      } catch {
+        return
+      }
+      if (event.type === 'TurnInfo' && event.event === 'EndOfTurn') onTurn((event.transcript ?? '').trim())
+    })
+  }
+
+  append(pcm: Buffer): void {
+    this.bytes += pcm.length
+    void this.ready.then((ok) => ok && this.socket.readyState === this.socket.OPEN && this.socket.send(pcm))
+  }
+
+  close(): void {
+    try {
+      this.socket.close()
+    } catch {
+      // Already closed.
+    }
+  }
+}
+
+/** Flux multilingual, per minute of streamed audio. */
+const FLUX_PER_MINUTE = 0.47 / 60
+
 // ---------------------------------------------------------------------- session
 
 interface Spoken {
@@ -284,6 +350,11 @@ class VoiceSession {
   private utterance: Buffer[] = []
   /** Transcribes while he talks, so the words are there the moment he stops. */
   private listener: LiveListener | null = null
+  /** Deepgram Flux, when there is a key: hears the end of his turn itself. */
+  private flux: FluxListener | null = null
+  /** Flux handed this utterance over already; the gate closing after it changes nothing. */
+  private fluxHandled = false
+  private fillers = 0
   /** The turn that may still speak; older ones finish quietly. */
   private turn = 0
   private spoken: Spoken[] = []
@@ -308,14 +379,18 @@ class VoiceSession {
         const pcm = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer)
         this.utterance.push(pcm)
         this.listener?.append(pcm)
+        this.flux?.append(pcm)
       }
       else void this.control(String(data))
     })
     ws.on('close', () => void this.close())
     ws.on('error', () => void this.close())
 
+    const deepgramKey = deps.secret('deepgramKey')
     const openaiKey = deps.secret('openaiKey')
-    if (openaiKey) this.listener = new LiveListener(openaiKey)
+    if (deepgramKey) this.flux = new FluxListener(deepgramKey, (text) => this.fluxTurn(text))
+    else if (openaiKey) this.listener = new LiveListener(openaiKey)
+    for (const text of FILLERS) void fillerAudio(text)
     // The cache is made while he is still saying hello, not while he waits for an answer.
     void this.brain.warm().catch((error: unknown) => log.warn('Jarvis cascade: cache failed.', error))
     if (opening) void this.answer(opening)
@@ -348,7 +423,30 @@ class VoiceSession {
   }
 
   /** He stopped talking: what did he say? */
+  /** Flux heard the end of his turn, with the words: straight to the answer. */
+  private fluxTurn(text: string): void {
+    this.utterance = []
+    this.fluxHandled = true
+    if (!text.trim()) return
+    this.send({ type: 'heard', text })
+    void this.answer(text)
+  }
+
+  /**
+   * The device's gate closed. With Flux that is usually after Flux already handed the turn
+   * over; then there is nothing left to do. If Flux has not (yet), give it a moment, and
+   * then transcribe what came in the old way.
+   */
   private async heard(): Promise<void> {
+    if (this.flux) {
+      for (let waited = 0; !this.fluxHandled && waited < 800; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50))
+      if (this.fluxHandled) {
+        this.fluxHandled = false
+        this.utterance = []
+        return
+      }
+      log.warn('Jarvis cascade: Flux gave no end of turn; transcribing the old way.')
+    }
     const pcm = Buffer.concat(this.utterance)
     this.utterance = []
     if (pcm.length < SAMPLE_RATE * 2 * MIN_SPEECH_S) {
@@ -394,11 +492,18 @@ class VoiceSession {
    * One sentence into the speech queue: made right away (Edge needs most of a second before
    * the first byte, so sentences are made side by side), sent in order.
    */
-  private say(turn: number, sentence: string): void {
-    const made = speakSentence(sentence).catch((error: unknown) => {
-      log.warn('Jarvis cascade: speech failed.', error)
-      return null
-    })
+  private sayFiller(turn: number): void {
+    const text = FILLERS[this.fillers++ % FILLERS.length]!
+    this.say(turn, text, fillerAudio(text))
+  }
+
+  private say(turn: number, sentence: string, ready?: Promise<Buffer | null>): void {
+    const made =
+      ready ??
+      speakSentence(sentence).catch((error: unknown) => {
+        log.warn('Jarvis cascade: speech failed.', error)
+        return null
+      })
     this.speech = this.speech.then(async () => {
       if (turn !== this.turn || this.closed) return
       try {
@@ -419,6 +524,14 @@ class VoiceSession {
     const chunker = new SentenceChunker((sentence) => this.say(turn, sentence))
     let saidSomething = false
     let cutText: string | null = null
+    // No words after a second: a short "momentje" in his voice, so silence never feels broken.
+    // At most one per turn; the tool rounds use the same one.
+    const filler = (): void => {
+      if (saidSomething || turn !== this.turn) return
+      saidSomething = true
+      this.sayFiller(turn)
+    }
+    const fillerTimer = setTimeout(filler, FILLER_AFTER_MS)
     try {
       const stateStarted = Date.now()
       const state = await this.parts.state()
@@ -427,15 +540,13 @@ class VoiceSession {
         text,
         state,
         async (name, args) => {
-          // Silence while a tool runs feels broken; a short "even kijken" covers it.
-          if (!saidSomething && turn === this.turn) {
-            saidSomething = true
-            this.say(turn, 'Even kijken.')
-          }
+          // A tool round takes a second or two more: cover it now rather than after the timer.
+          filler()
           return this.callTool(name, args)
         },
         (delta) => {
           if (turn !== this.turn) return
+          clearTimeout(fillerTimer)
           saidSomething = true
           this.send({ type: 'reply_text', delta })
           chunker.push(delta)
@@ -452,6 +563,8 @@ class VoiceSession {
     } catch (error) {
       log.warn('Jarvis cascade: turn failed.', error)
       if (turn === this.turn) this.send({ type: 'error', message: 'Er ging iets mis, probeer het nog eens.' })
+    } finally {
+      clearTimeout(fillerTimer)
     }
     // Cut off: the history keeps only what he got to hear.
     if (cutText !== null) this.brain.cutOff(cutText)
@@ -479,6 +592,8 @@ class VoiceSession {
     for (const resolve of this.tools.values()) resolve({ error: 'Het gesprek is gesloten.' })
     this.tools.clear()
     this.listener?.close()
+    this.flux?.close()
+    if (this.flux) this.spent += (this.flux.bytes / (SAMPLE_RATE * 2) / 60) * FLUX_PER_MINUTE
     await this.brain.close().catch(() => undefined)
     if (this.spent > 0) {
       const spend = addCostUsd(this.deps.usagePath, this.spent)
