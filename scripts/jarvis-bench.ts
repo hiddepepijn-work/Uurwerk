@@ -31,7 +31,9 @@ import type { JarvisLiveUsage, TimeTrackerAPI } from '@core/contract/api.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 
 import { MOMENT, SYSTEM } from '../packages/server/app/jarvis/index.js'
-import { liveSession, openaiSession, usageUsd } from '../packages/server/app/jarvis/live.js'
+import { instructionParts, liveSession, openaiSession, usageUsd } from '../packages/server/app/jarvis/live.js'
+import { ClaudeBrain, OpenAIBrain } from '../packages/server/app/jarvis/brain-others.js'
+import { Brain, type ThinkingBrain } from '../packages/server/app/jarvis/brain.js'
 import { speakGemini } from '../packages/server/app/jarvis/speech.js'
 
 // ------------------------------------------------------------------ setup
@@ -132,12 +134,14 @@ interface Check {
   /** After which turn (0-based) this is checked. */
   after: number
   name: string
-  test: (api: TimeTrackerAPI) => Promise<boolean>
+  test: (api: TimeTrackerAPI, turns: Turn[]) => Promise<boolean>
 }
 
 interface Scenario {
   id: string
-  category: 'dagelijks' | 'verder'
+  category: 'dagelijks' | 'verder' | 'challenge'
+  /** Challenge set: the kind of problem, to score per kind. */
+  family?: string
   title: string
   /** What a good answer does; the judge scores against this. */
   expect: string
@@ -204,7 +208,8 @@ const SCENARIOS: Scenario[] = [
     category: 'dagelijks',
     title: 'Afspraak, geen taak',
     expect: `Maakt een AFSPRAAK (geen taak) bij de tandarts op donderdag ${THURSDAY} 15:00–15:30, vraagt bevestiging, voert uit na ja.`,
-    turns: [{ text: 'Ik heb donderdag om drie uur een afspraak bij de tandarts, duurt een half uur.' }, { text: 'Ja.' }],
+    // Where and how far are in it: the brief asks for both, and a script cannot answer back.
+    turns: [{ text: 'Ik heb donderdag om drie uur een afspraak bij de tandarts in Zevenaar, tien minuten rijden, duurt een half uur.' }, { text: 'Ja.' }],
     checks: [
       {
         after: 1,
@@ -281,15 +286,17 @@ const SCENARIOS: Scenario[] = [
     category: 'verder',
     title: 'Avond vullen rond een training',
     expect:
-      'Zet BO afmaken (60 min), Financiën regelen (45 min) en Kamer opruimen (30 min) morgenavond na 17:00 in, niet tijdens de voetbaltraining 19:00–20:00, stelt het als één voorstel voor en voert uit na ja.',
+      'Zet BO afmaken (60 min), Fiets repareren (30 min) en Mail opruimen (20 min) morgenavond na de stage in, niet tijdens de voetbaltraining 19:00–20:00, stelt het als één voorstel voor en voert uit na ja.',
     setup: async (api) => {
-      await api.tasks.create({ title: 'Financiën regelen', areaId: 'personal', estimateMin: 45 })
-      await api.tasks.create({ title: 'Kamer opruimen', areaId: 'personal', estimateMin: 30 })
+      // Names the real database does not have: with its own 'Regelen financiën' (120 min) the
+      // evening really was too full, and the judge took that for making things up.
+      await api.tasks.create({ title: 'Fiets repareren', areaId: 'personal', estimateMin: 30 })
+      await api.tasks.create({ title: 'Mail opruimen', areaId: 'personal', estimateMin: 20 })
       if (!(await taskNamed(api, /BO afmaken/i))) await api.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 60 })
       await appointment(api, 'Voetbaltraining', TOMORROW, '19:00', '20:00')
     },
     turns: [
-      { text: 'Plan morgenavond na mijn stage BO afmaken, financiën regelen en kamer opruimen in. Niet tijdens de training.' },
+      { text: 'Plan morgenavond na mijn stage BO afmaken, fiets repareren en mail opruimen in. Niet tijdens de training.' },
       { text: 'Ja, prima.' }
     ],
     checks: [
@@ -299,8 +306,8 @@ const SCENARIOS: Scenario[] = [
         test: async (api) => {
           const blocks = [
             ...(await blocksOn(api, TOMORROW, /BO afmaken/i)),
-            ...(await blocksOn(api, TOMORROW, /financi/i)),
-            ...(await blocksOn(api, TOMORROW, /kamer/i))
+            ...(await blocksOn(api, TOMORROW, /fiets/i)),
+            ...(await blocksOn(api, TOMORROW, /mail opruimen/i))
           ].filter((block) => block.startMin >= 17 * 60)
           const clash = blocks.some((block) => block.startMin < 20 * 60 && block.endMin > 19 * 60)
           return new Set(blocks.map((block) => block.taskTitle)).size === 3 && !clash
@@ -470,7 +477,10 @@ const SCENARIOS: Scenario[] = [
     category: 'verder',
     title: 'Twee dingen in één zin',
     expect: `Voegt taak "band plakken" toe én maakt een afspraak "Huisarts" op vrijdag ${FRIDAY} 14:00–14:20; één bevestiging, beide uitgevoerd.`,
-    turns: [{ text: 'Voeg een taak band plakken toe, en ik heb vrijdag om twee uur de huisarts, twintig minuten.' }, { text: 'Ja, allebei.' }],
+    turns: [
+      { text: 'Voeg een taak band plakken toe, een half uurtje, en ik heb vrijdag om twee uur de huisarts, twintig minuten, hier in Zevenaar om de hoek.' },
+      { text: 'Ja, allebei.' }
+    ],
     checks: [
       { after: 1, name: 'taak band plakken', test: async (api) => (await taskNamed(api, /band/i)) !== null },
       {
@@ -482,6 +492,281 @@ const SCENARIOS: Scenario[] = [
     toolBudget: 4
   }
 ]
+
+// ------------------------------------------------------- challenge set
+//
+// SET=challenge: eight kinds of problem, five variants each, made from templates. Other days,
+// other times, other words, and made-up tasks the real database does not have. None of these
+// were used to tune the prompt, so they measure the model rather than our fixes for it.
+
+const DAY_NAMES = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag']
+const dayName = (day: string): string => DAY_NAMES[new Date(`${day}T12:00:00`).getDay()]!
+const replyHas = (pattern: RegExp) => async (_api: TimeTrackerAPI, turns: Turn[]) => turns.some((turn) => pattern.test(turn.reply))
+const at = (clock: string): number => Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3, 5))
+
+function eveningAround(variant: string, v: {
+  day: string
+  appointment: [string, string, string]
+  tasks: Array<[string, number]>
+  from: string
+  say: string
+}): Scenario {
+  const [title, start, end] = v.appointment
+  return {
+    id: `C1${variant}`,
+    family: 'avond rond een afspraak',
+    category: 'challenge',
+    title: `Avond vullen rond ${title.toLowerCase()}`,
+    expect: `Zet ${v.tasks.map(([task, minutes]) => `${task} (${minutes} min)`).join(', ')} op ${v.day} vanaf ${v.from} in, elk met die duur, niet tijdens ${title} ${start}–${end}; één voorstel, uitgevoerd na ja.`,
+    setup: async (api) => {
+      for (const [task, minutes] of v.tasks) await api.tasks.create({ title: task, areaId: 'personal', estimateMin: minutes })
+      await appointment(api, title, v.day, start, end)
+    },
+    turns: [{ text: v.say }, { text: 'Ja, prima.' }],
+    truth: snapshotTruth(v.day, v.day),
+    checks: [
+      {
+        after: 1,
+        name: 'alle taken ingepland, eigen duur, niet over de afspraak',
+        test: async (api) => {
+          for (const [task, minutes] of v.tasks) {
+            const blocks = (await blocksOn(api, v.day, new RegExp(task, 'i'))).filter((block) => block.startMin >= at(v.from))
+            if (blocks.length !== 1) return false
+            const block = blocks[0]!
+            if (block.endMin - block.startMin !== minutes) return false
+            if (block.startMin < at(end) && block.endMin > at(start)) return false
+          }
+          return true
+        }
+      }
+    ],
+    toolBudget: 5
+  }
+}
+
+function clash(variant: string, v: { day: string; appointment: [string, string, string]; task: [string, number]; say: string }): Scenario {
+  const [title, start, end] = v.appointment
+  const [task, minutes] = v.task
+  return {
+    id: `C2${variant}`,
+    family: 'botsing',
+    category: 'challenge',
+    title: `Botsing met ${title.toLowerCase()}`,
+    expect: `Ziet dat ${title} op ${v.day} ${start}–${end} in de weg zit, zet ${task} daar niet overheen en stelt een andere tijd voor; na ja staat het op die andere tijd.`,
+    setup: async (api) => {
+      await api.tasks.create({ title: task, areaId: 'personal', estimateMin: minutes })
+      await appointment(api, title, v.day, start, end)
+    },
+    turns: [{ text: v.say }, { text: 'Ja, doe maar wat jij voorstelt.' }],
+    truth: snapshotTruth(v.day, v.day),
+    checks: [
+      {
+        after: 1,
+        name: 'niets over de afspraak heen',
+        test: async (api) => (await blocksOn(api, v.day, new RegExp(task, 'i'))).every((block) => !(block.startMin < at(end) && block.endMin > at(start)))
+      }
+    ],
+    toolBudget: 4
+  }
+}
+
+function relativeDate(variant: string, v: { day: string; event: [string, string, string]; phrase: string; keyword: RegExp }): Scenario {
+  const [title, start, end] = v.event
+  return {
+    id: `C3${variant}`,
+    family: 'datum',
+    category: 'challenge',
+    title: `"${v.phrase}"`,
+    expect: `Weet dat "${v.phrase}" ${dayName(v.day)} ${v.day} is en noemt ${title} om ${start}.`,
+    setup: (api) => appointment(api, title, v.day, start, end),
+    turns: [{ text: `Wat heb ik ${v.phrase}?` }],
+    // The whole day, not only the appointment: naming the stage blocks around it is right.
+    truth: async (api) => `${dayName(v.day)} ${v.day}: ${await snapshotTruth(v.day, v.day)(api)}`,
+    checks: [{ after: 0, name: 'noemt de afspraak', test: replyHas(v.keyword) }],
+    toolBudget: 2
+  }
+}
+
+function memory(variant: string, v: { day: string; task: string; start: string; minutes: number; move: string; to: string; say: string }): Scenario {
+  const pattern = new RegExp(v.task.split(' ')[0]!, 'i')
+  return {
+    id: `C4${variant}`,
+    family: 'geheugen',
+    category: 'challenge',
+    title: `"${v.move}"`,
+    expect: `Zet ${v.task} op ${v.day} om ${v.start} (${v.minutes} min) na ja, begrijpt dan "${v.move}" als die taak en verzet hem na het tweede ja naar ${v.to}; het oude blok is weg.`,
+    turns: [{ text: v.say }, { text: 'Ja.' }, { text: v.move }, { text: 'Ja.' }],
+    checks: [
+      {
+        after: 3,
+        name: `alleen nog om ${v.to}`,
+        test: async (api) => {
+          const blocks = await blocksOn(api, v.day, pattern)
+          return blocks.length === 1 && blocks[0]!.startMin === at(v.to)
+        }
+      }
+    ],
+    toolBudget: 7
+  }
+}
+
+function twoInOne(variant: string, v: { say: string; task: RegExp; day: string; event: RegExp; start: string }): Scenario {
+  return {
+    id: `C5${variant}`,
+    family: 'twee in één zin',
+    category: 'challenge',
+    title: 'Taak en afspraak in één zin',
+    expect: `Maakt zowel de taak als de afspraak (op ${v.day} om ${v.start}); één bevestiging, beide uitgevoerd.`,
+    turns: [{ text: v.say }, { text: 'Ja, allebei.' }],
+    checks: [
+      { after: 1, name: 'taak bestaat', test: async (api) => (await taskNamed(api, v.task)) !== null },
+      {
+        after: 1,
+        name: `afspraak om ${v.start}`,
+        test: async (api) => (await eventsOn(api, v.day, v.event)).some((event) => clockOf(event.startsAt) === v.start)
+      }
+    ],
+    toolBudget: 5
+  }
+}
+
+function deadline(variant: string, v: { task: string; due: string; minutes: number; ask: string; keyword: RegExp }): Scenario {
+  return {
+    id: `C6${variant}`,
+    family: 'deadline-risico',
+    category: 'challenge',
+    title: `Deadline ${v.task.toLowerCase()}`,
+    expect: `Beantwoordt de vraag en wijst uit zichzelf op "${v.task}": deadline ${dayName(v.due)} ${v.due}, ${v.minutes} min werk, nog niet ingepland; biedt aan het in te plannen.`,
+    setup: async (api) => {
+      await api.tasks.create({ title: v.task, areaId: 'personal', estimateMin: v.minutes, priority: 'high', dueDate: v.due })
+    },
+    turns: [{ text: v.ask }],
+    truth: snapshotTruth(),
+    checks: [{ after: 0, name: 'noemt de deadline', test: replyHas(v.keyword) }],
+    toolBudget: 2
+  }
+}
+
+function cancelled(variant: string, v: { say: string; no: string; keyword: RegExp; day: string }): Scenario {
+  return {
+    id: `C7${variant}`,
+    family: 'annuleren',
+    category: 'challenge',
+    title: `"${v.no}"`,
+    expect: 'Stelt het voor en vraagt bevestiging; na de afwijzing doet hij niets en laat het voorstel vallen.',
+    turns: [{ text: v.say }, { text: v.no }],
+    checks: [
+      {
+        after: 1,
+        name: 'niets aangemaakt',
+        test: async (api) =>
+          (await taskNamed(api, v.keyword)) === null && (await eventsOn(api, v.day, v.keyword)).length === 0 && (await blocksOn(api, v.day, v.keyword)).length === 0
+      }
+    ],
+    toolBudget: 3
+  }
+}
+
+function kind(variant: string, v: { say: string; day: string; keyword: RegExp; appointment: boolean }): Scenario {
+  return {
+    id: `C8${variant}`,
+    family: 'afspraak of taak',
+    category: 'challenge',
+    title: v.appointment ? 'Is een afspraak' : 'Is een taak',
+    expect: v.appointment
+      ? 'Een vast moment met iemand of ergens: maakt een AFSPRAAK (create_appointment), geen taak.'
+      : 'Werk dat Hidde zelf doet: maakt een TAAK met een blok op die tijd, geen afspraak.',
+    turns: [{ text: v.say }, { text: 'Ja.' }],
+    checks: [
+      {
+        after: 1,
+        name: v.appointment ? 'afspraak, geen taak' : 'taakblok, geen afspraak',
+        test: async (api) => {
+          const events = (await eventsOn(api, v.day, v.keyword)).length
+          const blocks = (await blocksOn(api, v.day, v.keyword)).length
+          // An appointment with travel also brings a travel event ("naar de garage").
+          return v.appointment ? events >= 1 && blocks === 0 : blocks === 1 && events === 0
+        }
+      }
+    ],
+    toolBudget: 4
+  }
+}
+
+const D1 = inDays(1)
+const D2 = inDays(2)
+const D3 = inDays(3)
+
+const CHALLENGE: Scenario[] = [
+  eveningAround('a', { day: D1, appointment: ['Etentje bij Juul', '19:00', '20:00'], tasks: [['Fiets repareren', 30], ['Mail opruimen', 20], ['Rekening betalen', 15]], from: '18:00', say: 'Zet morgenavond vanaf zes uur fiets repareren, mail opruimen en rekening betalen erin, maar niet tijdens het etentje.' }),
+  eveningAround('b', { day: D2, appointment: ['Bioscoop', '20:00', '21:30'], tasks: [['Studieboek lezen', 60], ['Planten water geven', 15], ['Boodschappenlijst maken', 15]], from: '18:00', say: 'Overmorgenavond ga ik naar de bioscoop. Kun je daarvoor vanaf zes uur studieboek lezen, planten water geven en een boodschappenlijst maken inplannen?' }),
+  eveningAround('c', { day: D1, appointment: ['Tandarts', '18:30', '19:00'], tasks: [['Presentatie oefenen', 45], ['Kleding strijken', 20]], from: '18:00', say: 'Morgen na zessen wil ik presentatie oefenen en kleding strijken. Om half zeven zit ik bij de tandarts.' }),
+  eveningAround('d', { day: D2, appointment: ['Verjaardag Sanne', '19:30', '21:00'], tasks: [['Cadeau inpakken', 20], ['Kaart schrijven', 15]], from: '17:30', say: 'Overmorgen vanaf half zes, voor de verjaardag van Sanne: cadeau inpakken en een kaart schrijven.' }),
+  eveningAround('e', { day: D1, appointment: ['Hardlooptraining', '18:00', '19:00'], tasks: [['Afwas doen', 20], ['Rapport nakijken', 40], ['Was ophangen', 15]], from: '18:00', say: 'Morgenavond na de hardlooptraining wil ik afwas doen, het rapport nakijken en de was ophangen.' }),
+
+  clash('a', { day: D1, appointment: ['Overleg Margriet', '10:00', '11:00'], task: ['Kast fixen', 60], say: 'Zet morgen om tien uur een uur kast fixen erin.' }),
+  clash('b', { day: D2, appointment: ['Huisarts', '14:00', '15:30'], task: ['Stofzuigen', 30], say: 'Overmorgen om half drie wil ik stofzuigen, half uurtje.' }),
+  clash('c', { day: D1, appointment: ['Voetbal', '19:00', '20:00'], task: ['Mail beantwoorden', 30], say: 'Kun je morgen kwart over zeven mail beantwoorden inplannen?' }),
+  clash('d', { day: D3, appointment: ['Werkoverleg', '09:00', '12:00'], task: ['Rapport schrijven', 90], say: `Zet ${dayName(D3)} om tien uur anderhalf uur rapport schrijven erin.` }),
+  clash('e', { day: D2, appointment: ['Kapper', '16:00', '17:00'], task: ['Fiets poetsen', 45], say: 'Overmorgen half vijf fiets poetsen, drie kwartier.' }),
+
+  relativeDate('a', { day: D2, event: ['Sollicitatiegesprek', '11:00', '12:00'], phrase: 'overmorgen', keyword: /sollicitatie/i }),
+  relativeDate('b', { day: weekdayNextWeek(2), event: ['Borrel stage', '17:00', '19:00'], phrase: 'volgende week dinsdag', keyword: /borrel/i }),
+  relativeDate('c', { day: nextWeekday(6), event: ['Bruiloft Tim', '14:00', '23:00'], phrase: 'aanstaande zaterdag', keyword: /bruiloft/i }),
+  relativeDate('d', { day: inDays(10), event: ['Autokeuring', '08:30', '09:30'], phrase: 'over tien dagen', keyword: /auto|keuring|apk/i }),
+  relativeDate('e', { day: inDays(Math.round((new Date(`${weekdayNextWeek(5)}T12:00:00`).getTime() - Date.now()) / 86_400_000) + 7), event: ['Concert', '20:00', '23:00'], phrase: 'vrijdag over twee weken', keyword: /concert/i }),
+
+  memory('a', { day: D1, task: 'Stofzuigen', start: '20:00', minutes: 30, move: 'Doe die van net een half uur eerder.', to: '19:30', say: 'Zet morgen om acht uur \'s avonds een half uur stofzuigen erin.' }),
+  memory('b', { day: D1, task: 'Mail beantwoorden', start: '21:00', minutes: 30, move: 'Zet dat ding toch om acht uur \'s avonds.', to: '20:00', say: 'Morgen om negen uur \'s avonds half uur mail beantwoorden.' }),
+  memory('c', { day: D2, task: 'Boek lezen', start: '19:00', minutes: 60, move: 'Schuif hem een uur op.', to: '20:00', say: 'Overmorgen om zeven uur \'s avonds een uur boek lezen.' }),
+  memory('d', { day: D1, task: 'Planten water geven', start: '18:00', minutes: 15, move: 'Doe die toch maar een kwartier later.', to: '18:15', say: 'Morgen om zes uur \'s avonds een kwartiertje planten water geven.' }),
+  memory('e', { day: D2, task: 'Wasje draaien', start: '19:00', minutes: 30, move: 'Die laatste taak twee uur later graag.', to: '21:00', say: 'Overmorgen om zeven uur \'s avonds een half uur wasje draaien.' }),
+
+  twoInOne('a', { say: 'Voeg een taak lamp vervangen toe, een kwartier, en ik heb morgen om vier uur een afspraak bij de bank in Zevenaar, half uur, vijf minuten rijden.', task: /lamp/i, day: D1, event: /bank/i, start: '16:00' }),
+  twoInOne('b', { say: 'Maak een taak verzekering opzeggen aan, half uur, en zet morgen om zeven uur \'s avonds bellen met oma als afspraak, twintig minuten, gewoon thuis.', task: /verzekering/i, day: D1, event: /oma/i, start: '19:00' }),
+  twoInOne('c', { say: 'Ik heb overmorgen om elf uur de fysio in Duiven, drie kwartier, tien minuten rijden. En zet ook een taak: oefeningen uitprinten, tien minuten.', task: /oefening/i, day: D2, event: /fysio/i, start: '11:00' }),
+  twoInOne('d', { say: 'Overmorgen om twee uur koffie met Tessie bij de Bagels in Arnhem, een uur, twintig minuten rijden, en maak een taak cadeautje voor Tessie kopen, half uur.', task: /cadeau/i, day: D2, event: /tessie/i, start: '14:00' }),
+  twoInOne('e', { say: 'Taak erbij: fietsband oppompen, vijf minuten. En morgen om half vijf moet ik naar de garage in Zevenaar, half uur, vijf minuten rijden.', task: /fietsband|oppomp/i, day: D1, event: /garage/i, start: '16:30' }),
+
+  deadline('a', { task: 'Belastingaangifte', due: D1, minutes: 120, ask: 'Hoe ziet morgen eruit?', keyword: /belasting/i }),
+  deadline('b', { task: 'Verslag inleveren', due: inDays(0), minutes: 60, ask: 'Wat staat er vandaag nog?', keyword: /verslag/i }),
+  deadline('c', { task: 'Huur overmaken', due: D2, minutes: 15, ask: 'Wat moet ik overmorgen doen?', keyword: /huur/i }),
+  deadline('d', { task: 'Presentatie maken', due: D1, minutes: 180, ask: 'Heb ik morgen nog ruimte om te sporten?', keyword: /presentatie/i }),
+  deadline('e', { task: 'Formulier opsturen', due: D2, minutes: 30, ask: 'Moet ik de komende dagen ergens op letten?', keyword: /formulier/i }),
+
+  cancelled('a', { say: 'Zet morgen om acht uur \'s avonds een uur gamen erin.', no: 'Nee, laat maar.', keyword: /gamen/i, day: D1 }),
+  cancelled('b', { say: 'Maak een afspraak overmorgen om twee uur met de makelaar, een uur, online.', no: 'Wacht, toch niet.', keyword: /makelaar/i, day: D2 }),
+  cancelled('c', { say: 'Voeg een taak toe: garage opruimen, twee uur, morgen om zeven uur \'s avonds.', no: 'Stop, doe maar niet.', keyword: /garage/i, day: D1 }),
+  cancelled('d', { say: 'Plan morgen om zeven uur \'s ochtends yoga, half uur.', no: 'Hmm nee, geen zin in eigenlijk.', keyword: /yoga/i, day: D1 }),
+  cancelled('e', { say: 'Zet overmorgen om drie uur een uur boodschappen doen erin.', no: 'Laat maar zitten.', keyword: /boodschappen doen/i, day: D2 }),
+
+  kind('a', { say: 'Ik moet overmorgen om tien uur naar de garage voor de APK, een uur, tien minuten rijden.', day: D2, keyword: /garage|apk/i, appointment: true }),
+  kind('b', { say: 'Ik wil overmorgen om tien uur een uur de schuur opruimen.', day: D2, keyword: /schuur/i, appointment: false }),
+  kind('c', { say: 'Morgen om drie uur bel ik met de huisarts, tien minuten.', day: D1, keyword: /huisarts/i, appointment: true }),
+  kind('d', { say: 'Morgen om drie uur wil ik een uur aan mijn verslag schrijven.', day: D1, keyword: /verslag/i, appointment: false }),
+  kind('e', { say: 'Overmorgen om zes uur eet ik bij mijn ouders in Arnhem, twee uur, half uur rijden.', day: D2, keyword: /ouders|eten/i, appointment: true })
+]
+
+// ------------------------------------------------------- neutral prompt
+//
+// PROMPT=neutraal (the challenge set's default): without the lines written after Gemini
+// Live's mistakes. Everything else (facts looked up by code, the proposal flow) stays: that
+// helps every model the same.
+
+const GEMINI_PATCHES = [
+  '- Zeg nooit "ik ga het regelen" of "ik help je er zo bij" zonder in dezelfde beurt de tool\n  aan te roepen. Kun je nog niets doen, vraag dan meteen wat je nodig hebt.\n',
+  '- Noemt Hidde meerdere dingen in één keer, pak ze allemaal op; laat er geen vallen.\n',
+  'Staat het antwoord hieronder al, geef het dan meteen, zonder "even kijken". Alleen als je\necht een tool aanroept zeg je hooguit "even kijken", en je geeft het antwoord zodra het\nresultaat binnen is (dat duurt een fractie van een seconde).\nZeg nooit dat je later terugkomt.\n'
+]
+
+function neutral(fixed: string): string {
+  let out = fixed
+  for (const patch of GEMINI_PATCHES) {
+    if (!out.includes(patch)) throw new Error(`Neutrale prompt: patch niet gevonden, is de tekst veranderd? "${patch.slice(0, 50)}"`)
+    out = out.replace(patch, '')
+  }
+  return out
+}
 
 // ------------------------------------------------------------------ voice
 
@@ -500,14 +785,27 @@ async function clip(text: string): Promise<Buffer> {
 
 // ---------------------------------------------------------------- drivers
 
-type Provider = 'openai' | 'openai-full' | 'gemini'
+type Provider = 'openai' | 'openai-full' | 'gemini' | Brainy
+/** Text brains for a cascade, measured on their own. */
+type Brainy = 'flash' | 'terra' | 'gpt-mini' | 'sonnet' | 'haiku'
+const BRAINS: Brainy[] = ['flash', 'terra', 'gpt-mini', 'sonnet', 'haiku']
+const isBrain = (provider: Provider): provider is Brainy => (BRAINS as string[]).includes(provider)
 
 const MODEL: Record<Provider, string> = {
   openai: 'gpt-realtime-2.1-mini',
   'openai-full': 'gpt-realtime-2.1',
-  gemini: 'gemini-3.8-live-extended-thinking'
+  gemini: 'gemini-3.8-live-extended-thinking',
+  // The brain of a cascade, measured on its own: typed turns, no speech either way.
+  flash: process.env.FLASH_MODEL?.trim() || 'gemini-3.8-flash',
+  terra: 'gpt-5.6-terra',
+  'gpt-mini': 'gpt-5.4-mini',
+  sonnet: 'claude-sonnet-5',
+  haiku: 'claude-haiku-4-5'
 }
-const costOf = (provider: Provider, usage: JarvisLiveUsage): number => usageUsd(usage, MODEL[provider])
+const costOf = (provider: Provider, usage: JarvisLiveUsage): number => {
+  // A brain prices its own turns (cache writes and all): that lands in extraUsd.
+  return isBrain(provider) ? 0 : usageUsd(usage, MODEL[provider])
+}
 
 interface ToolUse {
   name: string
@@ -524,6 +822,8 @@ interface Turn {
   totalMs: number
   audioSec: number
   usage: JarvisLiveUsage
+  /** Costs outside the token usage (the cascade's cache). */
+  extraUsd: number
   problems: string[]
 }
 
@@ -533,7 +833,7 @@ interface Driver {
 }
 
 const blankUsage = (provider: Provider): JarvisLiveUsage => ({
-  provider: provider === 'gemini' ? 'gemini' : 'openai',
+  provider: provider === 'gemini' || provider === 'flash' ? 'gemini' : 'openai',
   textIn: 0,
   audioIn: 0,
   textOut: 0,
@@ -551,6 +851,7 @@ const blankTurn = (provider: Provider, said: string): Turn => ({
   totalMs: 0,
   audioSec: 0,
   usage: blankUsage(provider),
+  extraUsd: 0,
   problems: []
 })
 const addUsage = (into: JarvisLiveUsage, more: JarvisLiveUsage): void => {
@@ -682,6 +983,78 @@ async function geminiDriver(api: TimeTrackerAPI, opening: string | null): Promis
         })()
       }),
     close: () => session.close()
+  }
+}
+
+/**
+ * The cascade's brain on its own: Gemini Flash over its native streaming API with the fixed
+ * instruction cached (brain.ts), typed turns, no speech either way. "firstAudioMs" is when
+ * the first words of text arrive; speech would add the text-to-speech start on top.
+ */
+/**
+ * INTAKE=kort: the "proposal first" reading of the brief's intake questions, still to be
+ * decided for the app. Without it, the strictest models ask all intake questions before
+ * proposing anything, and a scripted conversation cannot answer them.
+ */
+const INTAKE_SHORT = `
+
+--- INTAKE ---
+De afsprakenvragen en takenvragen uit de brief stel je niet als verhoor vooraf. Wat je redelijk
+kunt invullen (gebied uit de context, duur uit wat hij zei, geen deadline, met de auto) vul je
+zelf in en noem je kort in het voorstel; Hidde verbetert je als het anders moet. Vraag alleen
+wat echt ontbreekt om het voorstel te maken (welke dag, hoe laat), één vraag tegelijk.`
+
+async function brainDriver(api: TimeTrackerAPI, opening: string | null, provider: Brainy): Promise<Driver> {
+  const base = instructionParts({ api, system: SYSTEM, opening })
+  const prompt = process.env.PROMPT ?? (process.env.SET === 'challenge' ? 'neutraal' : 'jarvis')
+  const intake = process.env.INTAKE ?? (process.env.SET === 'challenge' ? 'kort' : '')
+  const fixed = prompt === 'neutraal' ? neutral(base.fixed) : base.fixed
+  const parts = { ...base, fixed: intake === 'kort' ? fixed + INTAKE_SHORT : fixed }
+  const effort = (process.env.BRAIN_EFFORT?.trim() || 'low') as 'low' | 'medium' | 'high'
+  const brain: ThinkingBrain =
+    provider === 'flash'
+      ? new Brain({ key: GEMINI_KEY, model: MODEL.flash, thinking: effort, fixed: parts.fixed })
+      : provider === 'sonnet' || provider === 'haiku'
+        ? new ClaudeBrain({
+            key: key('ANTHROPIC_API_KEY'),
+            model: MODEL[provider],
+            fixed: parts.fixed,
+            // Sonnet 5 thinks unless told not to; Haiku 4.5 does not.
+            thinking: provider === 'sonnet' ? ((process.env.CLAUDE_THINKING?.trim() || 'low') as 'off' | 'low' | 'medium') : 'off'
+          })
+        : new OpenAIBrain({
+            key: OPENAI_KEY,
+            model: MODEL[provider],
+            fixed: parts.fixed,
+            effort: (process.env.OPENAI_EFFORT?.trim() || effort) as 'none' | 'minimal' | 'low' | 'medium' | 'high',
+            verbosity: process.env.OPENAI_VERBOSITY?.trim() as 'low' | 'medium' | 'high' | undefined
+          })
+  if (brain instanceof Brain) await brain.warm()
+  return {
+    turn: async (input) => {
+      const turn = blankTurn(provider, input.text)
+      const started = Date.now()
+      try {
+        const reply = await Promise.race([
+          brain.turn(input.text, await parts.state(), async (name, args) => {
+            const output = await useTool(api, turn, name, args)
+            return 'result' in output ? output.result : output
+          }),
+          sleep(TURN_TIMEOUT).then(() => null)
+        ])
+        if (reply) {
+          turn.reply = reply.text
+          turn.firstAudioMs = reply.firstTextMs
+          addUsage(turn.usage, reply.usage)
+          turn.extraUsd += reply.usd
+        } else turn.problems.push('time-out')
+      } catch (error) {
+        turn.problems.push(`fout: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      turn.totalMs = Date.now() - started
+      return turn
+    },
+    close: () => void brain.close()
   }
 }
 
@@ -870,6 +1243,49 @@ Geef een oordeel als JSON met precies deze velden:
 - verzonnen (boolean): noemt hij iets als feit dat niet klopt of nergens uit volgt?
 - toelichting (string): één of twee zinnen, concreet.`
 
+  const first = await withRetry(() => judgeGemini(prompt))
+  if (!SECOND_JUDGE) return first
+  // A judge from another family: a Gemini judge might like Gemini's way of answering.
+  const second = await withRetry(() => judgeOpenAI(prompt))
+  const mean = (a: number, b: number): number => Math.round(((a + b) / 2) * 10) / 10
+  return {
+    geslaagd: first.geslaagd && second.geslaagd,
+    juist: mean(first.juist, second.juist),
+    behulpzaam: mean(first.behulpzaam, second.behulpzaam),
+    beknopt: mean(first.beknopt, second.beknopt),
+    nederlands: mean(first.nederlands, second.nederlands),
+    initiatief: mean(first.initiatief, second.initiatief),
+    // Only when both saw it: one judge alone flagged a benchmark mistake as made up before.
+    verzonnen: first.verzonnen && second.verzonnen,
+    toelichting: `G: ${first.toelichting} | O: ${second.toelichting}`
+  }
+}
+
+/** JUDGES=2 adds the second judge (the challenge set always has it). */
+const SECOND_JUDGE = process.env.JUDGES === '2' || process.env.SET === 'challenge'
+
+const UNREADABLE = (why: string): Verdict => ({
+  geslaagd: false,
+  juist: 0,
+  behulpzaam: 0,
+  beknopt: 0,
+  nederlands: 0,
+  initiatief: 0,
+  verzonnen: false,
+  toelichting: `jury onleesbaar: ${why}`
+})
+
+/** A judge sometimes answers with nothing; ask again rather than score a zero. */
+async function withRetry(ask: () => Promise<Verdict>): Promise<Verdict> {
+  let verdict = UNREADABLE('geen poging')
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    verdict = await ask().catch((error: unknown) => UNREADABLE(error instanceof Error ? error.message : String(error)))
+    if (!verdict.toelichting.startsWith('jury onleesbaar')) return verdict
+  }
+  return verdict
+}
+
+async function judgeGemini(prompt: string): Promise<Verdict> {
   const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
@@ -889,7 +1305,31 @@ Geef een oordeel als JSON met precies deze velden:
   try {
     return JSON.parse(text) as Verdict
   } catch {
-    return { geslaagd: false, juist: 0, behulpzaam: 0, beknopt: 0, nederlands: 0, initiatief: 0, verzonnen: false, toelichting: `jury onleesbaar: ${body.error?.message ?? text.slice(0, 100)}` }
+    return UNREADABLE(body.error?.message ?? text.slice(0, 100))
+  }
+}
+
+async function judgeOpenAI(prompt: string): Promise<Verdict> {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'gpt-5.4-mini', input: prompt, reasoning: { effort: 'low' }, text: { format: { type: 'json_object' } } })
+  })
+  const body = (await response.json()) as {
+    output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>
+    usage?: { input_tokens?: number; output_tokens?: number }
+    error?: { message?: string }
+  }
+  judgeUsd += ((body.usage?.input_tokens ?? 0) * 0.75 + (body.usage?.output_tokens ?? 0) * 4.5) / 1_000_000
+  const text = (body.output ?? [])
+    .filter((item) => item.type === 'message')
+    .flatMap((item) => item.content ?? [])
+    .map((part) => part.text ?? '')
+    .join('')
+  try {
+    return JSON.parse(text) as Verdict
+  } catch {
+    return UNREADABLE(body.error?.message ?? text.slice(0, 100))
   }
 }
 
@@ -899,6 +1339,7 @@ interface Result {
   provider: Provider
   scenario: string
   category: Scenario['category']
+  family?: string
   title: string
   turns: Turn[]
   checks: Array<{ name: string; ok: boolean }>
@@ -934,6 +1375,7 @@ async function runScenario(provider: Provider, scenario: Scenario): Promise<Resu
     provider,
     scenario: scenario.id,
     category: scenario.category,
+    family: scenario.family,
     title: scenario.title,
     turns: [],
     checks: [],
@@ -949,14 +1391,19 @@ async function runScenario(provider: Provider, scenario: Scenario): Promise<Resu
     await scenario.setup?.(api)
     const truth = (await scenario.truth?.(api)) ?? ''
     const opening = scenario.opening ? MOMENT[scenario.opening] : null
-    driver = provider === 'gemini' ? await geminiDriver(api, opening) : await openaiDriver(api, opening, provider)
+    driver =
+      provider === 'gemini'
+        ? await geminiDriver(api, opening)
+        : isBrain(provider)
+          ? await brainDriver(api, opening, provider)
+          : await openaiDriver(api, opening, provider)
     const inputs = [...(opening ? [{ text: opening }] : []), ...scenario.turns]
     const offset = opening ? 1 : 0
     for (const [index, input] of inputs.entries()) {
       const turn = await driver.turn(input)
       result.turns.push(turn)
       for (const check of scenario.checks ?? []) {
-        if (check.after + offset === index) result.checks.push({ name: check.name, ok: await check.test(api).catch(() => false) })
+        if (check.after + offset === index) result.checks.push({ name: check.name, ok: await check.test(api, result.turns).catch(() => false) })
       }
     }
     driver.close()
@@ -968,7 +1415,7 @@ async function runScenario(provider: Provider, scenario: Scenario): Promise<Resu
   } finally {
     driver?.close()
   }
-  for (const turn of result.turns) result.usd += costOf(provider, turn.usage)
+  for (const turn of result.turns) result.usd += costOf(provider, turn.usage) + turn.extraUsd
   const calls = result.turns.reduce((sum, turn) => sum + turn.tools.length, 0)
   result.wastedTools = Math.max(0, calls - (scenario.toolBudget ?? 2))
   result.toolErrors = result.turns.reduce((sum, turn) => sum + turn.tools.filter((tool) => tool.error).length, 0)
@@ -978,6 +1425,9 @@ async function runScenario(provider: Provider, scenario: Scenario): Promise<Resu
 
 // --------------------------------------------------------------- report
 
+/** Hidde talks 15–30 minutes a day: about 40–70 turns. */
+const TURNS_PER_DAY = 55
+
 const pct = (part: number, whole: number): string => (whole ? `${Math.round((part / whole) * 100)}%` : '–')
 const avg = (values: number[]): number => (values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0)
 const quantile = (values: number[], q: number): number => {
@@ -985,6 +1435,8 @@ const quantile = (values: number[], q: number): number => {
   const sorted = [...values].sort((a, b) => a - b)
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!
 }
+
+const turnUsd = (provider: Provider, turn: Turn): number => costOf(provider, turn.usage) + turn.extraUsd
 
 /** A scenario passes when every hard check holds and the judge says it did the job. */
 const passed = (result: Result): boolean => !result.error && result.checks.every((check) => check.ok) && result.verdict.geslaagd
@@ -1009,6 +1461,12 @@ function summary(results: Result[]): Record<string, string | number> {
     'geslaagd (totaal)': `${pct(results.filter(passed).length, results.length)} (${results.filter(passed).length}/${results.length})`,
     'geslaagd dagelijks': byCategory('dagelijks'),
     'geslaagd verder dan standaard': byCategory('verder'),
+    ...Object.fromEntries(
+      [...new Set(results.map((result) => result.family).filter((family): family is string => !!family))].map((family) => {
+        const own = results.filter((result) => result.family === family)
+        return [`  soort: ${family}`, `${pct(own.filter(passed).length, own.length)} (${own.filter(passed).length}/${own.length})`]
+      })
+    ),
     'harde checks ok': pct(checks.filter((check) => check.ok).length, checks.length),
     'jury: juist /5': avg(judged.map((result) => result.verdict.juist)).toFixed(2),
     'jury: behulpzaam /5': avg(judged.map((result) => result.verdict.behulpzaam)).toFixed(2),
@@ -1031,23 +1489,33 @@ function summary(results: Result[]): Record<string, string | number> {
     'input uit cache': pct(cached, input),
     'kosten totaal': `$${usd.toFixed(3)}`,
     'kosten per beurt': `$${perTurn.toFixed(4)}`,
+    // Once the cache is warm: what a turn costs in a long conversation, the way Hidde talks.
+    'kosten per vervolgbeurt (cache warm)': `${avg(results.flatMap((result) => result.turns.slice(1).map((turn) => turnUsd(result.provider, turn)))).toFixed(4)}`,
+    'geschat per maand (cache warm)': `${(avg(results.flatMap((result) => result.turns.slice(1).map((turn) => turnUsd(result.provider, turn)))) * TURNS_PER_DAY * 30).toFixed(2)}`,
     'kosten per scenario': `$${(usd / Math.max(1, results.length)).toFixed(4)}`,
-    'geschat per dag (2 gesprekken × 6 beurten)': `$${(perTurn * 12).toFixed(3)}`,
-    'geschat per maand': `$${(perTurn * 12 * 30).toFixed(2)}`,
-    'score per dollar (maandgebruik)': perTurn ? (score * 100 / (perTurn * 12 * 30)).toFixed(0) : '–'
+    // 15–30 minutes of talking a day is about 40–70 turns; 55 is the middle.
+    'geschat per dag (55 beurten)': `$${(perTurn * TURNS_PER_DAY).toFixed(3)}`,
+    'geschat per maand': `${(perTurn * TURNS_PER_DAY * 30).toFixed(2)}`,
+    'score per dollar (maandgebruik)': perTurn ? ((score * 100) / (perTurn * TURNS_PER_DAY * 30)).toFixed(1) : '–'
   }
 }
 
 async function main(): Promise<void> {
   const providers = (process.env.ONLY ? process.env.ONLY.split(',').map((name) => name.trim()) : ['openai', 'gemini']) as Provider[]
   const wanted = process.env.SCENARIOS?.split(',').map((id) => id.trim().toUpperCase())
-  const scenarios = wanted ? SCENARIOS.filter((scenario) => wanted.includes(scenario.id)) : SCENARIOS
+  const pool = process.env.SET === 'challenge' ? CHALLENGE : SCENARIOS
+  const scenarios = wanted ? pool.filter((scenario) => wanted.some((id) => scenario.id.toUpperCase().startsWith(id))) : pool
   const budget: Record<Provider, number> = {
     openai: Number(process.env.BUDGET_OPENAI ?? 1.05),
     'openai-full': Number(process.env.BUDGET_OPENAI_FULL ?? 0.85),
+    flash: Number(process.env.BUDGET_FLASH ?? 0.5),
+    terra: Number(process.env.BUDGET_TERRA ?? 0.6),
+    'gpt-mini': Number(process.env.BUDGET_GPT_MINI ?? 0.4),
+    sonnet: Number(process.env.BUDGET_SONNET ?? 0.6),
+    haiku: Number(process.env.BUDGET_HAIKU ?? 0.4),
     gemini: Number(process.env.BUDGET_GEMINI ?? 2.7)
   }
-  const spent: Record<Provider, number> = { openai: 0, 'openai-full': 0, gemini: 0 }
+  const spent: Record<Provider, number> = { openai: 0, 'openai-full': 0, gemini: 0, flash: 0, terra: 0, 'gpt-mini': 0, sonnet: 0, haiku: 0 }
   const results: Result[] = []
 
   console.log(`Jarvis-benchmark: ${scenarios.length} scenario's × ${providers.join(' + ')}; budget ${providers.map((provider) => `${provider} $${budget[provider]}`).join(', ')}`)

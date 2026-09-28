@@ -198,6 +198,25 @@ function withoutMoments(system: string): string {
  * live, and the state of today. The same for Gemini and OpenAI.
  */
 async function instructionFor(options: LiveOptions): Promise<string> {
+  return `${fixedInstruction(options)}
+
+--- VANDAAG ---
+${await today(options.api)}`
+}
+
+/**
+ * The instruction in two parts: what stays the same all month (cacheable, so it goes first)
+ * and the state of today (a few hundred tokens, changes with every edit). A cascade sends the
+ * fixed part as its system prompt and the state along with each message.
+ */
+export function instructionParts(options: Pick<LiveOptions, 'api' | 'system' | 'opening'>): {
+  fixed: string
+  state: () => Promise<string>
+} {
+  return { fixed: fixedInstruction(options), state: () => today(options.api) }
+}
+
+function fixedInstruction(options: Pick<LiveOptions, 'system' | 'opening'>): string {
   // Native audio models pick their language themselves; only the instruction can pin it.
   return `TAAL: je spreekt uitsluitend Nederlands. Nooit Engels, ook niet als je iets niet goed
 verstaat of als een tool Engelse tekst teruggeeft.
@@ -208,8 +227,8 @@ ${options.opening ? options.system : withoutMoments(options.system)}
 Dit is een live spraakgesprek: Hidde hoort je direct. Antwoord in hooguit twee korte zinnen
 (zo'n 25 woorden), tenzij hij om een overzicht vraagt; dan de hoofdzaken, geen opsomming van
 alles. Zie je een risico (een deadline die niet gaat passen, een botsing, iets te laat; in de
-stand gemarkeerd met RISICO of TE LAAT), noem het altijd als het over die dag gaat, ook als
-dat een zin extra kost, en bied aan het in te plannen. Altijd Nederlands, en laat hem gerust onderbreken.
+stand gemarkeerd met RISICO of TE LAAT), noem het één keer per gesprek als het over die dag
+gaat, ook als dat een zin extra kost, en bied aan het in te plannen. Daarna niet steeds opnieuw. Altijd Nederlands, en laat hem gerust onderbreken.
 Staat het antwoord hieronder al, geef het dan meteen, zonder "even kijken". Alleen als je
 echt een tool aanroept zeg je hooguit "even kijken", en je geeft het antwoord zodra het
 resultaat binnen is (dat duurt een fractie van een seconde).
@@ -220,10 +239,7 @@ planning van vandaag en morgen, de open taken en de regels staan hieronder al. R
 zelf een datum uit: lees hem af.
 Gebruik daarvoor dus GEEN get_now, get_snapshot of list_tasks, ook niet bij het ochtend- of
 avondmoment: dat kost tijd en geld. Een tool alleen voor andere dagen, of nadat er in dit gesprek iets is
-veranderd.
-
---- VANDAAG ---
-${await today(options.api)}`
+veranderd.`
 }
 
 export async function liveSession(options: LiveOptions): Promise<JarvisLiveSession> {

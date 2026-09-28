@@ -65,7 +65,7 @@ export const TOOLS: ToolSpec[] = [
         taskIds: { type: 'array', items: { type: 'string' }, description: 'In deze volgorde' },
         after: { type: 'string', description: 'Vanaf YYYY-MM-DDTHH:MM; standaard nu' },
         before: { type: 'string', description: 'Uiterlijk YYYY-MM-DDTHH:MM; standaard een week later' },
-        minutes: { type: 'integer', minimum: 15, description: 'Minuten per taak; standaard de schatting van de taak, anders 60' }
+        minutes: { type: 'integer', minimum: 15, description: 'Alleen als Hidde zelf één duur voor alle taken noemt ("elk een uur"). Anders weglaten: dan krijgt elke taak haar eigen schatting.' }
       },
       ['taskIds']
     ),
@@ -631,8 +631,26 @@ async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promis
   }
 }
 
+/**
+ * The first moment after the asked time, same day and same length, that runs over no
+ * appointment: tried every quarter of an hour until 23:00.
+ */
+async function nextFreeSlot(api: TimeTrackerAPI, input: Input): Promise<Input | null> {
+  const length = minuteOf(String(input.end)) - minuteOf(String(input.start))
+  for (let start = minuteOf(String(input.start)) + 15; start + length <= 23 * 60; start += 15) {
+    const candidate = { ...input, start: hm(start), end: hm(start + length) }
+    try {
+      await slotFor(api, candidate)
+      return candidate
+    } catch {
+      // Still in the way; the next quarter.
+    }
+  }
+  return null
+}
+
 async function propose(api: TimeTrackerAPI, name: string, given: Input): Promise<unknown> {
-  let input: Input
+  let input: Input | undefined
   try {
     input = await resolveRefs(api, given)
     // A time with no date but a deadline: the model meant that day (the mini did this).
@@ -641,7 +659,24 @@ async function propose(api: TimeTrackerAPI, name: string, given: Input): Promise
     }
     await precheck(api, name, input)
   } catch (error) {
-    return { error: `Kan niet: ${error instanceof Error ? error.message : String(error)}` }
+    const message = error instanceof Error ? error.message : String(error)
+    // A task over an appointment: the code finds the next free moment and proposes that, so
+    // one "ja" is enough. Left to the models, they offered a time out loud, then proposed it
+    // on "ja" and asked again (challenge set, all models).
+    if (name === 'schedule_task' && message.startsWith('Overlapt met')) {
+      const moved = await nextFreeSlot(api, input!)
+      if (moved) {
+        const summary = await describe(api, name, moved)
+        const proposal = await api.assistant.propose({ tool: name, payload: moved, summary, expiresAt: Date.now() + PROPOSAL_MS })
+        return {
+          conflict: message,
+          pendingId: proposal.id,
+          summary,
+          next: `Niet op het gevraagde tijdstip: ${message}. Het eerstvolgende vrije moment staat klaar als voorstel. Noem de botsing en dat tijdstip in één zin en vraag "Zal ik dat zo doen?". Bij ja: confirm; wil hij een andere tijd: cancel en een nieuw voorstel.`
+        }
+      }
+    }
+    return { error: `Kan niet: ${message}` }
   }
   const summary = await describe(api, name, input)
   const proposal = await api.assistant.propose({ tool: name, payload: input, summary, expiresAt: Date.now() + PROPOSAL_MS })

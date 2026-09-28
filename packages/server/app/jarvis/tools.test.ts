@@ -136,7 +136,7 @@ describe('Jarvis tools', () => {
     expect(after.appointments).toHaveLength(0)
   })
 
-  it('schedules a task at a time, and refuses to put it over an appointment', async () => {
+  it('schedules a task at a time, and proposes the next free moment instead of an appointment', async () => {
     const day = next(2)
     const task = await api.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 60 })
     await api.calendar.createEvent({
@@ -151,11 +151,16 @@ describe('Jarvis tools', () => {
     })
 
     const clash = (await runTool(api, 'schedule_task', { taskId: task.id, date: day, start: '14:30', end: '15:30' })) as {
-      error?: string
+      conflict?: string
+      pendingId?: string
+      summary?: string
     }
-    expect(clash.error).toContain('Paspoort')
+    // Paspoort 14:00–15:00 is in the way; the hour right after it is free.
+    expect(clash.conflict).toContain('Paspoort')
+    expect(clash.summary).toContain('15:00–16:00')
 
-    const placed = await proposeAndConfirm('schedule_task', { taskId: task.id, date: day, start: '15:00', end: '16:00' })
+    // One "ja" carries it out: no second question.
+    const placed = (await runTool(api, 'confirm', { pendingIds: [clash.pendingId] })) as Confirmed
     expect(placed.executed[0]!.result).toMatchObject({ placed: `${day} 15:00–16:00` })
     const plan = await api.plans.day(day)
     expect(plan.blocks.find((block) => block.taskId === task.id)).toMatchObject({ startMin: 900, endMin: 960, source: 'manual' })

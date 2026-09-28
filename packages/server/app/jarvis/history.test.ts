@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { lastExchanges } from './brain.js'
 import { condense, TURNS, windowStart, withoutState, withState } from './providers.js'
 
 describe('what stays in the history', () => {
@@ -38,5 +39,18 @@ describe('what stays in the history', () => {
     // A single long exchange still keeps its own question.
     const one: M[] = [{ role: 'system' }, { role: 'user' }, ...Array.from({ length: 20 }, () => ({ role: 'tool' as const }))]
     expect(windowStart(one, 1, (message) => message.role === 'user')).toBe(1)
+  })
+})
+
+describe('lastExchanges (the cascade brains)', () => {
+  it('keeps the last six of his messages and everything after the first of them', () => {
+    const history = Array.from({ length: 8 }, (_, index) => [`hidde ${index}`, `tool ${index}`, `jarvis ${index}`]).flat()
+    const kept = lastExchanges(history, (entry) => entry.startsWith('hidde'))
+    expect(kept[0]).toBe('hidde 2')
+    expect(kept).toHaveLength(18)
+  })
+
+  it('keeps a short history whole', () => {
+    expect(lastExchanges(['hidde 0', 'jarvis 0'], (entry) => entry.startsWith('hidde'))).toEqual(['hidde 0', 'jarvis 0'])
   })
 })
