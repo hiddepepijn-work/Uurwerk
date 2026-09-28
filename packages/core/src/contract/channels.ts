@@ -126,6 +126,7 @@ export const CHANNELS = {
   window: ['minimizeToTray', 'closeQuickAdd', 'jarvisShow', 'jarvisHide', 'jarvisInteractive', 'openApp', 'wakeWordOn', 'wakeAudio', 'quit'],
   // This copy and the VPS. Offline first: everything above works without it.
   sync: ['status', 'pair', 'now', 'unpair'],
+  ideas: ['list', 'add', 'update', 'remove'],
   // The assistant. Lives on the server; devices forward.
   assistant: [
     'rules',

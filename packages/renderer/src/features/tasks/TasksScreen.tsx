@@ -8,6 +8,7 @@ import { CheckIcon, ClockIcon, FilterIcon, PlusIcon, SearchIcon } from '../../ui
 import { StatCard } from '../../ui/StatCard.js'
 import { CalendarIcon } from '../../ui/icons.js'
 import { CurrentQueue } from './CurrentQueue.js'
+import { IdeasPanel } from './IdeasPanel.js'
 import { PriorityView } from './PriorityView.js'
 import { TaskEditor } from './TaskEditor.js'
 
@@ -150,6 +151,8 @@ export function TasksScreen({ tracking }: { tracking: Tracking }) {
             />
             <StatCard icon={<CheckIcon size={16} />} label="Completed" value={String(done.length)} sub="tasks" />
           </div>
+
+          <IdeasPanel projects={projects ?? []} />
         </div>
 
         <PriorityView

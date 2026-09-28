@@ -1468,6 +1468,25 @@ export interface Settings {
  * A standing wish. Hard rules the planner enforces in code; soft ones go into Jarvis's
  * context as text. `config` is the rule's own JSON, read by whatever enforces its type.
  */
+/** An idea in the pot (migration 021): not a task, never planned, per project when one fits. */
+export type IdeaStatus = 'open' | 'done' | 'dropped'
+
+export interface Idea {
+  id: string
+  text: string
+  projectId: string | null
+  areaId: string | null
+  status: IdeaStatus
+  createdAt: number
+  updatedAt: number
+}
+
+export interface NewIdea {
+  text: string
+  projectId?: string | null
+  areaId?: string | null
+}
+
 export interface Rule {
   id: string
   kind: 'hard' | 'soft'

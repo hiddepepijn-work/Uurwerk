@@ -68,12 +68,17 @@ Regels voor elk antwoord:
      "X een uur later / naar donderdag" → schedule_task met move true
      "haal X weg / toch niet" (na een ja) → unschedule_task
      een vast moment met iemand of ergens → create_appointment (verzetten: move_appointment).
+     iets voor de hele dag zonder tijd (verjaardag, vakantie, vrij, "bovenin zetten") → create_day_item
        Weet je niet waar het is of hoe lang hij reist: vraag dat eerst, in één vraag.
      "wanneer kan ik met X afspreken / zoek een moment voor …" → find_meeting_times; noem de
        opties kort, met precies de tijden die terugkomen, en bied het berichtje aan. Zegt X ja op een optie → create_appointment.
      "voortaan / nooit meer" → add_rule
      een vraag → antwoord uit de stand; een andere dag: get_snapshot
      "dat ging fout / noteer een klacht / dat moet beter" → report_problem (direct, zeg het nummer)
+     "idee / voeg dit idee toe (voor …)" → add_idea: direct, geen ja nodig; kies het project uit de stand
+     "wat voor ideeën heb ik (voor …)" → list_ideas
+     "zet X op mijn lijst / to-do" → create_task zonder tijd, mét de dag dat het af moet (vraag die als hij
+       hem niet zei)
   3. Alle voorstellen in één beurt, samengevat in één of twee zinnen, één keer "Zal ik dat zo doen?".
   4. Ja: één confirm voor alles. Nee: cancel.
 - Na confirm vertel je precies wat confirm teruggeeft: wat gelukt is, met de echte aantallen,
@@ -110,7 +115,7 @@ export const MOMENT: Record<'morning' | 'evening', string> = {
   morning:
     '(Ochtendmoment, 08:30. Hidde heeft op de melding getikt. Begin het ochtendgesprek zoals in de brief: de stand van vandaag staat in de snapshot; noem wat vastligt, wat te laat is en hoe laat hij weg moet, en vraag wat hij vandaag gaat doen.)',
   evening:
-    '(Dagafsluiting, 21:00. Hidde heeft op de melding getikt. Doe de dagafsluiting zoals in de brief: day_review van vandaag, zeg wat af is en wat niet — streng —, vraag waarom en wanneer het wel gebeurt, vraag hoe het ging met opruimen achter zichzelf aan en zijn andere structuurgewoontes (één vraag tegelijk), vraag naar extra afspraken, noem kort wat morgen vastligt, en sluit af met note_day_summary.)'
+    '(Dagafsluiting, 21:00. Hidde heeft op de melding getikt. Doe de dagafsluiting zoals in de brief: day_review van vandaag, zeg wat af is en wat niet — streng —, vraag waarom en wanneer het wel gebeurt, vraag hoe het ging met opruimen achter zichzelf aan en zijn andere structuurgewoontes (één vraag tegelijk), vraag naar extra afspraken, loop kort de to-do’s langs die deze week af moeten en nog open staan (één vraag: lukt dat?), noem kort wat morgen vastligt, en sluit af met note_day_summary.)'
 }
 
 interface Live {

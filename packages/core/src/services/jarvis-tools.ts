@@ -105,6 +105,24 @@ export const TOOLS: ToolSpec[] = [
     proposes: true
   },
   {
+    name: 'add_idea',
+    description: 'Een idee in de ideeënpot ("voeg idee toe voor de app"). Geen taak, wordt nooit ingepland. Direct, geen voorstel en geen ja nodig. Kies zelf het project dat het best past uit Projecten in de stand.',
+    parameters: object(
+      {
+        text: { type: 'string', description: 'Het idee, kort en duidelijk' },
+        projectName: { type: 'string', description: 'Naam van het project uit de stand; weglaten als er geen past' }
+      },
+      ['text']
+    ),
+    writes: false
+  },
+  {
+    name: 'list_ideas',
+    description: 'De open ideeën, eventueel van één project.',
+    parameters: object({ projectName: { type: 'string' } }),
+    writes: false
+  },
+  {
     name: 'report_problem',
     description: 'Hidde is niet tevreden over hoe je iets deed ("dat ging fout", "noteer een klacht"): leg het vast, met het gesprek erbij, zodat het verbeterd wordt. Direct, geen voorstel. Zeg daarna kort het nummer.',
     parameters: object(
@@ -164,6 +182,7 @@ export const TOOLS: ToolSpec[] = [
           description: 'auto = stage altijd focus, privé vanaf 30 min; always/never als Hidde het anders wil'
         },
         date: { ...date, description: 'Optioneel: meteen inplannen op deze dag (met start en end)' },
+        noDeadline: { type: 'boolean', description: 'Alleen als Hidde zegt dat het niet uitmaakt wanneer het af is' },
         start: clock,
         end: clock
       },
@@ -247,6 +266,21 @@ export const TOOLS: ToolSpec[] = [
         notes: { type: 'string', description: 'Doel, Wie, Meenemen/voorbereiden, Bijzonderheden, Belangrijk: ja/nee' }
       },
       ['title', 'date', 'start', 'end', 'areaId', 'travelMinutes']
+    ),
+    writes: true,
+    proposes: true
+  },
+  {
+    name: 'create_day_item',
+    description: 'Iets voor de hele dag, bovenin de dag in plaats van in de tijdlijn (verjaardag, vakantie, vrij, deadline, "weet dat …"). Geen tijd, geen reis; de planning gaat er gewoon omheen. Meerdere dagen: endDate.' + PROPOSAL,
+    parameters: object(
+      {
+        title: { type: 'string' },
+        date,
+        endDate: { ...date, description: 'Laatste dag, als het meerdere dagen is' },
+        areaId: { type: 'string', enum: AREAS }
+      },
+      ['title', 'date']
     ),
     writes: true,
     proposes: true
@@ -453,6 +487,11 @@ async function snapshot(api: TimeTrackerAPI, from: IsoDate, to: IsoDate, withTas
       lines.push(`  ${ref('t', task.id)} ${task.title} [${task.areaId ?? '-'}] ${task.priority}${estimate}${due}${late}${risk}`)
     }
   }
+  const projects = await api.projects.list()
+  if (projects.length > 0) {
+    lines.push('', 'Projecten')
+    lines.push(`  ${projects.map((project) => `${project.name} [${project.areaId ?? '-'}]`).join(', ')}`)
+  }
   const rules = await api.assistant.rules()
   if (rules.length > 0) {
     lines.push('', 'Regels')
@@ -627,6 +666,8 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
       return `Taak "${await taskTitle(input.taskId)}" uit de planning halen ${input.date ? `op ${String(input.date)}` : 'vanaf nu'}`
     case 'clear_planning':
       return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} wissen (afspraken en wat Hidde zelf zette blijven)`
+    case 'create_day_item':
+      return `Hele dag: "${String(input.title)}" op ${String(input.date)}${input.endDate && input.endDate !== input.date ? ` t/m ${String(input.endDate)}` : ''}`
     case 'create_appointment':
       return `Nieuwe afspraak "${String(input.title)}" op ${String(input.date)} ${String(input.start)}–${String(input.end)}${typeof input.travelMinutes === 'number' && input.travelMinutes > 0 ? `, ${input.travelMinutes} min reistijd` : ''}`
     case 'move_appointment':
@@ -654,6 +695,10 @@ const plannedAt = (input: Input): boolean =>
 
 async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promise<void> {
   if (name === 'schedule_task') await slotFor(api, input)
+  // A to-do needs no time, but it does need a day it is done by (Hidde, 28 Sep 2026).
+  if (name === 'create_task' && !input.dueDate && !input.date && input.noDeadline !== true) {
+    throw new Error('Wanneer moet het af zijn? Vraag Hidde een datum (een tijd is niet nodig); zegt hij dat het niet uitmaakt: noDeadline true.')
+  }
   if (name === 'create_task' && (input.date || input.start || input.end)) {
     if (!plannedAt(input)) throw new Error('Meteen inplannen vraagt date, start én end.')
     if (minuteOf(String(input.end)) <= minuteOf(String(input.start))) throw new Error('Het einde ligt voor het begin.')
@@ -693,6 +738,18 @@ async function nextFreeSlot(api: TimeTrackerAPI, input: Input): Promise<Input | 
     }
   }
   return null
+}
+
+/** A project by the name he (or a misheard version of it) used: exact, then contains either way. */
+async function projectNamed(api: TimeTrackerAPI, name: string) {
+  const wanted = name.trim().toLowerCase()
+  if (!wanted) return null
+  const projects = await api.projects.list()
+  return (
+    projects.find((project) => project.name.toLowerCase() === wanted) ??
+    projects.find((project) => project.name.toLowerCase().includes(wanted) || wanted.includes(project.name.toLowerCase())) ??
+    null
+  )
 }
 
 async function propose(api: TimeTrackerAPI, name: string, given: Input): Promise<unknown> {
@@ -819,6 +876,8 @@ function cardsFor(tool: string, input: Input, result: unknown): JarvisCard[] {
       return [card('planning', 'weg', `${String(out.removedBlocks)} blokken weggehaald`, `${shortDay(String(out.from))} – ${shortDay(String(out.to))}`, out.from)]
     case 'apply_day_plan':
       return [card('planning', 'gewijzigd', `Dagplan ${shortDay(String(input.date))}`, null, input.date)]
+    case 'create_day_item':
+      return [card('afspraak', 'nieuw', input.title, input.endDate && input.endDate !== input.date ? `${shortDay(String(input.date))} – ${shortDay(String(input.endDate))}` : 'hele dag', input.date)]
     case 'create_appointment':
       return [card('afspraak', 'nieuw', input.title, slot(input.date, input.start, input.end), input.date)]
     case 'move_appointment':
@@ -912,6 +971,25 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
         type: rule.type,
         description: rule.description
       }))
+
+    case 'add_idea': {
+      const text = String(input.text ?? '').trim()
+      if (!text) return { error: 'Een idee heeft tekst nodig.' }
+      const project = typeof input.projectName === 'string' ? await projectNamed(api, input.projectName) : null
+      const idea = await api.ideas.add({ text, projectId: project?.id ?? null, areaId: project?.areaId ?? null })
+      return {
+        saved: idea.text,
+        project: project?.name ?? null,
+        ...(input.projectName && !project ? { note: `Geen project "${String(input.projectName)}"; zonder project bewaard.` } : {})
+      }
+    }
+
+    case 'list_ideas': {
+      const project = typeof input.projectName === 'string' ? await projectNamed(api, input.projectName) : null
+      const projects = new Map((await api.projects.list()).map((entry) => [entry.id, entry.name]))
+      const ideas = await api.ideas.list(project ? { projectId: project.id } : {})
+      return ideas.map((idea) => ({ idea: idea.text, project: idea.projectId ? projects.get(idea.projectId) ?? null : null, sinds: isoDate(new Date(idea.createdAt)) }))
+    }
 
     case 'report_problem':
       // Kept by the voice line, which has the whole conversation (app/jarvis/voice.ts).
@@ -1230,6 +1308,29 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
       const left = (await Promise.all(days.map((day) => ours(day)))).flat().length
       if (left > 0) throw new Error(`${removed} blokken verwijderd, maar er staan er nog ${left}.`)
       return { removedBlocks: removed, from: days[0], to: days[days.length - 1] }
+    }
+
+    case 'create_day_item': {
+      const first = String(input.date)
+      const last = typeof input.endDate === 'string' && input.endDate >= first ? input.endDate : first
+      if (daysBetween(first, last).length > 62) throw new Error('Langer dan twee maanden: splits het op.')
+      const created = await api.calendar.createEvent({
+        title: String(input.title),
+        startsAt: dayStart(first),
+        endsAt: dayStart(last) + 86_400_000,
+        allDay: true,
+        origin: 'uurwerk',
+        classificationStatus: 'unclassified',
+        // Above the day, not in it: the planner plans around nothing here.
+        includeInPlanning: false,
+        registrationMode: 'none',
+        countsAsWorked: false,
+        areaId: typeof input.areaId === 'string' ? input.areaId : null,
+        createdBy: 'jarvis'
+      })
+      const back = (await api.calendar.eventsInRange(dayStart(first), dayStart(first) + 86_400_000)).find((event) => event.id === created.id)
+      if (!back) throw new Error('Het staat na het opslaan niet in de agenda.')
+      return { added: created.title, days: first === last ? first : `${first} t/m ${last}` }
     }
 
     case 'create_appointment': {

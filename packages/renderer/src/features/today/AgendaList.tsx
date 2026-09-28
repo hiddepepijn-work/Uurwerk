@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { CalendarEvent, IsoDate, PlanBlock } from '@core/contract/types.js'
 import { Card, CardAction } from '../../ui/Card.js'
 import { formatDuration } from '../../lib/format.js'
-import { DayTimeline } from '../agenda/PhoneAgenda.js'
+import { AllDayRow, DayTimeline } from '../agenda/PhoneAgenda.js'
 import { agendaFor } from '../agenda/agenda-model.js'
 
 /**
@@ -20,7 +20,7 @@ export function AgendaList({
   events: CalendarEvent[]
   onPlanDay: () => void
 }) {
-  const { items } = useMemo(() => agendaFor(date, blocks, events), [date, blocks, events])
+  const { items, allDay } = useMemo(() => agendaFor(date, blocks, events), [date, blocks, events])
   const total = blocks
     .filter((block) => block.kind === 'task')
     .reduce((sum, block) => sum + (block.endMin - block.startMin), 0)
@@ -32,6 +32,11 @@ export function AgendaList({
       action={<CardAction onClick={onPlanDay}>{blocks.length > 0 ? 'Edit' : 'Plan'}</CardAction>}
       padded={false}
     >
+      {allDay.length > 0 && (
+        <div className="px-4 pt-3">
+          <AllDayRow items={allDay} />
+        </div>
+      )}
       {/* Always the timeline, empty or not: clicking an empty moment is how you plan it. */}
       <DayTimeline
         date={date}

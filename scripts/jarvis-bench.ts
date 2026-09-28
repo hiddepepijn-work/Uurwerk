@@ -1049,6 +1049,87 @@ const COMPOUND: Scenario[] = [
     turns: [{ text: 'Kun je een berichtje maken dat ik naar Sanne kan sturen voor een etentje van twee uur deze week?' }],
     checks: [{ after: 0, name: 'geeft opties in een berichtje', test: async (_api, turns) => turns[0]!.tools.some((tool) => tool.name === 'find_meeting_times') && /\d{1,2}[:.]\d{2}|om \d/.test(turns[0]!.reply) }],
     toolBudget: 2
+  },
+  {
+    id: 'S19',
+    family: 'ideeën',
+    category: 'challenge',
+    title: 'Idee voor deze app',
+    expect: 'Zet het idee (donkere modus voor de agenda) direct in de ideeënpot bij het project Uur app (de app van dit gesprek), zonder om een ja te vragen, en zegt dat kort.',
+    turns: [{ text: 'Voeg een idee toe voor deze app: een donkere modus voor de agenda.' }],
+    checks: [
+      {
+        after: 0,
+        name: 'idee bij Uur app, zonder ja',
+        test: async (api) => {
+          const projects = await api.projects.list()
+          const uur = projects.find((project) => /uur app/i.test(project.name))
+          const ideas = await api.ideas.list()
+          return ideas.some((idea) => /donker/i.test(idea.text) && idea.projectId === uur?.id) && (await api.assistant.pendingProposals()).length === 0
+        }
+      }
+    ],
+    toolBudget: 2
+  },
+  {
+    id: 'S20',
+    family: 'to-do',
+    category: 'challenge',
+    title: 'Op mijn lijst, zonder tijd',
+    expect: 'Vraagt wanneer het af moet zijn (geen tijd nodig); na "voor eind oktober" maakt hij de taak met deadline 31 oktober, zonder hem in te plannen, na ja.',
+    turns: [{ text: 'Zet paspoort verlengen op mijn to-do lijst.' }, { text: 'Voor eind oktober.' }, { text: 'Ja.' }],
+    checks: [
+      { after: 0, name: 'vraagt wanneer af, maakt nog niets', test: async (api, turns) => turns[0]!.reply.includes('?') && (await taskNamed(api, /paspoort/i)) === null },
+      { after: 2, name: 'taak met deadline eind oktober', test: async (api) => (await taskNamed(api, /paspoort/i))?.dueDate === '2026-10-31' }
+    ],
+    toolBudget: 4
+  },
+  {
+    id: 'S21',
+    family: 'ideeën',
+    category: 'challenge',
+    title: 'Welke ideeën heb ik',
+    expect: 'Noemt de open ideeën voor Uur app (Widget voor het vergrendelscherm, Spraakmemo bij een taak) kort.',
+    setup: async (api) => {
+      const uur = (await api.projects.list()).find((project) => /uur app/i.test(project.name))
+      await api.ideas.add({ text: 'Widget voor het vergrendelscherm', projectId: uur?.id ?? null })
+      await api.ideas.add({ text: 'Spraakmemo bij een taak', projectId: uur?.id ?? null })
+    },
+    turns: [{ text: 'Welke ideeën heb ik eigenlijk voor de app?' }],
+    checks: [{ after: 0, name: 'noemt beide', test: async (_api, turns) => /widget/i.test(turns[0]!.reply) && /spraakmemo|memo/i.test(turns[0]!.reply) }],
+    toolBudget: 2
+  },
+  {
+    id: 'S22',
+    family: 'hele dag',
+    category: 'challenge',
+    title: 'Bovenin: verjaardag oma',
+    expect: `Zet "Verjaardag oma" als hele-dag-item bovenin donderdag ${THURSDAY} (geen tijd, geen reis), na ja.`,
+    turns: [{ text: 'Zet donderdag bovenin dat oma jarig is, niet in de agenda zelf.' }, { text: 'Ja.' }],
+    checks: [
+      {
+        after: 1,
+        name: 'hele-dag-item donderdag',
+        test: async (api) => (await eventsOn(api, THURSDAY, /oma/i)).some((event) => event.allDay)
+      }
+    ],
+    toolBudget: 3
+  },
+  {
+    id: 'S23',
+    family: 'hele dag',
+    category: 'challenge',
+    title: 'Vakantie over meerdere dagen',
+    expect: 'Zet "Vakantie" als hele-dag-item van 12 tot en met 19 oktober, na ja.',
+    turns: [{ text: 'Ik heb vakantie van 12 tot en met 19 oktober, zet dat bovenin.' }, { text: 'Ja.' }],
+    checks: [
+      {
+        after: 1,
+        name: 'vakantie ook op 15 oktober',
+        test: async (api) => (await eventsOn(api, '2026-10-15', /vakantie/i)).some((event) => event.allDay)
+      }
+    ],
+    toolBudget: 3
   }
 ]
 

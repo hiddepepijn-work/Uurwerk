@@ -369,6 +369,17 @@ export function WeekTimeline({
               >
                 {fromIsoDate(day.date).getDate()}
               </span>
+              {/* All-day items, as a line under the date: the first one named, then a count. */}
+              {day.allDay && day.allDay.length > 0 && (
+                <span
+                  className="max-w-full truncate rounded-full border px-1.5 text-[10px] leading-4 text-text-dim"
+                  style={{ borderColor: colorFor(day.allDay[0]!.areaId).fill }}
+                  title={day.allDay.map((item) => item.title).join(', ')}
+                >
+                  {day.allDay[0]!.title}
+                  {day.allDay.length > 1 ? ` +${day.allDay.length - 1}` : ''}
+                </span>
+              )}
             </button>
           )
         })}
@@ -552,7 +563,8 @@ function NowLine({ top, thin = false }: { top: number; thin?: boolean }) {
   )
 }
 
-function AllDayRow({ items }: { items: AllDayItem[] }) {
+/** The day's all-day items, above its timeline: a birthday, a holiday, "vrij". */
+export function AllDayRow({ items }: { items: AllDayItem[] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {items.map((item) => (

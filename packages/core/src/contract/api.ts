@@ -76,7 +76,10 @@ import type {
   TrackingRun,
   WeekReport,
   WeekStats,
-  WorkType
+  WorkType,
+  Idea,
+  IdeaStatus,
+  NewIdea
 } from './types.js'
 
 export interface ProposeRequest {
@@ -623,6 +626,14 @@ export interface TimeTrackerAPI {
    * What Jarvis keeps in the database, on every copy: the standing rules, the day log, and
    * his proposals (those stay on the copy they were made on).
    */
+  /** The ideas pot: "voeg dit idee toe". Not tasks; the planner never sees them. */
+  ideas: {
+    list(filter?: { projectId?: string | null; status?: IdeaStatus | 'all' }): Promise<Idea[]>
+    add(idea: NewIdea): Promise<Idea>
+    update(id: string, patch: Partial<Pick<Idea, 'text' | 'projectId' | 'areaId' | 'status'>>): Promise<Idea>
+    remove(id: string): Promise<void>
+  }
+
   assistant: {
     rules(): Promise<Rule[]>
     addRule(rule: NewRule): Promise<Rule>

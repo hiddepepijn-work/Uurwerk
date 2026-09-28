@@ -812,6 +812,24 @@ export function buildImplementation(
       quit: async () => host().window.quit()
     },
 
+    ideas: {
+      list: async (filter) => store.ideas.list(filter ?? {}),
+      add: async (idea) => {
+        const added = store.ideas.add(idea)
+        emitEvent('data:invalidated', { domain: 'tasks' })
+        return added
+      },
+      update: async (id, patch) => {
+        const updated = store.ideas.update(id, patch)
+        emitEvent('data:invalidated', { domain: 'tasks' })
+        return updated
+      },
+      remove: async (id) => {
+        store.ideas.remove(id)
+        emitEvent('data:invalidated', { domain: 'tasks' })
+      }
+    },
+
     assistant: {
       rules: async () => store.rules.list(),
       addRule: async (rule) => {

@@ -1,6 +1,7 @@
 import { Db, openDatabase, openDatabaseWith, type SqlDriver } from './connection.js'
 import { AreaRepo } from './repositories/areas.js'
 import { DayLogRepo, ProposalRepo, RuleRepo } from './repositories/assistant.js'
+import { IdeaRepo } from './repositories/ideas.js'
 import { ArtifactRepo } from './repositories/artifacts.js'
 import { AvailabilityRepo } from './repositories/availability.js'
 import { DayRepo, PublishedFileRepo } from './repositories/days.js'
@@ -57,6 +58,7 @@ export interface Store {
   screenTime: ScreenTimeRepo
   /** Standing wishes: hard ones the planner enforces, soft ones Jarvis reads. */
   rules: RuleRepo
+  ideas: IdeaRepo
   /** Per day: Jarvis's opening, closing and summary. */
   dayLog: DayLogRepo
   /** Jarvis's proposals and what a "ja" did with them. Local to this copy. */
@@ -86,6 +88,7 @@ export function createStore(db: Db): Store {
     workTypes: new WorkTypeRepo(db),
     screenTime: new ScreenTimeRepo(db),
     rules: new RuleRepo(db),
+    ideas: new IdeaRepo(db),
     dayLog: new DayLogRepo(db),
     proposals: new ProposalRepo(db)
   }

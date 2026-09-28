@@ -52,6 +52,7 @@ import { migration017 } from './017-publish-audience.js'
 import { migration018 } from './018-task-notes.js'
 import { migration019 } from './019-task-focus.js'
 import { migration020 } from './020-jarvis-data.js'
+import { migration021 } from './021-ideas.js'
 
 const inlineMigrations: Migration[] = [
   {
@@ -188,5 +189,6 @@ export const MIGRATIONS: Migration[] = [
   migration017,
   migration018,
   migration019,
-  migration020
+  migration020,
+  migration021
 ].sort((a, b) => a.id - b.id)
