@@ -59,12 +59,12 @@ export function TimerHero({
   return (
     <section
       className="flex flex-col gap-3.5 rounded-modal bg-card px-[18px] pt-5 pb-[18px]
-        wide:flex-1 wide:justify-between wide:gap-6 wide:px-8 wide:py-[30px]"
+        wide:justify-between wide:gap-6 wide:px-8 wide:py-[28px]"
     >
       <div className="flex flex-col gap-1 wide:gap-[18px]">
         <div
           className={`font-display text-[58px] leading-none font-bold tracking-[-1.6px] tabular-nums
-            wide:text-[112px] wide:leading-[0.9] wide:tracking-[-3px]
+            wide:text-[76px] wide:leading-[0.95] wide:tracking-[-2px]
             ${running ? 'text-text' : 'text-text-faint'}`}
         >
           {formatStopwatch(elapsedSec)}
