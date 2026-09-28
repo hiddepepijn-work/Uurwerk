@@ -144,31 +144,80 @@ struct AgendaProvider: TimelineProvider {
 
 // MARK: - Look
 
+/// A colour from 0xRRGGBB, so the values read the same as in the design (STIJL.md, "Inkt").
+func hexColor(_ value: UInt32) -> Color {
+    Color(
+        red: Double((value >> 16) & 0xFF) / 255,
+        green: Double((value >> 8) & 0xFF) / 255,
+        blue: Double(value & 0xFF) / 255
+    )
+}
+
+/// The "Inkt" look: near-black ink, muted area colours. Per area there is a fill (solid block),
+/// an ink (text on that fill), a tint (soft background) and a soft (text on dark).
 enum Palette {
-    static let background = Color(red: 0.067, green: 0.063, blue: 0.078)
-    static let card = Color(red: 0.137, green: 0.129, blue: 0.157)
-    static let line = Color(red: 0.149, green: 0.141, blue: 0.169)
-    static let faint = Color(red: 0.553, green: 0.541, blue: 0.580)
-    static let text = Color(red: 0.957, green: 0.953, blue: 0.941)
-    static let accent = Color(red: 0.243, green: 0.812, blue: 0.451)
-    static let now = Color(red: 1.0, green: 0.42, blue: 0.353)
+    static let background = hexColor(0x0E0F13)
+    /// Tiles and cards.
+    static let card = hexColor(0x1A1B21)
+    /// Hour lines and small round buttons.
+    static let line = hexColor(0x1F2027)
+    static let control = hexColor(0x1F2027)
+    static let faint = hexColor(0x6F6E78)
+    static let dim = hexColor(0xA3A2AB)
+    static let text = hexColor(0xF3F2EE)
+    static let accent = hexColor(0x5DAE86)
+    static let accentInk = hexColor(0x0E1A14)
+    static let accentSoft = hexColor(0x86BFA0)
+    /// Behind the Live Activity's ring.
+    static let ringTrack = hexColor(0x1F2A24)
+    static let now = hexColor(0xCC6F62)
+    /// Danger / overdue: text, and the flat colour behind it.
+    static let dangerText = hexColor(0xD98476)
+    static let dangerFill = hexColor(0x3A1F1C)
+    /// "Bezig" on the Live Activity.
+    static let busyFill = hexColor(0x1D2A3A)
+    static let busyText = hexColor(0x98AFD8)
+    /// Focus on: the work area's tint and soft text.
+    static let focusFill = hexColor(0x221E2C)
+    static let focusText = hexColor(0xB3A4D6)
 
     static func fill(_ area: String?) -> Color {
         switch area {
         case "stage": return accent
-        case "school": return Color(red: 0.416, green: 0.655, blue: 1.0)
-        case "personal": return Color(red: 0.941, green: 0.631, blue: 0.294)
-        case "work": return Color(red: 0.788, green: 0.635, blue: 1.0)
-        default: return faint
+        case "school": return hexColor(0x7F9FD6)
+        case "personal": return hexColor(0xCF9A63)
+        case "work": return hexColor(0xA997CF)
+        default: return hexColor(0x8D8A94)
         }
     }
 
     static func ink(_ area: String?) -> Color {
         switch area {
-        case "school": return Color(red: 0.043, green: 0.102, blue: 0.2)
-        case "personal": return Color(red: 0.169, green: 0.09, blue: 0.02)
-        case "work": return Color(red: 0.118, green: 0.063, blue: 0.2)
-        default: return Color(red: 0.047, green: 0.122, blue: 0.075)
+        case "school": return hexColor(0x0B1220)
+        case "personal": return hexColor(0x1F1406)
+        case "work": return hexColor(0x120F1A)
+        case "stage": return accentInk
+        default: return hexColor(0x141318)
+        }
+    }
+
+    static func tint(_ area: String?) -> Color {
+        switch area {
+        case "stage": return hexColor(0x1B2721)
+        case "school": return hexColor(0x182030)
+        case "personal": return hexColor(0x2A2119)
+        case "work": return focusFill
+        default: return hexColor(0x1C1C21)
+        }
+    }
+
+    static func soft(_ area: String?) -> Color {
+        switch area {
+        case "stage": return accentSoft
+        case "school": return busyText
+        case "personal": return hexColor(0xD5AA7B)
+        case "work": return focusText
+        default: return dim
         }
     }
 }
@@ -202,15 +251,15 @@ struct AgendaView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             header
             GeometryReader { geo in
                 timeline(height: geo.size.height, width: geo.size.width)
             }
             if let overdue = entry.data?.overdue, !overdue.isEmpty {
                 Text("Te laat: " + overdue.prefix(2).joined(separator: " · "))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(Color(red: 0.945, green: 0.702, blue: 0.659))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Palette.dangerText)
                     .lineLimit(1)
             }
         }
@@ -221,49 +270,52 @@ struct AgendaView: View {
         HStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(dayLabel)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Palette.accent)
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.8)
+                    .foregroundColor(Palette.accentSoft)
                 Text("\(hhmm(windowStart)) – \(hhmm(windowEnd))")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .monospacedDigit()
                     .foregroundColor(Palette.text)
             }
             Spacer()
             if entry.offset != 0 {
                 Button(intent: ShiftWindowIntent(hours: 0)) {
-                    Text("nu").font(.system(size: 12, weight: .semibold)).frame(width: 34, height: 30)
+                    Text("nu").font(.system(size: 12, weight: .bold)).padding(.horizontal, 11).frame(height: 30)
                 }
                 .buttonStyle(.plain)
-                .background(Palette.card, in: Capsule())
+                .background(Palette.control, in: Capsule())
                 .foregroundColor(Palette.text)
             }
             Button(intent: ShiftWindowIntent(hours: -4)) {
                 Image(systemName: "chevron.up").font(.system(size: 13, weight: .bold)).frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
-            .background(Palette.card, in: Circle())
+            .background(Palette.control, in: Circle())
             .foregroundColor(Palette.text)
             Button(intent: ShiftWindowIntent(hours: 4)) {
                 Image(systemName: "chevron.down").font(.system(size: 13, weight: .bold)).frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
-            .background(Palette.card, in: Circle())
+            .background(Palette.control, in: Circle())
             .foregroundColor(Palette.text)
         }
     }
 
     private func timeline(height: CGFloat, width: CGFloat) -> some View {
         let perMinute = height / 240
-        let gutter: CGFloat = 36
+        let gutter: CGFloat = 40
         return ZStack(alignment: .topLeading) {
             ForEach(0..<5, id: \.self) { hour in
                 HStack(spacing: 6) {
                     Text(hhmm(windowStart + hour * 60))
-                        .font(.system(size: 9, design: .monospaced))
+                        .font(.system(size: 10, weight: .semibold))
+                        .monospacedDigit()
                         .foregroundColor(Palette.faint)
                         .frame(width: gutter - 6, alignment: .leading)
                     Rectangle().fill(Palette.line).frame(height: 1)
                 }
-                .offset(y: CGFloat(hour * 60) * perMinute - 5)
+                .offset(y: CGFloat(hour * 60) * perMinute - 6)
             }
             // Overlays last, so they draw on top of the block they cover.
             ForEach(items.sorted { ($0.overlay ?? false ? 1 : 0) < ($1.overlay ?? false ? 1 : 0) }, id: \.self) { item in
@@ -277,10 +329,10 @@ struct AgendaView: View {
             }
             if nowMinute >= windowStart && nowMinute <= windowEnd {
                 HStack(spacing: 0) {
-                    Circle().fill(Palette.now).frame(width: 7, height: 7)
+                    Circle().fill(Palette.now).frame(width: 8, height: 8)
                     Rectangle().fill(Palette.now).frame(height: 2)
                 }
-                .offset(x: gutter - 4, y: CGFloat(nowMinute - windowStart) * perMinute - 3)
+                .offset(x: gutter - 4, y: CGFloat(nowMinute - windowStart) * perMinute - 4)
             }
         }
     }
@@ -292,37 +344,50 @@ struct AgendaView: View {
         let height = max(CGFloat(isOverlay ? max(visible, 30) : visible) * perMinute - 3, isOverlay ? 22 : 8)
         let covered = CGFloat(item.coveredMin ?? 0) * perMinute
         if item.kind == "break" {
+            // Pause: a dotted line on the left, no block.
             Text(height >= 12 ? "Pauze" : "")
-                .font(.system(size: 9))
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundColor(Palette.faint)
-                .frame(width: width, height: height, alignment: .leading)
                 .padding(.leading, 8)
+                .frame(width: width, height: height, alignment: .leading)
+                .overlay(alignment: .leading) {
+                    Path { path in
+                        path.move(to: CGPoint(x: 1, y: 0))
+                        path.addLine(to: CGPoint(x: 1, y: height))
+                    }
+                    .stroke(Palette.faint, style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [2, 4]))
+                    .frame(width: 2, height: height)
+                }
         } else {
+            // Tasks and meetings: solid fill with dark ink. Appointments and travel: the soft
+            // tint with a 1.5pt edge in the fill colour (dashed for travel).
             let planned = item.kind == "task" || item.kind == "meeting"
+            let roomy = height >= 26
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12, weight: .bold))
                     .lineLimit(1)
                 if height >= 36, let meta = item.meta {
-                    Text(meta).font(.system(size: 10)).opacity(0.8).lineLimit(1)
+                    Text(meta).font(.system(size: 10, weight: .semibold)).opacity(0.8).lineLimit(1)
                 }
             }
             .padding(.horizontal, 8)
-            .padding(.top, covered > 0 ? covered + 2 : 0)
-            .frame(width: width, height: height, alignment: covered > 0 ? .topLeading : .leading)
-            .foregroundColor(planned ? Palette.ink(item.area) : Palette.text)
+            .padding(.top, covered > 0 ? covered + 4 : (roomy ? 5 : 0))
+            .frame(width: width, height: height, alignment: covered > 0 || roomy ? .topLeading : .leading)
+            .foregroundColor(planned ? Palette.ink(item.area) : Palette.soft(item.area))
             .background(
                 ZStack {
                     // Opaque first: an overlay must hide what it covers, not mix with it.
-                    RoundedRectangle(cornerRadius: 8).fill(Palette.background)
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(planned ? Palette.fill(item.area) : Palette.fill(item.area).opacity(0.22))
+                    RoundedRectangle(cornerRadius: 10).fill(Palette.background)
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(planned ? Palette.fill(item.area) : Palette.tint(item.area))
                 }
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(planned ? Color.clear : Palette.fill(item.area), style: StrokeStyle(lineWidth: 1.5, dash: item.kind == "travel" ? [4, 3] : []))
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(planned ? Color.clear : Palette.fill(item.area), style: StrokeStyle(lineWidth: 1.5, dash: item.kind == "travel" ? [4, 3] : []))
             )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
     }
 }
@@ -363,8 +428,6 @@ struct QuickProvider: TimelineProvider {
 struct QuickView: View {
     let entry: QuickEntry
 
-    private static let focusColor = Color(red: 0.608, green: 0.549, blue: 1.0)
-
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
@@ -373,42 +436,51 @@ struct QuickView: View {
                     icon: entry.running == nil ? "play.fill" : "stop.fill",
                     title: entry.running == nil ? "Start timer" : "Stop timer",
                     subtitle: entry.running,
+                    large: true,
                     fill: Palette.accent,
-                    ink: Color(red: 0.047, green: 0.122, blue: 0.075)
+                    ink: Palette.accentInk
                 )
-                tile(url: "uurwerk://jarvis", icon: "mic.fill", title: "Jarvis", subtitle: "Praat of plan")
+                tile(url: "uurwerk://jarvis", icon: "mic.fill", title: "Jarvis", subtitle: "Praat of plan", large: true)
             }
             HStack(spacing: 8) {
+                // Focus on: the muted violet tint with soft violet text, not a bright block.
                 tile(
                     url: "uurwerk://focus",
                     icon: entry.focus == nil ? "moon" : "moon.fill",
                     title: entry.focus == nil ? "Focus" : "Focus aan",
                     subtitle: entry.focus,
-                    fill: entry.focus == nil ? nil : Self.focusColor,
-                    ink: entry.focus == nil ? nil : Color(red: 0.102, green: 0.071, blue: 0.2)
+                    fill: entry.focus == nil ? nil : Palette.focusFill,
+                    ink: entry.focus == nil ? nil : Palette.focusText
                 )
                 tile(url: "uurwerk://task", icon: "plus", title: "Taak", subtitle: nil)
                 tile(url: "uurwerk://appointment", icon: "calendar.badge.plus", title: "Afspraak", subtitle: nil)
             }
         }
+        .padding(12)
     }
 
-    private func tile(url: String, icon: String, title: String, subtitle: String?, fill: Color? = nil, ink: Color? = nil) -> some View {
-        Link(destination: URL(string: url)!) {
-            HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 14, weight: .semibold))
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
-                    if let subtitle {
-                        Text(subtitle).font(.system(size: 10)).opacity(0.75).lineLimit(1)
-                    }
+    /// Icon top-left, title (and subtitle) bottom-left. On a plain tile the subtitle is dim;
+    /// on a coloured one it is the tile's ink, a little faded.
+    private func tile(url: String, icon: String, title: String, subtitle: String?, large: Bool = false, fill: Color? = nil, ink: Color? = nil) -> some View {
+        Link(destination: URL(string: url) ?? URL(fileURLWithPath: "/")) {
+            VStack(alignment: .leading, spacing: 0) {
+                Image(systemName: icon).font(.system(size: large ? 15 : 14, weight: .bold))
+                Spacer(minLength: 2)
+                Text(title)
+                    .font(.system(size: large ? 14 : 13, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: large ? 11 : 10, weight: .semibold))
+                        .lineLimit(1)
+                        .foregroundColor(ink.map { $0.opacity(0.8) } ?? Palette.dim)
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 9)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .foregroundColor(ink ?? Palette.text)
-            .background(fill ?? Palette.card, in: RoundedRectangle(cornerRadius: 14))
+            .background(fill ?? Palette.card, in: RoundedRectangle(cornerRadius: 16))
         }
     }
 }
@@ -416,9 +488,12 @@ struct QuickView: View {
 struct QuickWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "UurwerkSnel", provider: QuickProvider()) { entry in
+            // Own 12pt margin (as in the design) instead of the system's wider one, so the
+            // two rows of tiles have room for icon, title and subtitle.
             QuickView(entry: entry)
                 .containerBackground(Palette.background, for: .widget)
         }
+        .contentMarginsDisabled()
         .configurationDisplayName("Snel")
         .description("Timer, Jarvis, focus, taak of afspraak met één tik.")
         .supportedFamilies([.systemMedium])

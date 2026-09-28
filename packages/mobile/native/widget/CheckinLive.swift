@@ -23,6 +23,8 @@ struct CheckinAttributes: ActivityAttributes {
         var important: Bool
         var busy: Bool
         var project: String?
+        /// The task planned after this one, for "daarna …".
+        var next: String? = nil
     }
 }
 
@@ -145,7 +147,8 @@ final class LiveCheckin: NSObject {
         let answers = LiveStore.answers()
         let done = Set(answers.filter { $0["answer"] as? String == "done" }.compactMap { $0["taskId"] as? String })
         let busy = Set(answers.filter { $0["answer"] as? String == "busy" }.compactMap { $0["taskId"] as? String })
-        let focus = LiveStore.queue().first { block in
+        let queue = LiveStore.queue()
+        let focus = queue.first { block in
             !done.contains(block.taskId) && block.end > now - 30 * 60_000 && block.start <= now + 30 * 60_000
         }
         let activities = Activity<CheckinAttributes>.activities
@@ -161,7 +164,8 @@ final class LiveCheckin: NSObject {
             end: Date(timeIntervalSince1970: block.end / 1000),
             important: block.important,
             busy: busy.contains(block.taskId) || block.busy == true,
-            project: block.project
+            project: block.project,
+            next: queue.first(where: { $0.start >= block.end - 60_000 && $0.taskId != block.taskId && !done.contains($0.taskId) })?.title
         )
         // Stale at the end of the block: the view then turns into the "gelukt?" question.
         let content = ActivityContent(state: state, staleDate: state.end)
