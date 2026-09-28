@@ -381,10 +381,13 @@ export class TrackingService {
     this.emit(this.currentSegment(), 'edit')
   }
 
-  /** Working on a task moves it out of 'open' without the user having to say so. */
+  /**
+   * Working on a task moves it out of 'open' without the user having to say so. A task that
+   * was ticked off (perhaps by accident) and is started again is evidently not done: it reopens.
+   */
   private markInProgress(taskId: string): void {
     const task = this.store.tasks.get(taskId)
-    if (task && task.status === 'open') {
+    if (task && (task.status === 'open' || task.status === 'done')) {
       this.store.tasks.update(taskId, { status: 'in_progress' })
     }
   }

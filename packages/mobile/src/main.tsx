@@ -190,9 +190,12 @@ async function start(): Promise<void> {
     liveBusy = true
     void (async () => {
       const { answers } = await AudioFocus.liveTake()
-      for (const { answer, taskId } of answers) {
+      for (const { answer, taskId, at } of answers) {
         const task = backend.store.tasks.get(taskId)
         if (!task) continue
+        // Started again after that tap (an accidental Klaar, say): the tap is out of date.
+        const segment = backend.trackingService.currentSegment()
+        if (answer === 'done' && segment?.taskId === taskId && segment.startedAt > at) continue
         if (answer === 'done' && task.status !== 'done') await window.api!.tasks.complete(taskId, true)
         if (answer === 'busy' && !(await window.api!.tracking.currentRun())) await window.api!.tracking.startRun(taskId)
       }

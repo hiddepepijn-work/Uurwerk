@@ -276,3 +276,16 @@ describe('idle and repair', () => {
     expect(tracking.isRunning()).toBe(true)
   })
 })
+
+describe('working on a task again', () => {
+  it('reopens a task that was ticked off when its timer starts', () => {
+    const task = personalTask('Kamer opruimen')
+    store.tasks.update(task, { status: 'done' })
+    expect(store.tasks.get(task)!.completedAt).not.toBeNull()
+
+    tracking.startRun(task)
+
+    expect(store.tasks.get(task)!.status).toBe('in_progress')
+    expect(store.tasks.get(task)!.completedAt).toBeNull()
+  })
+})
