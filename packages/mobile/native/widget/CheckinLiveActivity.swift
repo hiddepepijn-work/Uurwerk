@@ -27,7 +27,7 @@ struct CheckinLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    CheckinRing(state: context.state, stale: context.isStale, size: 52, lineWidth: 5)
+                    CheckinRing(state: context.state, stale: context.isStale, size: 42, lineWidth: 4)
                         .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.center) {
@@ -42,29 +42,13 @@ struct CheckinLiveActivity: Widget {
                             .font(.system(size: 17, weight: .bold, design: .rounded))
                             .foregroundStyle(Palette.text)
                             .lineLimit(1)
-                        if let next = context.state.next, !next.isEmpty {
-                            Text("daarna \(next)")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Palette.dim)
-                                .lineLimit(1)
-                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 8) {
-                        if !context.isStale && Date() < context.state.end {
-                            // Live: iOS moves this bar by itself, no update needed.
-                            ProgressView(timerInterval: context.state.start...context.state.end, countsDown: false) {
-                                EmptyView()
-                            } currentValueLabel: {
-                                EmptyView()
-                            }
-                            .tint(Palette.accent)
-                        }
-                        CheckinButtons(state: context.state, stale: context.isStale, height: 40)
-                    }
-                    .padding(.horizontal, 4)
+                    CheckinButtons(state: context.state, stale: context.isStale, height: 34)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 4)
                 }
             } compactLeading: {
                 CheckinMiniRing(state: context.state, stale: context.isStale)
