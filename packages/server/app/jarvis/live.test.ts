@@ -35,6 +35,20 @@ describe('live spend', () => {
     expect(readSpend(path).usd).toBeCloseTo(24.75)
   })
 
+  it('prices OpenAI at its own rates, cached input at the cached rate', () => {
+    const spend = addUsage(path, {
+      provider: 'openai',
+      textIn: 1_000_000,
+      textInCached: 500_000,
+      audioIn: 1_000_000,
+      audioInCached: 1_000_000,
+      textOut: 1_000_000,
+      audioOut: 1_000_000,
+      thoughts: 0
+    })
+    expect(spend.usd).toBeCloseTo(0.3 + 0.03 + 0.3 + 2.4 + 20)
+  })
+
   it('ignores nonsense counts', () => {
     const spend = addUsage(path, { textIn: -5, audioIn: Number.NaN, textOut: 0, audioOut: 0, thoughts: 0 })
     expect(spend.usd).toBe(0)

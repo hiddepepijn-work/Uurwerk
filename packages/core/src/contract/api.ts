@@ -664,6 +664,8 @@ export interface TimeTrackerAPI {
       moment?: 'morning' | 'evening' | null
       /** Carry on a conversation whose connection dropped: the handle Gemini gave for it. */
       resume?: string | null
+      /** Which realtime voice model; the server's default (JARVIS_LIVE_PROVIDER) when left out. */
+      provider?: 'gemini' | 'openai' | null
     }): Promise<JarvisLiveSession>
     /**
      * A device's Jarvis trail ("[jarvis] …" lines) into the server log: the phone has no log
@@ -678,6 +680,8 @@ export interface TimeTrackerAPI {
 }
 
 export interface JarvisLiveSession {
+  /** Which realtime voice model: Gemini Live, or OpenAI Realtime. */
+  provider: 'gemini' | 'openai'
   /** Ephemeral token: use it as the API key for this one connection. */
   token: string
   apiVersion: string
@@ -691,12 +695,17 @@ export interface JarvisLiveSession {
 
 /** Tokens a live conversation used, by kind: audio costs about four times text. */
 export interface JarvisLiveUsage {
+  /** Whose prices apply; Gemini when left out. */
+  provider?: 'gemini' | 'openai'
   textIn: number
   audioIn: number
   textOut: number
   audioOut: number
   /** Thinking, billed as text output. */
   thoughts: number
+  /** OpenAI: input read from its cache, at a fraction of the price (part of textIn/audioIn). */
+  textInCached?: number
+  audioInCached?: number
 }
 
 export interface JarvisLiveSpend {

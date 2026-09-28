@@ -26,7 +26,7 @@ import brief from '../../../../docs/jarvis.md'
 import { briefForModel } from './brief.js'
 import { claude, compatible, openai, usageListeners, type Conversation, type Effort, type Provider } from './providers.js'
 import { effortFor } from './effort.js'
-import { addTextUsage, addUsage, liveSession, readSpend } from './live.js'
+import { addTextUsage, addUsage, liveSession, openaiSession, readSpend } from './live.js'
 import { speak, speakFree, speakGemini } from './speech.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 
@@ -272,10 +272,12 @@ export function createJarvis(
     },
 
     async liveSession(input) {
-      const key = secrets.get('geminiKey')
-      if (!key) throw new Error('Geen geminiKey op de server. Zet hem met: uurwerk-secrets set geminiKey')
+      const provider = input.provider ?? (process.env.JARVIS_LIVE_PROVIDER?.trim() === 'openai' ? 'openai' : 'gemini')
+      const keyName = provider === 'openai' ? 'openaiKey' : 'geminiKey'
+      const key = secrets.get(keyName)
+      if (!key) throw new Error(`Geen ${keyName} op de server. Zet hem met: uurwerk-secrets set ${keyName}`)
       await markMoment(input.moment)
-      return liveSession({
+      return (provider === 'openai' ? openaiSession : liveSession)({
         api,
         key,
         system: SYSTEM,

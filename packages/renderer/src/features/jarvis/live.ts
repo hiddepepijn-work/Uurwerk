@@ -8,9 +8,12 @@ import { SpeechGate } from './gate.js'
 import type { OrbState } from './JarvisOrb.js'
 
 /**
- * A live conversation with Jarvis: the microphone streams to Gemini Live, his voice streams
- * back and plays as it arrives, and either side can cut in. The server hands out the token
- * (with the brief, the tools and today's day locked in); the tools run here, on this copy.
+ * A live conversation with Jarvis: the microphone streams to the realtime model (Gemini Live
+ * or OpenAI Realtime, whichever the server hands a token for), his voice streams back and
+ * plays as it arrives, and either side can cut in. The server hands out the token (with the
+ * brief, the tools and today's day locked in); the tools run here, on this copy.
+ *
+ * The conversation is the same for both; only the wire differs (GeminiWire, OpenAIWire).
  *
  * The microphone only streams while someone is actually talking: silence is not sent, and
  * so not paid for. A short pre-roll keeps the first syllable.
@@ -28,20 +31,15 @@ export interface LiveHandlers {
   onToolResult?(name: string, result: unknown): void
 }
 
-const MIC_RATE = 16_000
+/** Both models take 24 kHz (Gemini resamples); the context is made before the token is in. */
+const MIC_RATE = 24_000
 const VOICE_RATE = 24_000
 /** Samples per chunk sent: 40 ms. */
-const CHUNK = 640
+const CHUNK = 960
 /** Audio kept from before the gate opened, so the first syllable is not lost. */
 const PREROLL_CHUNKS = 8
-/**
- * The gate stays open this long after the voice drops. The model only ends Hidde's turn
- * after it has heard about 0.7 s of real silence — "microphone paused" alone does not
- * end it — so the silence has to be sent, with room to spare.
- */
 
-
-/** Runs off the main thread: 16 kHz mono float in, 40 ms of 16-bit PCM plus its loudness out. */
+/** Runs off the main thread: mono float in, 40 ms of 16-bit PCM plus its loudness out. */
 const WORKLET = `
 class Capture extends AudioWorkletProcessor {
   // A quiet microphone (a laptop's built-in array) is brought up to speaking level: the
@@ -71,6 +69,7 @@ registerProcessor('uurwerk-capture', Capture)
 `
 
 const EMPTY: JarvisLiveUsage = { textIn: 0, audioIn: 0, textOut: 0, audioOut: 0, thoughts: 0 }
+const COUNTS = ['textIn', 'audioIn', 'textOut', 'audioOut', 'thoughts', 'textInCached', 'audioInCached'] as const
 
 /** Splits a total by modality; without details, all of it counts as the dearer audio. */
 function split(total: number | undefined, details: ModalityTokenCount[] | undefined): { text: number; audio: number } {
@@ -85,7 +84,7 @@ function split(total: number | undefined, details: ModalityTokenCount[] | undefi
 }
 
 const add = (into: JarvisLiveUsage, more: JarvisLiveUsage): void => {
-  for (const kind of Object.keys(into) as Array<keyof JarvisLiveUsage>) into[kind] += more[kind]
+  for (const kind of COUNTS) into[kind] = (into[kind] ?? 0) + (more[kind] ?? 0)
 }
 
 /** Jarvis's trail in the app log (the main process forwards "[jarvis]" lines). */
@@ -105,14 +104,313 @@ const fromBase64 = (data: string): Int16Array => {
   return new Int16Array(bytes.buffer, 0, bytes.length >> 1)
 }
 
-export class LiveCall {
+// ---------------------------------------------------------------- wires
+
+interface ToolCall {
+  id: string
+  name: string
+  args: Record<string, unknown>
+}
+
+/** What a wire reports; the conversation (LiveCall) decides what it means. */
+interface WireEvents {
+  heard(delta: string): void
+  /** Hidde started talking over Jarvis. */
+  interrupted(): void
+  /** A new answer starts. */
+  replyStart(): void
+  audio(base64: string): void
+  replyText(delta: string): void
+  /** An answer is done; `working`: he is still on it (tools running, or "even kijken"). */
+  turnDone(working: boolean): void
+  usage(usage: JarvisLiveUsage): void
+  tools(calls: ToolCall[]): Promise<Array<{ call: ToolCall; result: Record<string, unknown> }>>
+  closed(code: number, reason: string): void
+}
+
+interface Wire {
+  audio(pcm: ArrayBuffer): void
+  /** The gate closed: the microphone paused. */
+  paused(): void
+  /** A typed line, as Hidde's turn. */
+  text(text: string): void
+  /** Jarvis was cut off after this many ms of his current answer had played. */
+  cutOff(playedMs: number): void
+  close(): void
+}
+
+/** Gemini Live, through its SDK. */
+class GeminiWire implements Wire {
   private session: Session | null = null
+  private turnUsage: JarvisLiveUsage | null = null
+  private replying = false
+  /** Gemini's latest resumption handle: a dropped connection carries on from it. */
+  handle: string | null = null
+
+  static async open(live: JarvisLiveSession, events: WireEvents): Promise<GeminiWire> {
+    const wire = new GeminiWire()
+    const ai = new GoogleGenAI({ apiKey: live.token, httpOptions: { apiVersion: live.apiVersion } })
+    wire.session = await ai.live.connect({
+      model: live.model,
+      config: live.config,
+      callbacks: {
+        onmessage: (message) => void wire.receive(message, events),
+        onerror: (event) => trail(`verbindingsfout: ${event.message}`),
+        onclose: (event) => events.closed(event.code, event.reason)
+      }
+    })
+    return wire
+  }
+
+  private async receive(message: LiveServerMessage, events: WireEvents): Promise<void> {
+    const update = message.sessionResumptionUpdate
+    if (update?.resumable && update.newHandle) this.handle = update.newHandle
+    if (message.goAway) trail(`Google sluit de verbinding zo (nog ${String(message.goAway.timeLeft ?? '?')}); ik ga daarna verder`)
+    const content = message.serverContent
+
+    if (content?.inputTranscription?.text) events.heard(content.inputTranscription.text)
+    if (content?.interrupted) events.interrupted()
+    const start = (): void => {
+      if (this.replying) return
+      this.replying = true
+      events.replyStart()
+    }
+    if (content?.modelTurn?.parts) {
+      start()
+      for (const part of content.modelTurn.parts) if (part.inlineData?.data) events.audio(part.inlineData.data)
+    }
+    if (content?.outputTranscription?.text) {
+      start()
+      events.replyText(content.outputTranscription.text)
+    }
+    if (message.usageMetadata) {
+      const meta = message.usageMetadata
+      const input = split(meta.promptTokenCount, meta.promptTokensDetails)
+      const output = split(meta.responseTokenCount, meta.responseTokensDetails)
+      this.turnUsage = {
+        textIn: input.text,
+        audioIn: input.audio,
+        textOut: output.text,
+        audioOut: output.audio,
+        thoughts: meta.thoughtsTokenCount ?? 0
+      }
+    }
+    if (content?.turnComplete) {
+      this.replying = false
+      if (this.turnUsage) events.usage(this.turnUsage)
+      this.turnUsage = null
+      events.turnDone(String(content.interactionStatus) === 'IN_PROGRESS')
+    }
+    if (message.toolCall?.functionCalls?.length) {
+      const calls = message.toolCall.functionCalls.map((call) => ({
+        id: call.id ?? '',
+        name: call.name ?? '',
+        args: (call.args ?? {}) as Record<string, unknown>
+      }))
+      const results = await events.tools(calls)
+      // No scheduling: 3.8 Live refuses it (and closes), and answers on its own.
+      this.session?.sendToolResponse({
+        functionResponses: results.map(({ call, result }) => ({ id: call.id, name: call.name, response: result }))
+      })
+    }
+  }
+
+  audio(pcm: ArrayBuffer): void {
+    this.session?.sendRealtimeInput({ audio: { data: toBase64(pcm), mimeType: `audio/pcm;rate=${MIC_RATE}` } })
+  }
+
+  paused(): void {
+    // Tells the model the microphone paused, so it answers instead of waiting.
+    this.session?.sendRealtimeInput({ audioStreamEnd: true })
+  }
+
+  text(text: string): void {
+    this.session?.sendClientContent({ turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true })
+  }
+
+  cutOff(): void {
+    // Gemini keeps track of what was heard itself.
+  }
+
+  close(): void {
+    try {
+      this.session?.close()
+    } catch {
+      // Already closed.
+    }
+  }
+}
+
+interface OpenAIUsage {
+  input_token_details?: {
+    text_tokens?: number
+    audio_tokens?: number
+    cached_tokens_details?: { text_tokens?: number; audio_tokens?: number }
+  }
+  output_token_details?: { text_tokens?: number; audio_tokens?: number }
+}
+
+interface OpenAIEvent {
+  type: string
+  delta?: string
+  item_id?: string
+  error?: { message?: string; code?: string }
+  response?: {
+    status?: string
+    output?: Array<{ type: string; call_id?: string; name?: string; arguments?: string }>
+    usage?: OpenAIUsage
+  }
+}
+
+/** OpenAI Realtime, over its WebSocket; the client secret goes in as a subprotocol. */
+class OpenAIWire implements Wire {
+  private socket: WebSocket | null = null
+  /** The answer that is playing, for cutting it off where Hidde stopped hearing it. */
+  private replyItem: string | null = null
+
+  static open(live: JarvisLiveSession, events: WireEvents): Promise<OpenAIWire> {
+    const wire = new OpenAIWire()
+    return new Promise((resolve, reject) => {
+      const socket = new WebSocket(`wss://api.openai.com/v1/realtime?model=${encodeURIComponent(live.model)}`, [
+        'realtime',
+        `openai-insecure-api-key.${live.token}`
+      ])
+      wire.socket = socket
+      let open = false
+      socket.onopen = () => {
+        open = true
+        resolve(wire)
+      }
+      socket.onerror = () => {
+        trail('verbindingsfout (OpenAI)')
+        if (!open) reject(new Error('Kon geen verbinding maken met OpenAI.'))
+      }
+      socket.onclose = (event) => {
+        if (open) events.closed(event.code, event.reason)
+        else reject(new Error(`OpenAI weigerde de verbinding: ${event.code} ${event.reason}`))
+      }
+      socket.onmessage = (message: MessageEvent<string>) => {
+        let event: OpenAIEvent
+        try {
+          event = JSON.parse(message.data) as OpenAIEvent
+        } catch {
+          return
+        }
+        void wire.receive(event, events)
+      }
+    })
+  }
+
+  private send(event: Record<string, unknown>): void {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(event))
+  }
+
+  private async receive(event: OpenAIEvent, events: WireEvents): Promise<void> {
+    switch (event.type) {
+      case 'input_audio_buffer.speech_started':
+        events.interrupted()
+        break
+      case 'conversation.item.input_audio_transcription.delta':
+        if (event.delta) events.heard(event.delta)
+        break
+      case 'response.created':
+        this.replyItem = null
+        events.replyStart()
+        break
+      case 'response.output_audio.delta':
+        if (event.item_id) this.replyItem = event.item_id
+        if (event.delta) events.audio(event.delta)
+        break
+      case 'response.output_audio_transcript.delta':
+        if (event.delta) events.replyText(event.delta)
+        break
+      case 'error':
+        // Cutting off an answer that had already ended is harmless.
+        if (event.error?.code !== 'response_cancel_not_active') trail(`OpenAI-fout: ${event.error?.message ?? '?'}`)
+        break
+      case 'response.done': {
+        const response = event.response
+        if (response?.usage) {
+          const input = response.usage.input_token_details ?? {}
+          const output = response.usage.output_token_details ?? {}
+          events.usage({
+            provider: 'openai',
+            textIn: input.text_tokens ?? 0,
+            audioIn: input.audio_tokens ?? 0,
+            textInCached: input.cached_tokens_details?.text_tokens ?? 0,
+            audioInCached: input.cached_tokens_details?.audio_tokens ?? 0,
+            textOut: output.text_tokens ?? 0,
+            audioOut: output.audio_tokens ?? 0,
+            thoughts: 0
+          })
+        }
+        const calls = (response?.output ?? [])
+          .filter((item) => item.type === 'function_call' && item.call_id && item.name)
+          .map((item) => {
+            let args: Record<string, unknown> = {}
+            try {
+              args = JSON.parse(item.arguments || '{}') as Record<string, unknown>
+            } catch {
+              // Left empty; the tool says what is missing.
+            }
+            return { id: item.call_id!, name: item.name!, args }
+          })
+        events.turnDone(calls.length > 0)
+        if (calls.length > 0) {
+          const results = await events.tools(calls)
+          for (const { call, result } of results) {
+            this.send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: call.id, output: JSON.stringify(result) } })
+          }
+          // Unlike Gemini, OpenAI waits to be asked for the answer that uses the results.
+          this.send({ type: 'response.create' })
+        }
+        break
+      }
+    }
+  }
+
+  audio(pcm: ArrayBuffer): void {
+    this.send({ type: 'input_audio_buffer.append', audio: toBase64(pcm) })
+  }
+
+  paused(): void {
+    // The server's turn detection hears the silence the gate still sends.
+  }
+
+  text(text: string): void {
+    this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } })
+    this.send({ type: 'response.create' })
+  }
+
+  cutOff(playedMs: number): void {
+    // What he did not get to say is dropped from the conversation too, so he knows.
+    if (!this.replyItem) return
+    this.send({ type: 'response.cancel' })
+    this.send({ type: 'conversation.item.truncate', item_id: this.replyItem, content_index: 0, audio_end_ms: Math.max(0, Math.round(playedMs)) })
+    this.replyItem = null
+  }
+
+  close(): void {
+    try {
+      this.socket?.close(1000)
+    } catch {
+      // Already closed.
+    }
+  }
+}
+
+// ------------------------------------------------------------- the call
+
+export class LiveCall {
+  private wire: GeminiWire | OpenAIWire | null = null
   private micContext: AudioContext | null = null
   private voiceContext: AudioContext | null = null
   private stream: MediaStream | null = null
   private analyser: AnalyserNode | null = null
   private playing = new Set<AudioBufferSourceNode>()
   private playUntil = 0
+  /** When the current answer's first audio was scheduled to play, in context time. */
+  private replyStartedAt: number | null = null
   private preroll: ArrayBuffer[] = []
   private gate = new SpeechGate()
   private micLevel = 0
@@ -120,16 +418,14 @@ export class LiveCall {
   private heard = ''
   private reply = ''
   private replyDone = true
-  /** Jarvis said "even kijken" and is still working on the answer. */
+  /** Jarvis said "even kijken" or runs tools, and is still working on the answer. */
   private working = false
   /** Tapped away: drop the rest of this answer. */
   private muted = false
   private usage: JarvisLiveUsage = { ...EMPTY }
-  private turnUsage: JarvisLiveUsage | null = null
   private frame = 0
   private closed = false
-  /** Gemini's latest resumption handle, and how often a dropped connection was picked up. */
-  private handle: string | null = null
+  /** How often a dropped connection was picked up (Gemini only: it hands out handles). */
   private resumes = 0
   /** For the trail: loudest the microphone got since the last report, chunks sent. */
   private loudest = 0
@@ -189,7 +485,7 @@ export class LiveCall {
       trail(`microfoon "${track.label}" staat gedempt`)
       throw new Error('Je microfoon staat gedempt (in Windows of met de mute-toets). Zet hem aan en probeer het opnieuw.')
     }
-    trail(`token voor ${live.model}; microfoon "${track?.label ?? '?'}" (${track?.readyState}), opname ${this.micContext.sampleRate} Hz ${this.micContext.state}`)
+    trail(`token voor ${live.provider} ${live.model}; microfoon "${track?.label ?? '?'}" (${track?.readyState}), opname ${this.micContext.sampleRate} Hz ${this.micContext.state}`)
 
     await this.connect(live)
 
@@ -204,33 +500,72 @@ export class LiveCall {
 
     trail('verbonden, luistert')
     this.animate()
+    this.usage.provider = live.provider
     if (live.opening) {
-      this.session?.sendClientContent({ turns: [{ role: 'user', parts: [{ text: live.opening }] }], turnComplete: true })
+      this.wire?.text(live.opening)
     } else {
       this.setPhase('listening')
     }
   }
 
-  /** Opens the connection to Gemini Live with a token from the server. */
+  /** Opens the connection the server's token is for. */
   private async connect(live: JarvisLiveSession): Promise<void> {
-    const ai = new GoogleGenAI({ apiKey: live.token, httpOptions: { apiVersion: live.apiVersion } })
-    let session: Session | null = null
-    session = await ai.live.connect({
-      model: live.model,
-      config: live.config,
-      callbacks: {
-        onmessage: (message) => void this.receive(message),
-        onerror: (event) => trail(`verbindingsfout: ${event.message}`),
-        onclose: (event) => {
-          // A connection replaced by a resumed one closes quietly.
-          if (session !== null && this.session !== session) return
-          trail(`verbinding dicht door ${this.closed ? 'de app' : 'Google'}: ${event.code} ${event.reason}`)
-          if (this.closed) return
-          void this.resumeOrFinish(event.code === 1000 ? null : event.reason || 'De verbinding met Jarvis is gesloten.')
-        }
+    let wire: GeminiWire | OpenAIWire | null = null
+    const events: WireEvents = {
+      heard: (delta) => {
+        this.heard += delta
+        this.handlers.onHeard(this.heard.trim())
+      },
+      interrupted: () => {
+        // Hidde started talking: stop Jarvis mid-sentence.
+        if (this.playing.size > 0) this.cutOff()
+        this.setPhase('listening')
+      },
+      replyStart: () => {
+        this.reply = ''
+        this.replyDone = false
+        this.replyStartedAt = null
+      },
+      audio: (data) => {
+        if (!this.muted) this.play(data)
+      },
+      replyText: (delta) => {
+        if (this.muted) return
+        this.reply += delta
+        this.handlers.onReply(this.reply.trim())
+      },
+      turnDone: (working) => {
+        trail(`beurt klaar${working ? ' (werkt nog)' : ''}: "${this.reply.trim().slice(0, 80)}"`)
+        this.working = working
+        this.replyDone = true
+        this.muted = false
+      },
+      usage: (usage) => add(this.usage, usage),
+      tools: async (calls) => {
+        trail(`tools: ${calls.map((call) => call.name).join(', ')}`)
+        this.setPhase('thinking')
+        return Promise.all(
+          calls.map(async (call) => {
+            try {
+              const result = await api.jarvis.runTool({ name: call.name, args: call.args })
+              this.handlers.onToolResult?.(call.name, result)
+              return { call, result: { result } as Record<string, unknown> }
+            } catch (error) {
+              return { call, result: { error: error instanceof Error ? error.message : String(error) } }
+            }
+          })
+        )
+      },
+      closed: (code, reason) => {
+        // A connection replaced by a resumed one closes quietly.
+        if (wire !== null && this.wire !== wire) return
+        trail(`verbinding dicht door ${this.closed ? 'de app' : live.provider}: ${code} ${reason}`)
+        if (this.closed) return
+        void this.resumeOrFinish(code === 1000 ? null : reason || 'De verbinding met Jarvis is gesloten.')
       }
-    })
-    this.session = session
+    }
+    wire = live.provider === 'openai' ? await OpenAIWire.open(live, events) : await GeminiWire.open(live, events)
+    this.wire = wire
   }
 
   /**
@@ -239,14 +574,15 @@ export class LiveCall {
    */
   private async resumeOrFinish(problem: string | null): Promise<void> {
     if (this.closed) return
-    if (!this.handle || this.resumes >= 3) {
+    const handle = this.wire instanceof GeminiWire ? this.wire.handle : null
+    if (!handle || this.resumes >= 3) {
       this.finish(problem)
       return
     }
     this.resumes += 1
     trail(`ik ga verder waar we waren (poging ${this.resumes})`)
     try {
-      await this.connect(await api.jarvis.liveSession({ moment: null, resume: this.handle }))
+      await this.connect(await api.jarvis.liveSession({ moment: null, resume: handle, provider: 'gemini' }))
       trail('weer verbonden')
     } catch (error) {
       trail(`verder gaan lukt niet: ${error instanceof Error ? error.message : String(error)}`)
@@ -262,7 +598,7 @@ export class LiveCall {
   // ------------------------------------------------------------ microphone
 
   private hear(pcm: ArrayBuffer, rms: number): void {
-    if (!this.session || this.closed) return
+    if (!this.wire || this.closed) return
     this.micLevel = rms
     const now = performance.now()
     this.loudest = Math.max(this.loudest, rms)
@@ -289,8 +625,7 @@ export class LiveCall {
       this.send(pcm)
       if (decision.closed) {
         trail(`stil; verstuurd tot nu: ${this.sentChunks} stukjes, gehoord: "${this.heard.trim().slice(0, 80)}"`)
-        // Tells the model the microphone paused, so it answers instead of waiting.
-        this.session.sendRealtimeInput({ audioStreamEnd: true })
+        this.wire.paused()
         if (this.phase === 'listening' && this.heard) this.setPhase('thinking')
       }
     } else {
@@ -301,82 +636,7 @@ export class LiveCall {
 
   private send(pcm: ArrayBuffer): void {
     this.sentChunks += 1
-    this.session?.sendRealtimeInput({ audio: { data: toBase64(pcm), mimeType: `audio/pcm;rate=${MIC_RATE}` } })
-  }
-
-  // --------------------------------------------------------------- model
-
-  private async receive(message: LiveServerMessage): Promise<void> {
-    if (this.closed) return
-    const update = message.sessionResumptionUpdate
-    if (update?.resumable && update.newHandle) this.handle = update.newHandle
-    if (message.goAway) trail(`Google sluit de verbinding zo (nog ${String(message.goAway.timeLeft ?? '?')}); ik ga daarna verder`)
-    const content = message.serverContent
-
-    if (content?.inputTranscription?.text) {
-      this.heard += content.inputTranscription.text
-      this.handlers.onHeard(this.heard.trim())
-    }
-    if (content?.interrupted) {
-      // Hidde started talking: stop Jarvis mid-sentence.
-      this.stopVoice()
-      this.setPhase('listening')
-    }
-    if (content?.modelTurn?.parts) {
-      if (this.replyDone) {
-        this.reply = ''
-        this.replyDone = false
-      }
-      for (const part of content.modelTurn.parts) {
-        if (part.inlineData?.data && !this.muted) this.play(part.inlineData.data)
-      }
-    }
-    if (content?.outputTranscription?.text && !this.muted) {
-      if (this.replyDone) {
-        this.reply = ''
-        this.replyDone = false
-      }
-      this.reply += content.outputTranscription.text
-      this.handlers.onReply(this.reply.trim())
-    }
-    if (message.usageMetadata) {
-      const meta = message.usageMetadata
-      const input = split(meta.promptTokenCount, meta.promptTokensDetails)
-      const output = split(meta.responseTokenCount, meta.responseTokensDetails)
-      this.turnUsage = {
-        textIn: input.text,
-        audioIn: input.audio,
-        textOut: output.text,
-        audioOut: output.audio,
-        thoughts: meta.thoughtsTokenCount ?? 0
-      }
-    }
-    if (content?.turnComplete) {
-      trail(`beurt klaar (${String(content.interactionStatus ?? '')}): "${this.reply.trim().slice(0, 80)}"`)
-      this.working = String(content.interactionStatus) === 'IN_PROGRESS'
-      this.replyDone = true
-      this.muted = false
-      if (this.turnUsage) add(this.usage, this.turnUsage)
-      this.turnUsage = null
-    }
-
-    if (message.toolCall?.functionCalls?.length) {
-      trail(`tools: ${message.toolCall.functionCalls.map((call) => call.name).join(', ')}`)
-      this.setPhase('thinking')
-      const responses = await Promise.all(
-        message.toolCall.functionCalls.map(async (call) => {
-          try {
-            const result = await api.jarvis.runTool({ name: call.name ?? '', args: (call.args ?? {}) as Record<string, unknown> })
-            this.handlers.onToolResult?.(call.name ?? '', result)
-            // No scheduling: 3.8 Live refuses it (and closes), and answers on its own.
-            return { id: call.id, name: call.name, response: { result } }
-          } catch (error) {
-            return { id: call.id, name: call.name, response: { error: error instanceof Error ? error.message : String(error) } }
-          }
-        })
-      )
-      if (!this.closed) this.session?.sendToolResponse({ functionResponses: responses })
-    }
+    this.wire?.audio(pcm)
   }
 
   // --------------------------------------------------------------- voice
@@ -393,11 +653,20 @@ export class LiveCall {
     source.connect(this.analyser)
     // A small lead on the first chunk absorbs network jitter.
     const at = Math.max(context.currentTime + 0.06, this.playUntil)
+    if (this.replyStartedAt === null) this.replyStartedAt = at
     source.start(at)
     this.playUntil = at + buffer.duration
     this.playing.add(source)
     source.onended = () => this.playing.delete(source)
     this.setPhase('speaking')
+  }
+
+  /** Stops his voice, and tells the model how much of the answer was heard. */
+  private cutOff(): void {
+    const context = this.voiceContext
+    const played = context && this.replyStartedAt !== null ? (context.currentTime - this.replyStartedAt) * 1000 : 0
+    this.stopVoice()
+    this.wire?.cutOff(played)
   }
 
   private stopVoice(): void {
@@ -437,7 +706,7 @@ export class LiveCall {
 
   /** Tap while he talks: silence him and listen. */
   interrupt(): void {
-    this.stopVoice()
+    this.cutOff()
     if (!this.replyDone) this.muted = true
     this.setPhase('listening')
   }
@@ -445,7 +714,7 @@ export class LiveCall {
   /** Typed instead of spoken, in the same conversation. */
   say(text: string): void {
     this.heard = text
-    this.session?.sendClientContent({ turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true })
+    this.wire?.text(text)
     this.setPhase('thinking')
   }
 
@@ -466,17 +735,10 @@ export class LiveCall {
     cancelAnimationFrame(this.frame)
     this.level.current = 0
     this.stopVoice()
-    try {
-      this.session?.close()
-    } catch {
-      // Already closed.
-    }
+    this.wire?.close()
     for (const track of this.stream?.getTracks() ?? []) track.stop()
     await Promise.all([this.micContext?.close(), this.voiceContext?.close()].map((done) => done?.catch(() => undefined)))
-    // A turn cut off by closing still counts.
-    if (this.turnUsage) add(this.usage, this.turnUsage)
-    this.turnUsage = null
-    const used = Object.values(this.usage).reduce((sum, value) => sum + value, 0)
+    const used = COUNTS.reduce((sum, kind) => sum + (this.usage[kind] ?? 0), 0)
     if (used > 0) await api.jarvis.liveUsage(this.usage).catch(() => undefined)
   }
 }

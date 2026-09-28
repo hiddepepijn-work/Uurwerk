@@ -22,6 +22,8 @@ import { runTool, TOOLS } from '@core/services/jarvis-tools.js'
 
 /** Gemini 3.8 Live prices per million tokens; thinking counts as text output. */
 const PRICE = { textIn: 0.75, audioIn: 3, textOut: 4.5, audioOut: 12, thoughts: 4.5 } as const
+/** OpenAI gpt-realtime-2.1-mini per million tokens; what comes from its cache costs a fraction. */
+const OPENAI_PRICE = { textIn: 0.6, textInCached: 0.06, audioIn: 10, audioInCached: 0.3, textOut: 2.4, audioOut: 20 } as const
 
 const API_VERSION = 'v1alpha'
 
@@ -85,12 +87,31 @@ export function addTextUsage(usagePath: string, usage: { prompt: number; cached:
 }
 
 export function addUsage(usagePath: string, usage: JarvisLiveUsage): JarvisLiveSpend {
-  const clean = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 0)
-  const usd = (Object.keys(PRICE) as Array<keyof typeof PRICE>).reduce(
+  return addSpend(usagePath, 'live', usageUsd(usage))
+}
+
+/** What one conversation's tokens cost, at its provider's prices. */
+export function usageUsd(usage: JarvisLiveUsage): number {
+  const clean = (value: number | undefined): number => (Number.isFinite(value) && value! > 0 ? value! : 0)
+  if (usage.provider === 'openai') {
+    // Cached input is part of the input count, and billed at the cached price instead.
+    const textCached = Math.min(clean(usage.textInCached), clean(usage.textIn))
+    const audioCached = Math.min(clean(usage.audioInCached), clean(usage.audioIn))
+    const P = OPENAI_PRICE
+    return (
+      ((clean(usage.textIn) - textCached) * P.textIn +
+        textCached * P.textInCached +
+        (clean(usage.audioIn) - audioCached) * P.audioIn +
+        audioCached * P.audioInCached +
+        clean(usage.textOut) * P.textOut +
+        clean(usage.audioOut) * P.audioOut) /
+      1_000_000
+    )
+  }
+  return (Object.keys(PRICE) as Array<keyof typeof PRICE>).reduce(
     (sum, kind) => sum + (clean(usage[kind]) * PRICE[kind]) / 1_000_000,
     0
   )
-  return addSpend(usagePath, 'live', usd)
 }
 
 /** Gemini's schema dialect: upper-case types, no additionalProperties. */
@@ -119,17 +140,13 @@ async function today(api: TimeTrackerAPI): Promise<string> {
 ${typeof snapshot === 'string' ? snapshot : '(stand niet beschikbaar)'}`
 }
 
-export async function liveSession(options: LiveOptions): Promise<JarvisLiveSession> {
-  const spend = readSpend(options.usagePath)
-  if (spend.usd >= spend.capUsd) {
-    throw new Error(`Het spraakbudget van deze maand ($${spend.capUsd}) is op. Typen werkt nog.`)
-  }
-
-  const model = process.env.JARVIS_LIVE_MODEL?.trim() || 'gemini-3.8-live-extended-thinking'
-  const thinking = (process.env.JARVIS_LIVE_THINKING?.trim() || 'low').toUpperCase()
-
+/**
+ * What a live conversation starts from: the language, his brief and rules, how to talk
+ * live, and the state of today. The same for Gemini and OpenAI.
+ */
+async function instructionFor(options: LiveOptions): Promise<string> {
   // Native audio models pick their language themselves; only the instruction can pin it.
-  const instruction = `TAAL: je spreekt uitsluitend Nederlands. Nooit Engels, ook niet als je iets niet goed
+  return `TAAL: je spreekt uitsluitend Nederlands. Nooit Engels, ook niet als je iets niet goed
 verstaat of als een tool Engelse tekst teruggeeft.
 
 ${options.system}
@@ -147,6 +164,18 @@ veranderd.
 
 --- VANDAAG ---
 ${await today(options.api)}`
+}
+
+export async function liveSession(options: LiveOptions): Promise<JarvisLiveSession> {
+  const spend = readSpend(options.usagePath)
+  if (spend.usd >= spend.capUsd) {
+    throw new Error(`Het spraakbudget van deze maand ($${spend.capUsd}) is op. Typen werkt nog.`)
+  }
+
+  const model = process.env.JARVIS_LIVE_MODEL?.trim() || 'gemini-3.8-live-extended-thinking'
+  const thinking = (process.env.JARVIS_LIVE_THINKING?.trim() || 'low').toUpperCase()
+
+  const instruction = await instructionFor(options)
 
   const config: LiveConnectConfig = {
     responseModalities: ['AUDIO' as never],
@@ -190,6 +219,7 @@ ${await today(options.api)}`
   if (!token.name) throw new Error('Gemini gaf geen token terug.')
 
   return {
+    provider: 'gemini',
     token: token.name,
     apiVersion: API_VERSION,
     model,
@@ -197,4 +227,54 @@ ${await today(options.api)}`
     opening: options.opening,
     spend
   }
+}
+
+/**
+ * An OpenAI Realtime session: a short-lived client secret with the whole session locked in
+ * (model, instruction, voice, tools), so the device only ever holds that secret.
+ */
+export async function openaiSession(options: LiveOptions): Promise<JarvisLiveSession> {
+  const spend = readSpend(options.usagePath)
+  if (spend.usd >= spend.capUsd) {
+    throw new Error(`Het spraakbudget van deze maand ($${spend.capUsd}) is op. Typen werkt nog.`)
+  }
+  const model = process.env.JARVIS_REALTIME_MODEL?.trim() || 'gpt-realtime-2.1-mini'
+  const voice = process.env.JARVIS_REALTIME_VOICE?.trim() || 'cedar'
+  const instruction = await instructionFor(options)
+
+  const session = {
+    type: 'realtime',
+    model,
+    instructions: instruction,
+    output_modalities: ['audio'],
+    audio: {
+      input: {
+        format: { type: 'audio/pcm', rate: 24000 },
+        transcription: { model: 'gpt-4o-mini-transcribe', language: 'nl' },
+        noise_reduction: { type: 'near_field' },
+        // Semantic VAD waits for a finished thought, not for a pause: a breath mid-sentence
+        // does not hand him the turn.
+        turn_detection: { type: 'semantic_vad', eagerness: 'low', create_response: true, interrupt_response: true }
+      },
+      output: { format: { type: 'audio/pcm', rate: 24000 }, voice }
+    },
+    tools: TOOLS.map((tool) => ({
+      type: 'function',
+      name: tool.name,
+      description: tool.description,
+      parameters: toSchema(tool.parameters)
+    })),
+    tool_choice: 'auto'
+  }
+
+  const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${options.key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expires_after: { anchor: 'created_at', seconds: 600 }, session })
+  })
+  const body = (await response.json().catch(() => ({}))) as { value?: string; error?: { message?: string } }
+  if (!response.ok || !body.value) {
+    throw new Error(`OpenAI gaf geen sessie: ${body.error?.message ?? response.status}`)
+  }
+  return { provider: 'openai', token: body.value, apiVersion: '', model, config: {}, opening: options.opening, spend }
 }
