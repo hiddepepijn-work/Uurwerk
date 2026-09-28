@@ -302,21 +302,36 @@ class LiveListener {
  * device and transcribing afterwards, which took about 1.6 s together.
  */
 class FluxListener {
-  private socket: WebSocket
   private ready: Promise<boolean>
   /** Audio streamed, in bytes: Flux bills by the minute of audio. */
   bytes = 0
 
-  constructor(key: string, onTurn: (text: string) => void) {
-    const query = new URLSearchParams({ model: 'flux-general-multi', language_hint: 'nl', encoding: 'linear16', sample_rate: String(SAMPLE_RATE) })
-    this.socket = new WebSocketClient(`wss://api.deepgram.com/v2/listen?${query}`, { headers: { Authorization: `Token ${key}` } })
-    this.ready = new Promise((resolve) => {
-      this.socket.on('open', () => resolve(true))
-      this.socket.on('error', (error) => {
-        log.warn('Jarvis cascade: Flux did not connect.', error)
-        resolve(false)
-      })
-    })
+  private socket!: WebSocket
+
+  /**
+   * `keyterms`: the words Hidde uses that a general model mishears (his task titles, "inplannen",
+   * "Tessie"). On his phone Flux once heard "staan u niet in planeet" for "staat niet in de planning".
+   */
+  constructor(key: string, onTurn: (text: string) => void, keyterms: Promise<string[]>) {
+    this.ready = keyterms
+      .catch(() => [] as string[])
+      .then(
+        (terms) =>
+          new Promise<boolean>((resolve) => {
+            const query = new URLSearchParams({ model: 'flux-general-multi', language_hint: 'nl', encoding: 'linear16', sample_rate: String(SAMPLE_RATE) })
+            for (const term of terms) query.append('keyterm', term)
+            this.socket = new WebSocketClient(`wss://api.deepgram.com/v2/listen?${query}`, { headers: { Authorization: `Token ${key}` } })
+            this.socket.on('open', () => resolve(true))
+            this.socket.on('error', (error) => {
+              log.warn('Jarvis cascade: Flux did not connect.', error)
+              resolve(false)
+            })
+            this.listen(onTurn)
+          })
+      )
+  }
+
+  private listen(onTurn: (text: string) => void): void {
     this.socket.on('message', (data) => {
       let event: { type?: string; event?: string; transcript?: string }
       try {
@@ -335,11 +350,20 @@ class FluxListener {
 
   close(): void {
     try {
-      this.socket.close()
+      void this.ready.then(() => this.socket?.close())
     } catch {
       // Already closed.
     }
   }
+}
+
+/** Words he says that a speech model should expect: fixed ones and his open tasks' titles. */
+const FIXED_TERMS = ['Jarvis', 'inplannen', 'planning', 'afvinken', 'agenda', 'afspraak', 'stage', 'Tessie', 'Zevenaar', 'Nieuwendijk']
+
+export async function keytermsFor(api: TimeTrackerAPI): Promise<string[]> {
+  const titles = (await api.tasks.list({ status: 'active' })).map((task) => task.title.trim()).filter((title) => title.length >= 3 && title.length <= 40)
+  // Deepgram takes up to a hundred; the most recent tasks are the likeliest to be named.
+  return [...new Set([...FIXED_TERMS, ...titles])].slice(0, 80)
 }
 
 /** Flux multilingual, per minute of streamed audio. */
@@ -407,7 +431,7 @@ class VoiceSession {
 
     const deepgramKey = deps.secret('deepgramKey')
     const openaiKey = deps.secret('openaiKey')
-    if (deepgramKey) this.flux = new FluxListener(deepgramKey, (text) => this.fluxTurn(text))
+    if (deepgramKey) this.flux = new FluxListener(deepgramKey, (text) => this.fluxTurn(text), keytermsFor(deps.api))
     else if (openaiKey) this.listener = new LiveListener(openaiKey)
     for (const text of FILLERS) void fillerAudio(text)
     // The cache is made while he is still saying hello, not while he waits for an answer.

@@ -1022,9 +1022,10 @@ async function slotFor(
     if (!overlaps(block.startMin, block.endMin)) continue
     const title = block.taskTitle ?? block.title ?? block.kind
     const span = `${title} ${hm(block.startMin)}–${hm(block.endMin)}`
-    if (block.source === 'planner' && !block.locked && !block.fixed) replaces.push({ id: block.id, title })
-    // Tasks may run through each other; a fixed meeting or blocked time may not be planned over.
-    else if (block.kind === 'task') alongside.push(span)
+    // Tasks may run through each other, the planner's too: nothing is taken away to make room
+    // (Hidde, 28 Sep 2026: "maakt niet uit dat het overlapt"; a stage block vanished for it).
+    // Only a fixed meeting or blocked time may not be planned over.
+    if (block.kind === 'task' || (block.source === 'planner' && !block.locked && !block.fixed)) alongside.push(span)
     else walls.push(span)
   }
   const events = await api.calendar.eventsInRange(dayStart(day), dayStart(day) + 86_400_000)

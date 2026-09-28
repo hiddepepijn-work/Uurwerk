@@ -286,17 +286,18 @@ const SCENARIOS: Scenario[] = [
     category: 'verder',
     title: 'Avond vullen rond een training',
     expect:
-      'Zet BO afmaken (60 min), Fiets repareren (30 min) en Mail opruimen (20 min) morgenavond na de stage in, niet tijdens de voetbaltraining 19:00–20:00, stelt het als één voorstel voor en voert uit na ja.',
+      'Zet Werkstuk afmaken (60 min), Fiets repareren (30 min) en Mail opruimen (20 min) morgenavond na de stage in, niet tijdens de voetbaltraining 19:00–20:00, stelt het als één voorstel voor en voert uit na ja.',
     setup: async (api) => {
       // Names the real database does not have: with its own 'Regelen financiën' (120 min) the
       // evening really was too full, and the judge took that for making things up.
       await api.tasks.create({ title: 'Fiets repareren', areaId: 'personal', estimateMin: 30 })
       await api.tasks.create({ title: 'Mail opruimen', areaId: 'personal', estimateMin: 20 })
-      if (!(await taskNamed(api, /BO afmaken/i))) await api.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 60 })
+      // Its own task: the real 'BO afmaken' may be done by now.
+      await api.tasks.create({ title: 'Werkstuk afmaken', areaId: 'school', estimateMin: 60 })
       await appointment(api, 'Voetbaltraining', TOMORROW, '19:00', '20:00')
     },
     turns: [
-      { text: 'Plan morgenavond na mijn stage BO afmaken, fiets repareren en mail opruimen in. Niet tijdens de training.' },
+      { text: 'Plan morgenavond na mijn stage werkstuk afmaken, fiets repareren en mail opruimen in. Niet tijdens de training.' },
       { text: 'Ja, prima.' }
     ],
     checks: [
@@ -305,7 +306,7 @@ const SCENARIOS: Scenario[] = [
         name: 'drie blokken na 17:00, niet in 19–20',
         test: async (api) => {
           const blocks = [
-            ...(await blocksOn(api, TOMORROW, /BO afmaken/i)),
+            ...(await blocksOn(api, TOMORROW, /werkstuk afmaken/i)),
             ...(await blocksOn(api, TOMORROW, /fiets/i)),
             ...(await blocksOn(api, TOMORROW, /mail opruimen/i))
           ].filter((block) => block.startMin >= 17 * 60)
@@ -747,6 +748,253 @@ const CHALLENGE: Scenario[] = [
   kind('e', { say: 'Overmorgen om zes uur eet ik bij mijn ouders in Arnhem, twee uur, half uur rijden.', day: D2, keyword: /ouders|eten/i, appointment: true })
 ]
 
+// ------------------------------------------------------- compound set
+//
+// SET=samengesteld: long sentences with several things in them, the way Hidde really talks
+// (28 Sep 2026: "wie betaalt wat is al gebeurd, uitzoeken verjaardag ook, en zet financiën
+// vanavond"), with self-corrections, filler words and a change of mind. Every scenario is
+// checked on what ended up in the database, not only on what he said.
+
+const isDone = (title: RegExp) => async (api: TimeTrackerAPI) => (await taskNamed(api, title))?.status === 'done'
+const blockAt = (day: string, title: RegExp, start: string, end?: string) => async (api: TimeTrackerAPI) =>
+  (await blocksOn(api, day, title)).some((block) => block.startMin === at(start) && (!end || block.endMin === at(end)))
+const noBlock = (day: string, title: RegExp) => async (api: TimeTrackerAPI) => (await blocksOn(api, day, title)).length === 0
+const makeTasks = (tasks: Array<[string, number, string?]>) => async (api: TimeTrackerAPI) => {
+  for (const [title, minutes, areaId] of tasks) await api.tasks.create({ title, areaId: areaId ?? 'personal', estimateMin: minutes })
+}
+
+const TODAY = inDays(0)
+
+const COMPOUND: Scenario[] = [
+  {
+    id: 'S1',
+    family: 'afvinken + plannen',
+    category: 'challenge',
+    title: 'Twee dingen af, één inplannen',
+    expect: 'Vinkt Fietsband plakken en Belasting nakijken af en zet Garage opruimen vanavond 19:00–20:00 in; één samenvatting, één bevestiging, alles uitgevoerd.',
+    setup: makeTasks([['Fietsband plakken', 30], ['Belasting nakijken', 60], ['Garage opruimen', 60]]),
+    turns: [{ text: 'Ja prima. Fietsband plakken is al gebeurd, belasting nakijken ook, en zet garage opruimen vanavond om zeven uur, een uurtje.' }, { text: 'Ja.' }],
+    checks: [
+      { after: 1, name: 'fietsband af', test: isDone(/fietsband/i) },
+      { after: 1, name: 'belasting af', test: isDone(/belasting nakijken/i) },
+      { after: 1, name: 'garage 19:00–20:00', test: blockAt(TODAY, /garage/i, '19:00', '20:00') }
+    ],
+    toolBudget: 6
+  },
+  {
+    id: 'S2',
+    family: 'zelfcorrectie',
+    category: 'challenge',
+    title: 'Nee wacht, half vier',
+    expect: 'Neemt de verbetering: Scriptie lezen morgen 15:30–16:30, niet om 15:00.',
+    setup: makeTasks([['Scriptie lezen', 60, 'school']]),
+    turns: [{ text: 'Zet morgen om drie uur scriptie lezen erin, nee wacht, om half vier, een uur.' }, { text: 'Ja, goed.' }],
+    checks: [
+      { after: 1, name: 'om 15:30', test: blockAt(D1, /scriptie/i, '15:30', '16:30') },
+      { after: 1, name: 'niet om 15:00', test: async (api) => !(await blockAt(D1, /scriptie/i, '15:00')(api)) }
+    ],
+    toolBudget: 4
+  },
+  {
+    id: 'S3',
+    family: 'rommelige zin',
+    category: 'challenge',
+    title: 'Eh, na mijn stage, twee dingen',
+    expect: 'Haalt uit de rommelige zin: Kast fixen (60) en Boodschappen doen (30) morgen na de stage (na 17:00), elk met hun eigen duur, één voorstel.',
+    setup: makeTasks([['Kast fixen', 60], ['Boodschappen doen', 30]]),
+    turns: [{ text: 'Eh ja dus ik dacht, kun je misschien, als dat kan, morgen na mijn stage eh de kast fixen en dan ook de boodschappen doen, ja?' }, { text: 'Ja, doe maar.' }],
+    checks: [
+      {
+        after: 1,
+        name: 'beide na 17:00 morgen',
+        test: async (api) => {
+          const kast = (await blocksOn(api, D1, /kast/i)).filter((block) => block.startMin >= 17 * 60)
+          const boodschap = (await blocksOn(api, D1, /boodschappen/i)).filter((block) => block.startMin >= 17 * 60)
+          return kast.length === 1 && boodschap.length === 1 && kast[0]!.endMin - kast[0]!.startMin === 60 && boodschap[0]!.endMin - boodschap[0]!.startMin === 30
+        }
+      }
+    ],
+    toolBudget: 5
+  },
+  {
+    id: 'S4',
+    family: 'overlap mag',
+    category: 'challenge',
+    title: 'Maakt niet uit dat het overlapt',
+    expect: 'Zet Rapport printen morgen 12:00–14:00, ook al staat daar al een andere taak (taken mogen overlappen); vraagt niet opnieuw.',
+    setup: async (api) => {
+      await makeTasks([['Rapport printen', 120], ['Mail wegwerken', 60]])(api)
+      const mail = await taskNamed(api, /mail wegwerken/i)
+      const proposed = (await runTool(api, 'schedule_task', { taskId: mail!.id, date: D1, start: '12:30', end: '13:30' })) as { pendingId?: string }
+      if (proposed.pendingId) await runTool(api, 'confirm', { pendingIds: [proposed.pendingId] })
+    },
+    turns: [{ text: 'Zet rapport printen alsjeblieft morgen tussen twaalf en twee. Maakt niet uit dat het overlapt.' }, { text: 'Ja.' }],
+    checks: [{ after: 1, name: 'rapport 12:00–14:00', test: blockAt(D1, /rapport printen/i, '12:00', '14:00') }],
+    toolBudget: 4
+  },
+  {
+    id: 'S5',
+    family: 'afspraak + af + taak',
+    category: 'challenge',
+    title: 'Drie soorten in één zin',
+    expect: `Maakt afspraak Tandarts vrijdag ${FRIDAY} 10:00–10:30 (Zevenaar, 10 min rijden), vinkt Belasting nakijken af, en zet Verslag schrijven morgen 19:00–20:00; één bevestiging.`,
+    setup: makeTasks([['Belasting nakijken', 60], ['Verslag schrijven', 60, 'school']]),
+    turns: [{ text: 'Ik heb vrijdag om tien uur de tandarts in Zevenaar, half uur, tien minuten rijden. Belasting nakijken is af. En zet morgenavond om zeven een uur verslag schrijven.' }, { text: 'Ja, allemaal.' }],
+    checks: [
+      { after: 1, name: 'tandarts vr 10:00', test: async (api) => (await eventsOn(api, FRIDAY, /tandarts/i)).some((event) => clockOf(event.startsAt) === '10:00') },
+      { after: 1, name: 'belasting af', test: isDone(/belasting nakijken/i) },
+      { after: 1, name: 'verslag morgen 19:00', test: blockAt(D1, /verslag schrijven/i, '19:00', '20:00') }
+    ],
+    toolBudget: 6
+  },
+  {
+    id: 'S6',
+    family: 'vraag + actie',
+    category: 'challenge',
+    title: 'Wat heb ik, en zet erbij',
+    expect: 'Noemt kort wat er morgen staat en stelt voor Planten verpotten morgen na 18:00 (30 min) in te plannen; na ja staat het erin.',
+    setup: makeTasks([['Planten verpotten', 30]]),
+    turns: [{ text: 'Wat heb ik morgen allemaal, en zet daar na zessen planten verpotten bij.' }, { text: 'Ja.' }],
+    truth: snapshotTruth(),
+    checks: [
+      {
+        after: 1,
+        name: 'verpotten na 18:00',
+        test: async (api) => (await blocksOn(api, D1, /verpotten/i)).some((block) => block.startMin >= 18 * 60 && block.endMin - block.startMin === 30)
+      }
+    ],
+    toolBudget: 4
+  },
+  {
+    id: 'S7',
+    family: 'ongedaan maken',
+    category: 'challenge',
+    title: 'Oh nee, haal die toch weg',
+    expect: 'Zet Hardlopen morgen 07:00–07:30 na ja, en haalt het na "haal die toch weg" weer uit de planning (na bevestiging). De taak zelf blijft bestaan, niet afgevinkt.',
+    setup: makeTasks([['Hardlopen', 30]]),
+    turns: [{ text: 'Zet morgen om zeven uur s ochtends hardlopen erin, half uur.' }, { text: 'Ja.' }, { text: 'Oh nee, haal die toch maar weg.' }, { text: 'Ja.' }],
+    checks: [
+      { after: 1, name: 'eerst ingepland', test: blockAt(D1, /hardlopen/i, '07:00') },
+      { after: 3, name: 'daarna weg', test: noBlock(D1, /hardlopen/i) },
+      { after: 3, name: 'niet afgevinkt', test: async (api) => (await taskNamed(api, /hardlopen/i))?.status !== 'done' }
+    ],
+    toolBudget: 7
+  },
+  {
+    id: 'S8',
+    family: 'van gedachten veranderen',
+    category: 'challenge',
+    title: 'Nee laat maar, ... nee ik wil het wel',
+    expect: 'Na "nee laat maar" laat hij het vallen; na "nee nee, ik wil het wel, tussen twaalf en twee" zet hij Financiën ordenen morgen 12:00–14:00 (na ja).',
+    setup: makeTasks([['Financiën ordenen', 120]]),
+    turns: [
+      { text: 'Zet financiën ordenen morgen van twaalf tot twee.' },
+      { text: 'Nee, laat maar.' },
+      { text: 'Nee nee nee, ik wil het wel doen. Tussen twaalf en twee.' },
+      { text: 'Ja.' }
+    ],
+    checks: [{ after: 3, name: 'financiën 12:00–14:00', test: blockAt(D1, /financiën ordenen/i, '12:00', '14:00') }],
+    toolBudget: 7
+  },
+  {
+    id: 'S9',
+    family: 'afvinken wat gepland staat',
+    category: 'challenge',
+    title: 'Is al af, haal het uit de planning',
+    expect: 'Vinkt Presentatie oefenen af; de blokken van morgen en overmorgen verdwijnen daarmee vanzelf. Zegt niet dat hij iets doet wat hij niet doet.',
+    setup: async (api) => {
+      await makeTasks([['Presentatie oefenen', 60, 'school']])(api)
+      const task = await taskNamed(api, /presentatie oefenen/i)
+      for (const day of [D1, D2]) {
+        const proposed = (await runTool(api, 'schedule_task', { taskId: task!.id, date: day, start: '19:00', end: '20:00' })) as { pendingId?: string }
+        if (proposed.pendingId) await runTool(api, 'confirm', { pendingIds: [proposed.pendingId] })
+      }
+    },
+    turns: [{ text: 'Presentatie oefenen heb ik al gedaan, dus die kan uit de planning.' }, { text: 'Ja.' }],
+    checks: [
+      { after: 1, name: 'afgevinkt', test: isDone(/presentatie oefenen/i) },
+      { after: 1, name: 'morgen weg', test: noBlock(D1, /presentatie oefenen/i) },
+      { after: 1, name: 'overmorgen weg', test: noBlock(D2, /presentatie oefenen/i) }
+    ],
+    toolBudget: 4
+  },
+  {
+    id: 'S10',
+    family: 'meerdere dagen',
+    category: 'challenge',
+    title: 'Morgen en overmorgen elk een uur',
+    expect: 'Zet Scriptie lezen morgen én overmorgen 20:00–21:00 in; één voorstel, één bevestiging.',
+    setup: makeTasks([['Scriptie lezen', 120, 'school']]),
+    turns: [{ text: 'Zet scriptie lezen morgen en overmorgen allebei om acht uur s avonds, steeds een uur.' }, { text: 'Ja prima.' }],
+    checks: [
+      { after: 1, name: 'morgen 20:00', test: blockAt(D1, /scriptie lezen/i, '20:00', '21:00') },
+      { after: 1, name: 'overmorgen 20:00', test: blockAt(D2, /scriptie lezen/i, '20:00', '21:00') }
+    ],
+    toolBudget: 5
+  },
+  {
+    id: 'S11',
+    family: 'verhaspeld',
+    category: 'challenge',
+    title: '"Joe, staan u niet in planeet"',
+    expect: 'Begrijpt de verhaspelde zin (echte transcriptie): Fiets repareren en Mail wegwerken staan niet ingepland; zet ze morgenavond na 18:00 in, elk met eigen duur; één voorstel.',
+    setup: makeTasks([['Fiets repareren', 30], ['Mail wegwerken', 30]]),
+    turns: [{ text: 'Joe, staan u fiets repareren en mail weg werken niet in planeet? Als die niet zijn ingepland, zet ze dan morgenavond na zessen in de agend.' }, { text: 'Ja.' }],
+    checks: [
+      { after: 1, name: 'fiets morgen na 18:00', test: async (api) => (await blocksOn(api, D1, /fiets repareren/i)).some((block) => block.startMin >= 18 * 60) },
+      { after: 1, name: 'mail morgen na 18:00', test: async (api) => (await blocksOn(api, D1, /mail wegwerken/i)).some((block) => block.startMin >= 18 * 60) }
+    ],
+    toolBudget: 5
+  },
+  {
+    id: 'S12',
+    family: 'verhaspeld',
+    category: 'challenge',
+    title: '"kasfixer" is Kast fixen',
+    expect: 'Herkent "kasfixer" als de bestaande taak Kast fixen en zet die morgen 20:00–21:00; maakt geen nieuwe taak "kasfixer".',
+    setup: makeTasks([['Kast fixen', 60]]),
+    turns: [{ text: 'zet morgavond om acht uur een uur kasfixer in.' }, { text: 'Ja, toe maar!' }],
+    checks: [
+      { after: 1, name: 'kast fixen 20:00', test: blockAt(D1, /kast fixen/i, '20:00', '21:00') },
+      { after: 1, name: 'geen taak kasfixer', test: async (api) => (await taskNamed(api, /kasfixer/i)) === null }
+    ],
+    toolBudget: 4
+  },
+  {
+    id: 'S13',
+    family: 'zelfcorrectie',
+    category: 'challenge',
+    title: 'Die ook, nee wacht, die nog niet',
+    expect: 'Vinkt alleen Rekening betalen af; Verjaardag plannen blijft open (hij nam het terug).',
+    setup: makeTasks([['Rekening betalen', 15], ['Verjaardag plannen', 30]]),
+    turns: [{ text: 'Ja dus eh, de rekening betalen, die is al af, en eh, verjaardag plannen ook, en eh nee wacht, die verjaardag nog niet.' }, { text: 'Ja klopt.' }],
+    checks: [
+      { after: 1, name: 'rekening af', test: isDone(/rekening betalen/i) },
+      { after: 1, name: 'verjaardag nog open', test: async (api) => (await taskNamed(api, /verjaardag plannen/i))?.status !== 'done' }
+    ],
+    toolBudget: 4
+  },
+  {
+    id: 'S14',
+    family: 'lange zin',
+    category: 'challenge',
+    title: 'Vraag, twee acties en een regel',
+    expect: 'Beantwoordt de vraag kort, vinkt Belasting nakijken af, zet Garage opruimen morgen 19:00–20:00, en maakt een vaste regel dat er op zondag niets gepland wordt; alles in één voorstel met één bevestiging.',
+    setup: makeTasks([['Belasting nakijken', 60], ['Garage opruimen', 60]]),
+    turns: [
+      { text: 'Oké luister, hoe laat ben ik morgen klaar met stage? En belasting nakijken is gedaan, garage opruimen wil ik morgenavond om zeven doen, een uur, en voortaan wil ik op zondag helemaal niks ingepland hebben.' },
+      { text: 'Ja, alles.' }
+    ],
+    truth: snapshotTruth(),
+    checks: [
+      { after: 1, name: 'belasting af', test: isDone(/belasting nakijken/i) },
+      { after: 1, name: 'garage 19:00', test: blockAt(D1, /garage/i, '19:00', '20:00') },
+      { after: 1, name: 'regel over zondag', test: async (api) => (await api.assistant.rules()).some((rule) => rule.active && /zondag/i.test(rule.description)) }
+    ],
+    toolBudget: 7
+  }
+]
+
 // ------------------------------------------------------- neutral prompt
 //
 // PROMPT=neutraal (the challenge set's default): without the lines written after Gemini
@@ -811,6 +1059,8 @@ interface ToolUse {
   name: string
   args: Record<string, unknown>
   error: string | null
+  /** What the tool gave back, shortened: the judge needs it to tell a fact from an invention. */
+  result?: string
 }
 
 interface Turn {
@@ -864,7 +1114,7 @@ async function useTool(api: TimeTrackerAPI, turn: Turn, name: string, args: Reco
   try {
     const result = await runTool(api, name, args)
     const error = result && typeof result === 'object' && 'error' in result ? String((result as { error: unknown }).error) : null
-    turn.tools.push({ name, args, error })
+    turn.tools.push({ name, args, error, result: JSON.stringify(result).slice(0, 400) })
     return { result }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -1217,13 +1467,19 @@ async function judge(scenario: Scenario, truth: string, turns: Turn[], opening: 
   const transcript = [
     opening ? `[opening door het systeem]: ${opening}` : '',
     ...turns.map((turn, index) => {
-      const tools = turn.tools.map((tool) => `${tool.name}(${JSON.stringify(tool.args).slice(0, 200)})${tool.error ? ` → FOUT: ${tool.error.slice(0, 120)}` : ''}`)
+      const tools = turn.tools.map((tool) => `${tool.name}(${JSON.stringify(tool.args).slice(0, 200)})${tool.error ? ` → FOUT: ${tool.error.slice(0, 120)}` : tool.result ? ` → ${tool.result}` : ''}`)
       return `Beurt ${index + 1}\nHidde: ${turn.said}${turn.heard && turn.heard.trim() !== turn.said ? ` (verstaan als: "${turn.heard.trim()}")` : ''}\nTools: ${tools.join('; ') || 'geen'}\nAssistent (uitgesproken): ${turn.reply.trim() || '(niets)'}`
     })
   ]
     .filter(Boolean)
     .join('\n\n')
   const prompt = `Je beoordeelt een Nederlandse spraakassistent ("Jarvis") die de agenda, taken en planning van Hidde beheert. De assistent praat; zijn antwoorden worden uitgesproken, dus lang voorlezen is slecht. Schrijf-acties horen een voorstel te zijn dat pas na Hiddes "ja" wordt uitgevoerd (via confirm).
+
+Zo werkt dit systeem, beoordeel daarnaar:
+- Een schrijvende tool (create_task, schedule_task, create_appointment, …) voert niets uit, maar maakt een voorstel. Een tool aanroepen en dan vragen "Zal ik dat zo doen?" is dus precies goed; pas confirm voert uit.
+- Taken mogen over andere taken heen staan, ook over stageblokken van de planner. Alleen afspraken (vaste momenten met iemand of ergens) zijn harde grenzen.
+- Wat een tool teruggeeft (achter de →) is waar: meldingstijden, vertrektijden en dergelijke uit een tool-uitkomst zijn geen verzinsels.
+- De planner zet taken op de eerstvolgende vrije plek; een start iets later dan gevraagd omdat er iets anders staat is prima.
 
 Datum en tijd nu: ${new Date().toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}.
 
@@ -1503,7 +1759,7 @@ function summary(results: Result[]): Record<string, string | number> {
 async function main(): Promise<void> {
   const providers = (process.env.ONLY ? process.env.ONLY.split(',').map((name) => name.trim()) : ['openai', 'gemini']) as Provider[]
   const wanted = process.env.SCENARIOS?.split(',').map((id) => id.trim().toUpperCase())
-  const pool = process.env.SET === 'challenge' ? CHALLENGE : SCENARIOS
+  const pool = process.env.SET === 'challenge' ? CHALLENGE : process.env.SET === 'samengesteld' ? COMPOUND : SCENARIOS
   const scenarios = wanted ? pool.filter((scenario) => wanted.some((id) => scenario.id.toUpperCase().startsWith(id))) : pool
   const budget: Record<Provider, number> = {
     openai: Number(process.env.BUDGET_OPENAI ?? 1.05),

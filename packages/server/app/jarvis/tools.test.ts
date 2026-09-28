@@ -179,6 +179,20 @@ describe('Jarvis tools', () => {
     expect(half.error).toContain('date, start én end')
   })
 
+  it('puts a task over a planner block without taking the planner block away', async () => {
+    const day = next(3)
+    const stage = await api.tasks.create({ title: 'Stagewerk', areaId: 'stage', estimateMin: 240 })
+    const draft = await api.plans.draft(day)
+    await api.plans.addBlock(draft.plan!.id, { taskId: stage.id, areaId: 'stage', date: day, startMin: 13 * 60, endMin: 17 * 60, kind: 'task', source: 'planner' })
+    await api.plans.accept(draft.plan!.id)
+    const extra = await api.tasks.create({ title: 'Financiën ordenen', areaId: 'personal', estimateMin: 120 })
+    const placed = await proposeAndConfirm('schedule_task', { taskId: extra.id, date: day, start: '14:00', end: '16:00' })
+    expect(placed.failed).toEqual([])
+    const titles = (await api.plans.day(day)).blocks.map((block) => block.taskTitle)
+    expect(titles).toContain('Stagewerk')
+    expect(titles).toContain('Financiën ordenen')
+  })
+
   it('takes a finished task out of the planning from now on, and keeps the past', async () => {
     const task = await api.tasks.create({ title: 'Verslag afronden', areaId: 'school', estimateMin: 60 })
     const later = next(3)
