@@ -180,6 +180,12 @@ export class LiveCall {
     ])
     this.stream = stream
     const track = stream.getAudioTracks()[0]
+    // A microphone muted by the system (Windows, a mute key) delivers silence: say so,
+    // rather than listening to nothing.
+    if (track?.muted) {
+      trail(`microfoon "${track.label}" staat gedempt`)
+      throw new Error('Je microfoon staat gedempt (in Windows of met de mute-toets). Zet hem aan en probeer het opnieuw.')
+    }
     trail(`token voor ${live.model}; microfoon "${track?.label ?? '?'}" (${track?.readyState}), opname ${this.micContext.sampleRate} Hz ${this.micContext.state}`)
 
     const ai = new GoogleGenAI({ apiKey: live.token, httpOptions: { apiVersion: live.apiVersion } })

@@ -62,7 +62,11 @@ export class WakeWord {
     }
     context.createMediaStreamSource(stream).connect(node)
     await context.resume()
-    console.info(`[jarvis] wekwoord luistert via "${stream.getAudioTracks()[0]?.label ?? '?'}" (${context.state})`)
+    const track = stream.getAudioTracks()[0]
+    console.info(`[jarvis] wekwoord luistert via "${track?.label ?? '?'}" (${context.state}${track?.muted ? ', maar de microfoon staat GEDEMPT' : ''})`)
+    // The system mute switched on or off while listening: say so in the log.
+    track?.addEventListener('mute', () => console.info('[jarvis] microfoon gedempt; het wekwoord hoort nu niets'))
+    track?.addEventListener('unmute', () => console.info('[jarvis] microfoon weer aan; het wekwoord luistert'))
     return wake
   }
 
