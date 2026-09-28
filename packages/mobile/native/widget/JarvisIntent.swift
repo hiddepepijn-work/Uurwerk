@@ -7,6 +7,7 @@ import UIKit
 /// way in. In Shortcuts it shows up as "Praat met Jarvis"; a shortcut named just "Jarvis" with
 /// this action is what makes Siri react to the one word. Also fits on the Action Button.
 /// App only (add-widget.rb): the widget has no business opening the app's conversations.
+@available(iOS 17.0, *)
 struct OpenJarvisIntent: AppIntent {
     static var title: LocalizedStringResource = "Praat met Jarvis"
     static var description = IntentDescription("Opent Uurwerk en begint een gesprek met Jarvis.")
@@ -23,6 +24,7 @@ struct OpenJarvisIntent: AppIntent {
 
 /// Siri phrases that work without making a shortcut first. Apple requires the app's name in
 /// each one; the shortcut named "Jarvis" is the way around that.
+@available(iOS 17.0, *)
 struct UurwerkShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(

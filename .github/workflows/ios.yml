@@ -141,7 +141,12 @@ jobs:
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build | tail -40
+            build > /tmp/xcodebuild.log 2>&1 || {
+              # The errors, not the last 40 lines of copying: a failure used to hide above them.
+              grep -E "error:" -A3 /tmp/xcodebuild.log | head -80
+              exit 1
+            }
+          tail -40 /tmp/xcodebuild.log
 
       - name: Package .ipa
         working-directory: packages/mobile/ios/App
