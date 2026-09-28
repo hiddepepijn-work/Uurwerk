@@ -27,9 +27,9 @@ export interface ToolSpec {
 
 const AREAS = ['stage', 'work', 'school', 'personal']
 
-const date = { type: 'string', description: 'Datum als YYYY-MM-DD' }
-const clock = { type: 'string', description: 'Tijd als HH:MM (24 uur)' }
-const PROPOSAL = ' Maakt een voorstel; pas na Hiddes ja uitvoeren met confirm.'
+const date = { type: 'string', description: 'YYYY-MM-DD' }
+const clock = { type: 'string', description: 'HH:MM' }
+const PROPOSAL = ' Voorstel; na ja: confirm.'
 
 const object = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: 'object',
@@ -41,28 +41,25 @@ const object = (properties: Record<string, unknown>, required: string[] = []) =>
 export const TOOLS: ToolSpec[] = [
   {
     name: 'get_now',
-    description: 'De huidige datum, tijd, weekdag en ISO-week. Gebruik dit voor je iets over "vandaag" of "morgen" zegt.',
+    description: 'Datum, tijd, weekdag en ISO-week.',
     parameters: object({}),
     writes: false
   },
   {
     name: 'get_snapshot',
-    description:
-      'Compact overzicht: per dag de planning en afspraken, de open en te late taken, en de actieve regels. Eén regel per item met een kort kenmerk (t:… taak, a:… afspraak) dat de andere tools als id accepteren. Standaard vandaag en morgen; maximaal 14 dagen.',
+    description: 'Per dag planning en afspraken, open en te late taken, regels. Kenmerken t:… (taak) en a:… (afspraak) gelden als id. Standaard vandaag en morgen, max 14 dagen.',
     parameters: object({ from: date, to: date, tasks: { type: 'boolean', description: 'Taken meenemen, standaard ja' } }),
     writes: false
   },
   {
     name: 'get_agenda',
-    description:
-      'Details van een of meer dagen als JSON, met notities, locaties en reisblokken van afspraken. Alleen als get_snapshot niet genoeg zegt. Maximaal 21 dagen.',
+    description: 'Details van dagen als JSON (notities, locaties, reisblokken). Alleen als get_snapshot niet genoeg is.',
     parameters: object({ from: date, to: date }, ['from', 'to']),
     writes: false
   },
   {
     name: 'propose_plan',
-    description:
-      'Laat de planner taken in vrije tijd zetten, achter elkaar, vanaf een moment: jij geeft alleen welke taken, hoe lang en het venster; de code zoekt de plekken met de harde regels (stage alleen in de stage-uren, niets over afspraken of wat Hidde zelf zette). Maakt één voorstel; na ja: confirm. Voor "zet X en Y achter elkaar na mijn afspraken".',
+    description: 'Taken achter elkaar in vrije tijd laten zetten door de code (taken, minuten, venster). Maakt één voorstel.',
     parameters: object(
       {
         taskIds: { type: 'array', items: { type: 'string' }, description: 'In deze volgorde' },
@@ -76,15 +73,13 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'list_rules',
-    description: 'De vaste regels: hard (de planner dwingt ze af) en zacht (voorkeuren om rekening mee te houden).',
+    description: 'Vaste regels, hard en zacht.',
     parameters: object({}),
     writes: false
   },
   {
     name: 'add_rule',
-    description:
-      'Een vaste regel toevoegen, zodat "voortaan …" blijft. type stage_window (hard): op welke dagen en tussen welke uren stage mag; de planner dwingt dat af. type note (zacht): een voorkeur in woorden.' +
-      PROPOSAL,
+    description: 'Vaste regel: stage_window (hard, dagen en uren voor stage) of note (zacht).' + PROPOSAL,
     parameters: object(
       {
         type: { type: 'string', enum: ['stage_window', 'note'] },
@@ -100,7 +95,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'update_rule',
-    description: 'Een regel aanpassen of uitzetten.' + PROPOSAL,
+    description: 'Regel aanpassen of uitzetten.' + PROPOSAL,
     parameters: object(
       { ruleId: { type: 'string' }, active: { type: 'boolean' }, description: { type: 'string' } },
       ['ruleId']
@@ -110,15 +105,13 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'note_day_summary',
-    description:
-      'Aan het eind van de dagafsluiting: twee of drie zinnen over hoe de dag ging en wat morgen telt. Een volgend gesprek begint hiermee. Direct, zonder voorstel.',
+    description: 'Twee of drie zinnen over de dag, aan het eind van de dagafsluiting. Direct.',
     parameters: object({ summary: { type: 'string' } }, ['summary']),
     writes: true
   },
   {
     name: 'list_tasks',
-    description:
-      'Taken met prioriteit, gebied, project, schatting, gelogde tijd, deadline en notitie. Standaard alleen open taken.',
+    description: 'Taken met prioriteit, gebied, schatting, deadline en notitie. Standaard open taken.',
     parameters: object({
       status: { type: 'string', enum: ['active', 'open', 'done', 'blocked'], description: 'Standaard active' },
       search: { type: 'string' }
@@ -127,22 +120,19 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'list_projects',
-    description: 'Alle projecten met hun gebied, voor het koppelen van een nieuwe taak.',
+    description: 'Projecten met hun gebied.',
     parameters: object({}),
     writes: false
   },
   {
     name: 'day_review',
-    description:
-      'Hoe een dag ging: welke geplande taken af zijn en welke niet, en de gewerkte minuten per gebied (stage, work, school, personal).',
+    description: 'Hoe een dag ging: wat af is, wat niet, minuten per gebied.',
     parameters: object({ date }, ['date']),
     writes: false
   },
   {
     name: 'create_task',
-    description:
-      'Nieuwe taak. Vraag eerst alles uit (wat, klaar-als, gebied/project, schatting, deadline, prioriteit, bijzonderheden) en zet dat in notes.' +
-      PROPOSAL,
+    description: 'Nieuwe taak; zet alles wat je hoorde in notes.' + PROPOSAL,
     parameters: object(
       {
         title: { type: 'string' },
@@ -166,7 +156,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'update_task',
-    description: 'Een bestaande taak aanpassen (titel, prioriteit, schatting, deadline, notitie, status).' + PROPOSAL,
+    description: 'Taak aanpassen (titel, prioriteit, schatting, deadline, notitie, status).' + PROPOSAL,
     parameters: object(
       {
         taskId: { type: 'string' },
@@ -184,36 +174,28 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'schedule_task',
-    description:
-      'Een taak op een vast tijdstip in de planning zetten (een blok, geen afspraak). Taken plan je altijd hiermee of met plan_range, nooit met create_appointment. Taken mogen over andere taken heen staan (dat meld je dan). Een afspraak op die tijd is een muur: dat weigert hij. Blokken die de planner zelf zette maken plaats.' +
-      PROPOSAL,
+    description: 'Taak als blok op een vast tijdstip. Mag over andere taken; weigert over afspraken.' + PROPOSAL,
     parameters: object({ taskId: { type: 'string' }, date, start: clock, end: clock }, ['taskId', 'date', 'start', 'end']),
     writes: true,
     proposes: true
   },
   {
     name: 'plan_range',
-    description:
-      'De planner opnieuw laten plannen van een dag tot en met een dag: open taken in de vrije tijd, met de harde regels (stage alleen ma-vr binnen de stage-uren, pauzes). Vervangt alleen wat de planner eerder zette; afspraken en met de hand gezette blokken blijven. Voor "plan opnieuw tot …".' +
-      PROPOSAL,
+    description: 'Planner plant een periode opnieuw; afspraken en handmatige blokken blijven.' + PROPOSAL,
     parameters: object({ from: date, to: date }, ['from', 'to']),
     writes: true,
     proposes: true
   },
   {
     name: 'clear_planning',
-    description:
-      'Wist wat de planner en jij (Jarvis) hebben ingepland van een dag tot en met een dag, zonder opnieuw te plannen. Afspraken en wat Hidde zelf zette blijven. Voor "haal de planning weg".' +
-      PROPOSAL,
+    description: 'Wist wat planner en Jarvis in een periode zetten; wat Hidde zette blijft.' + PROPOSAL,
     parameters: object({ from: date, to: date }, ['from', 'to']),
     writes: true,
     proposes: true
   },
   {
     name: 'create_appointment',
-    description:
-      'Nieuwe afspraak: alleen voor iets met een vaste tijd met iemand of ergens (geen taken). Vraag eerst: wat, wanneer, duur, gebied, waar, vervoer en reistijd, belangrijk?, bijzonderheden. Reistijd maakt een reisblok; daarop tellen de vertrekmeldingen (30 en 15 min vooraf).' +
-      PROPOSAL,
+    description: 'Nieuwe afspraak (vaste tijd, met iemand of ergens), met reistijd.' + PROPOSAL,
     parameters: object(
       {
         title: { type: 'string' },
@@ -233,54 +215,40 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'move_appointment',
-    description: 'Een afspraak verzetten; het reisblok schuift mee.' + PROPOSAL,
+    description: 'Afspraak verzetten; reisblok schuift mee.' + PROPOSAL,
     parameters: object({ eventId: { type: 'string' }, date, start: clock, end: clock }, ['eventId', 'date', 'start', 'end']),
     writes: true,
     proposes: true
   },
   {
     name: 'delete_appointment',
-    description: 'Een afspraak verwijderen, met zijn reisblokken.' + PROPOSAL,
+    description: 'Afspraak verwijderen, met reisblokken.' + PROPOSAL,
     parameters: object({ eventId: { type: 'string' } }, ['eventId']),
     writes: true,
     proposes: true
   },
   {
-    name: 'propose_day_plan',
-    description: 'Een voorstel voor het dagplan (niet opgeslagen): welke taken wanneer, en wat niet past.',
-    parameters: object({ date }, ['date']),
-    writes: false
-  },
-  {
-    name: 'apply_day_plan',
-    description: 'Het dagplan van één dag laten invullen door de planner. Handmatig of vast geplaatste blokken blijven staan.' + PROPOSAL,
-    parameters: object({ date }, ['date']),
-    writes: true,
-    proposes: true
-  },
-  {
     name: 'confirm',
-    description:
-      'Voert de openstaande voorstellen uit, na een duidelijk ja van Hidde. Zonder pendingIds: alle openstaande. Geeft de echte uitkomst uit de database terug; vertel Hidde precies die, ook wat mislukte.',
+    description: 'Voert openstaande voorstellen uit na een ja. Geeft de echte uitkomst terug; zeg precies die.',
     parameters: object({ pendingIds: { type: 'array', items: { type: 'string' } } }),
     writes: true
   },
   {
     name: 'cancel',
-    description: 'Laat openstaande voorstellen vallen (Hidde zei nee of wil iets anders). Zonder pendingIds: alle.',
+    description: 'Laat openstaande voorstellen vallen.',
     parameters: object({ pendingIds: { type: 'array', items: { type: 'string' } } }),
     writes: false
   },
   {
     name: 'start_timer',
-    description: 'De timer starten, optioneel op een taak.' + PROPOSAL,
+    description: 'Timer starten, optioneel op een taak.' + PROPOSAL,
     parameters: object({ taskId: { type: 'string' } }),
     writes: true,
     proposes: true
   },
   {
     name: 'stop_timer',
-    description: 'De lopende timer stoppen.' + PROPOSAL,
+    description: 'Timer stoppen.' + PROPOSAL,
     parameters: object({}),
     writes: true,
     proposes: true

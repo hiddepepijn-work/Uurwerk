@@ -167,7 +167,8 @@ ${await today(options.api)}`
     inputAudioTranscription: {},
     outputAudioTranscription: {},
     // Long conversations keep going: older turns are folded away instead of ending the session.
-    contextWindowCompression: { slidingWindow: {} },
+    // Folded early: every turn re-reads what is kept, and a long talk should not cost more per turn.
+    contextWindowCompression: { triggerTokens: '16000', slidingWindow: { targetTokens: '9000' } },
     // Gemini hands out resumption handles, so a dropped connection can carry on where it was.
     sessionResumption: options.resume ? { handle: options.resume } : {},
     // A breath mid-sentence is not the end of a turn: 700 ms cut Hidde's sentences in half

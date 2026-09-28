@@ -23,6 +23,7 @@ import type { SecretVault } from '@backend/host.js'
 import { log } from '@backend/log.js'
 
 import brief from '../../../../docs/jarvis.md'
+import { briefForModel } from './brief.js'
 import { claude, compatible, openai, usageListeners, type Conversation, type Effort, type Provider } from './providers.js'
 import { effortFor } from './effort.js'
 import { addTextUsage, addUsage, liveSession, readSpend } from './live.js'
@@ -48,7 +49,7 @@ Regels voor elk antwoord:
   Verzin nooit een afspraak, taak of tijd. De kenmerken t:… en a:… gebruik je als id.
 - Iets veranderen gaat in twee stappen. De schrijvende tools (create_task, update_task,
   schedule_task, plan_range, clear_planning, create_appointment, move_appointment,
-  delete_appointment, apply_day_plan, start_timer, stop_timer) voeren niets uit: ze maken een voorstel. Zet alles
+  delete_appointment, start_timer, stop_timer) voeren niets uit: ze maken een voorstel. Zet alles
   wat bij één verzoek hoort in voorstellen, vat ze samen en vraag "Zal ik dat zo doen?".
   Bij een duidelijk ja: confirm. Bij nee of iets anders: cancel.
 - Na confirm vertel je precies wat confirm teruggeeft: wat gelukt is, met de echte aantallen,
@@ -76,7 +77,7 @@ Regels voor elk antwoord:
   en wat morgen telt. Het volgende gesprek begint daarmee.
 
 --- BRIEF ---
-${brief}`
+${briefForModel(brief)}`
 
 export const MOMENT: Record<'morning' | 'evening', string> = {
   morning:

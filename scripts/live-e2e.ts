@@ -7,7 +7,8 @@
  * answers them the way the app does, and checks the replies: Dutch, and actually answering
  * rather than promising to come back.
  *
- *   npm run test:live
+ *   npm run test:live            the typed scenarios and the regression test (cents)
+ *   VOICE=1 npm run test:live    also the spoken ones through Gemini Live (some 20 cents)
  *
  * Needs GEMINI_API_KEY, in the environment or in .env.local (git-ignored). Costs a few
  * cents per run. Writes nothing to the real database: the tools run on a temporary copy.
@@ -212,7 +213,8 @@ async function main(): Promise<void> {
     (await api.plans.day(day)).blocks.some((block) => block.taskId === task.id && block.startMin === 22 * 60)
 
   // ONLY=regressie skips the spoken scenarios (and their cost) and runs the regression test.
-  const voiceToo = process.env.ONLY !== 'regressie'
+  // The spoken scenarios cost the most (Gemini Live, audio both ways): only with VOICE=1.
+  const voiceToo = process.env.VOICE === '1' && process.env.ONLY !== 'regressie'
   console.log(voiceToo ? 'Stem opnemen voor de testvragen…' : 'Alleen de regressietest.')
   const [tomorrow, today, schedule, yes] = voiceToo ? await Promise.all([
     voice(key, 'Wat staat er morgen op de planning?'),
