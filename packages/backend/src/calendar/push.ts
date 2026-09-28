@@ -22,7 +22,7 @@
  * without storing a second mapping table that could drift out of step with the plan.
  */
 
-import type { PlanBlock } from '@core/contract/types.js'
+import type { CalendarEvent, PlanBlock } from '@core/contract/types.js'
 import { atMinuteOfDay } from '@core/util/time.js'
 
 import type { Backend } from '../create.js'
@@ -135,3 +135,78 @@ export async function pushPlan(
 }
 
 export { uidFor, isPlanUid, toEvent, sameAppointment }
+
+// ------------------------------------------------------------ appointments
+//
+// What Uurwerk itself put in the agenda (an appointment Jarvis made, a birthday above the
+// day, the travel to an appointment) goes to the same Uurwerk calendar, so the iPhone's
+// Calendar app shows it too. Same reasoning as the plan: one calendar only Uurwerk writes to,
+// a full reconcile, the event id in the UID. Imported events are never pushed back.
+
+const EVENT_UID_PREFIX = 'uurwerk-event-'
+const eventUid = (eventId: string): string => `${EVENT_UID_PREFIX}${eventId}@uurwerk.app`
+const isEventUid = (uid: string): boolean => uid.startsWith(EVENT_UID_PREFIX)
+
+const sameEvent = (a: ParsedEvent, b: ParsedEvent): boolean =>
+  sameAppointment(a, b) && (a.location ?? null) === (b.location ?? null) && a.allDay === b.allDay
+
+/** The entries Uurwerk made itself, as calendar events keyed by uid; imported ones never go back. */
+export function appointmentEvents(events: CalendarEvent[]): Map<string, ParsedEvent> {
+  const wanted = new Map<string, ParsedEvent>()
+  for (const event of events) {
+    if (event.origin !== 'uurwerk' || event.cancelled || event.deletedAt) continue
+    const uid = eventUid(event.id)
+    wanted.set(uid, {
+      uid,
+      summary: event.title,
+      description: event.description,
+      location: event.location,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      allDay: event.allDay,
+      recurrenceRule: null,
+      recurrenceId: null,
+      cancelled: false,
+      organizer: null,
+      attendees: [],
+      updatedAt: null
+    })
+  }
+  return wanted
+}
+
+export async function pushAppointments(backend: Backend, accountId: string, calendarId: string, from: number, to: number): Promise<PushOutcome> {
+  const store = backend.store
+  const calendar = store.calendar.calendar(calendarId)
+  if (!calendar) throw new Error(`Calendar not found: ${calendarId}`)
+  const provider = calDavProviderFor(backend, accountId)
+
+  const wanted = appointmentEvents(store.calendar.eventsInRange(from, to))
+
+  const existing = await provider.eventsIn(calendar.externalId, from, to)
+  const onServer = new Map(existing.filter((event) => isEventUid(event.uid)).map((event) => [event.uid, event]))
+  const outcome: PushOutcome = { created: 0, updated: 0, removed: 0, unchanged: 0 }
+
+  for (const [uid, event] of wanted) {
+    const current = onServer.get(uid)
+    if (!current) {
+      await provider.createEvent(calendar.externalId, event)
+      outcome.created += 1
+    } else if (!sameEvent(current, event)) {
+      await provider.updateEvent(calendar.externalId, uid, event)
+      outcome.updated += 1
+    } else {
+      outcome.unchanged += 1
+    }
+  }
+  // Moved out of the window, deleted, or cancelled in Uurwerk: gone from the phone as well.
+  for (const uid of onServer.keys()) {
+    if (wanted.has(uid)) continue
+    await provider.deleteEvent(calendar.externalId, uid)
+    outcome.removed += 1
+  }
+  if (outcome.created || outcome.updated || outcome.removed) log.info('Appointments pushed to iCloud.', { accountId, ...outcome })
+  return outcome
+}
+
+export { eventUid, isEventUid }

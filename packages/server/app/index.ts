@@ -34,7 +34,8 @@ import { createBackend, type Backend } from '@backend/create.js'
 import { buildImplementation } from '@backend/implementation.js'
 import { installHost, unavailable, type SecretKey } from '@backend/host.js'
 import { log, setLogFile } from '@backend/log.js'
-import { syncAllAccounts } from '@backend/calendar/index.js'
+import { ensureUurwerkCalendar, syncAllAccounts } from '@backend/calendar/index.js'
+import { pushAppointments } from '@backend/calendar/push.js'
 import type { TimeTrackerAPI } from '@core/contract/api.js'
 import type { Host } from '@backend/host.js'
 import type { Duplex } from 'node:stream'
@@ -190,6 +191,25 @@ export async function startApp(options: AppOptions): Promise<App> {
       lastCalendarSync = Date.now()
       void syncAllAccounts(backend).catch((error: unknown) => log.warn('Calendar sync failed.', error))
     }, 60_000)
+  )
+  // What Uurwerk and Jarvis put in the agenda goes to the iPhone's Calendar app (the Uurwerk
+  // calendar in iCloud), a couple of minutes after it was made. Only with an iCloud account.
+  let pushing = false
+  timers.push(
+    setInterval(() => {
+      if (!backend || pushing) return
+      const account = backend.store.calendar.accounts().find((entry) => entry.provider === 'icloud')
+      if (!account) return
+      pushing = true
+      const current = backend
+      void (async () => {
+        const calendarId = await ensureUurwerkCalendar(current, account.id)
+        const now = Date.now()
+        await pushAppointments(current, account.id, calendarId, now - 7 * 86_400_000, now + 120 * 86_400_000)
+      })()
+        .catch((error: unknown) => log.warn('Pushing appointments to iCloud failed.', error))
+        .finally(() => (pushing = false))
+    }, 120_000)
   )
   timers.push(
     setInterval(() => {

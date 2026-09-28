@@ -7,8 +7,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import type { PlanBlock } from '@core/contract/types.js'
-import { isPlanUid, sameAppointment, toEvent, uidFor } from './push.js'
+import type { CalendarEvent, PlanBlock } from '@core/contract/types.js'
+import { appointmentEvents, eventUid, isEventUid, isPlanUid, sameAppointment, toEvent, uidFor } from './push.js'
 import { parseIcs } from './ics-parse.js'
 import { writeCalendar } from './ics-write.js'
 
@@ -120,5 +120,45 @@ describe('what actually goes over the wire', () => {
     const event = toEvent(block({ taskTitle: 'Overleg: planning, fase 2; herzien' }))!
     const [back] = parseIcs(writeCalendar(event)).events
     expect(back!.summary).toBe('Overleg: planning, fase 2; herzien')
+  })
+})
+
+describe('appointments that reach the phone', () => {
+  const event = (overrides: Partial<CalendarEvent> = {}): CalendarEvent =>
+    ({
+      id: 'event-1',
+      title: 'Tandarts',
+      description: null,
+      location: 'Zevenaar',
+      startsAt: new Date('2026-10-01T15:00:00').getTime(),
+      endsAt: new Date('2026-10-01T15:30:00').getTime(),
+      allDay: false,
+      cancelled: false,
+      deletedAt: null,
+      origin: 'uurwerk',
+      ...overrides
+    }) as CalendarEvent
+
+  it('sends what Uurwerk or Jarvis made, with its own uid', () => {
+    const wanted = appointmentEvents([event()])
+    expect([...wanted.keys()]).toEqual([eventUid('event-1')])
+    expect(isEventUid(eventUid('event-1'))).toBe(true)
+    expect(isPlanUid(eventUid('event-1'))).toBe(false)
+  })
+
+  it('never sends back what came from iCloud or a subscription', () => {
+    expect(appointmentEvents([event({ origin: 'icloud' }), event({ id: 'b', origin: 'ics' })]).size).toBe(0)
+  })
+
+  it('keeps an all-day item all-day, and drops cancelled or deleted ones', () => {
+    const wanted = appointmentEvents([event({ id: 'day', allDay: true, title: 'Oma jarig' }), event({ id: 'gone', cancelled: true }), event({ id: 'del', deletedAt: 1 })])
+    expect([...wanted.values()].map((entry) => [entry.summary, entry.allDay])).toEqual([['Oma jarig', true]])
+  })
+
+  it('writes an all-day item as a date, so the phone shows it above the day', () => {
+    const [entry] = appointmentEvents([event({ allDay: true, startsAt: new Date('2026-10-01T00:00:00').getTime(), endsAt: new Date('2026-10-02T00:00:00').getTime() })]).values()
+    const ics = writeCalendar(entry!)
+    expect(ics).toContain('DTSTART;VALUE=DATE:20261001')
+    expect(parseIcs(ics).events[0]!.allDay).toBe(true)
   })
 })
