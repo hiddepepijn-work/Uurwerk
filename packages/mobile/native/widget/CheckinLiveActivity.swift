@@ -21,47 +21,59 @@ struct CheckinLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CheckinAttributes.self) { context in
             CheckinLockView(state: context.state, stale: context.isStale)
-                .padding(18)
+                .padding(14)
                 .activityBackgroundTint(hexColor(0x0C0E12).opacity(0.82))
                 .activitySystemActionForegroundColor(Palette.text)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
+                    CheckinRing(state: context.state, stale: context.isStale, size: 52, lineWidth: 5)
+                        .padding(.leading, 4)
+                }
+                DynamicIslandExpandedRegion(.center) {
                     let phase = CheckinPhase(state: context.state, stale: context.isStale, now: Date())
-                    HStack(spacing: 5) {
-                        Image(systemName: phase.icon)
-                            .font(.system(size: 13, weight: .bold))
-                        Text(phase.chip(busy: context.state.busy))
-                            .font(.system(size: 12, weight: .bold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(phase.chip(busy: context.state.busy).uppercased() + " · \(clock(context.state.start))–\(clock(context.state.end))")
+                            .font(.system(size: 11, weight: .bold))
+                            .tracking(0.5)
+                            .foregroundStyle(phase.soft)
                             .lineLimit(1)
-                    }
-                    .foregroundStyle(phase.soft)
-                    .padding(.leading, 4)
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    CheckinClock(state: context.state, stale: context.isStale)
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .padding(.trailing, 4)
-                }
-                DynamicIslandExpandedRegion(.bottom) {
-                    VStack(alignment: .leading, spacing: 8) {
                         Text(context.state.title)
                             .font(.system(size: 17, weight: .bold, design: .rounded))
                             .foregroundStyle(Palette.text)
                             .lineLimit(1)
-                        CheckinButtons(state: context.state, stale: context.isStale, height: 44)
+                        if let next = context.state.next, !next.isEmpty {
+                            Text("daarna \(next)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Palette.dim)
+                                .lineLimit(1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    VStack(spacing: 8) {
+                        if !context.isStale && Date() < context.state.end {
+                            // Live: iOS moves this bar by itself, no update needed.
+                            ProgressView(timerInterval: context.state.start...context.state.end, countsDown: false) {
+                                EmptyView()
+                            } currentValueLabel: {
+                                EmptyView()
+                            }
+                            .tint(Palette.accent)
+                        }
+                        CheckinButtons(state: context.state, stale: context.isStale, height: 40)
                     }
                     .padding(.horizontal, 4)
                 }
             } compactLeading: {
-                Image(systemName: context.isStale ? "questionmark.circle.fill" : "checkmark.circle")
-                    .foregroundStyle(context.isStale ? Palette.dangerText : Palette.accent)
+                CheckinMiniRing(state: context.state, stale: context.isStale)
             } compactTrailing: {
                 CheckinClock(state: context.state, stale: context.isStale)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .frame(maxWidth: 52)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .frame(maxWidth: 56)
             } minimal: {
-                Image(systemName: "checkmark.circle").foregroundStyle(Palette.accent)
+                CheckinMiniRing(state: context.state, stale: context.isStale)
             }
             .keylineTint(Palette.accent)
         }
@@ -165,8 +177,8 @@ struct CheckinRing: View {
     let state: CheckinAttributes.ContentState
     let stale: Bool
 
-    private let size: CGFloat = 96
-    private let lineWidth: CGFloat = 9
+    var size: CGFloat = 64
+    var lineWidth: CGFloat = 6
 
     var body: some View {
         let now = Date()
@@ -182,25 +194,29 @@ struct CheckinRing: View {
                 switch phase {
                 case .after:
                     Image(systemName: "questionmark")
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
                         .foregroundStyle(Palette.dangerText)
                 case .before:
                     Text(timerInterval: now...state.start, countsDown: true)
-                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .font(.system(size: size * 0.23, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Palette.text)
-                        .frame(width: size - 2 * lineWidth - 8)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                        .frame(width: size - 2 * lineWidth - 6)
                 case .during:
                     Text(timerInterval: now...state.end, countsDown: true)
-                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .font(.system(size: size * 0.23, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Palette.text)
-                        .frame(width: size - 2 * lineWidth - 8)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                        .frame(width: size - 2 * lineWidth - 6)
                 }
                 Text(caption(phase))
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 8, weight: .bold))
                     .tracking(0.6)
                     .foregroundStyle(Palette.dim)
             }
@@ -232,6 +248,38 @@ struct CheckinRing: View {
 }
 
 @available(iOS 17.0, *)
+struct CheckinMiniRing: View {
+    let state: CheckinAttributes.ContentState
+    let stale: Bool
+
+    var body: some View {
+        let now = Date()
+        let phase = CheckinPhase(state: state, stale: stale, now: now)
+        ZStack {
+            Circle().stroke(Palette.ringTrack, lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: fraction(phase: phase, now: now))
+                .stroke(phase == .after ? Palette.now : Palette.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Image(systemName: phase == .after ? "questionmark" : "checkmark")
+                .font(.system(size: 8, weight: .heavy))
+                .foregroundStyle(phase == .after ? Palette.dangerText : Palette.accentSoft)
+        }
+        .frame(width: 20, height: 20)
+    }
+
+    private func fraction(phase: CheckinPhase, now: Date) -> CGFloat {
+        switch phase {
+        case .before: return 0
+        case .after: return 1
+        case .during:
+            let total = max(state.end.timeIntervalSince(state.start), 1)
+            return CGFloat(min(max(now.timeIntervalSince(state.start) / total, 0.05), 1))
+        }
+    }
+}
+
+@available(iOS 17.0, *)
 struct CheckinLockView: View {
     let state: CheckinAttributes.ContentState
     let stale: Bool
@@ -239,10 +287,10 @@ struct CheckinLockView: View {
     var body: some View {
         let now = Date()
         let phase = CheckinPhase(state: state, stale: stale, now: now)
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .center, spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
                 CheckinRing(state: state, stale: stale)
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(phase.chip(busy: state.busy).uppercased())
                             .font(.system(size: 11, weight: .bold))
@@ -259,20 +307,20 @@ struct CheckinLockView: View {
                             .lineLimit(1)
                     }
                     Text(state.title)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
                         .foregroundStyle(Palette.text)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.85)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     if let detail {
                         Text(detail)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(Palette.dim)
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            CheckinButtons(state: state, stale: stale, height: 52)
+            CheckinButtons(state: state, stale: stale, height: 40)
         }
     }
 
