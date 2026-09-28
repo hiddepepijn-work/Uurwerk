@@ -289,15 +289,20 @@ export function WeekTimeline({
               >
                 {fromIsoDate(day.date).getDate()}
               </span>
-              {/* All-day items, as a line under the date: the first one named, then a count. */}
+              {/* All-day items under the date, one per line: "Kerstvakantie" and "Kerst" both show. */}
               {day.allDay && day.allDay.length > 0 && (
-                <span
-                  // Outlined on the phone, a tinted chip on the desktop's roomier week.
-                  className="max-w-full truncate rounded-pill bg-area-work-tint px-1.5 py-0.5 text-[10px] leading-[14px] font-bold text-area-work-soft ring-1 ring-area-work/50 wide:px-2.5 wide:py-1 wide:text-[12.5px] wide:leading-4"
-                  title={day.allDay.map((item) => item.title).join(', ')}
-                >
-                  {day.allDay[0]!.title}
-                  {day.allDay.length > 1 ? ` +${day.allDay.length - 1}` : ''}
+                <span className="flex w-full flex-col items-center gap-1">
+                  {day.allDay.map((item) => (
+                    <span
+                      key={item.id}
+                      className={`max-w-full truncate rounded-pill px-1.5 py-0.5 text-[10px] leading-[14px] font-bold ring-1 wide:px-2.5 wide:py-1 wide:text-[12.5px] wide:leading-4 ${
+                        day.allDay!.length > 1 ? MANY_DAY_ITEMS.chip : ONE_DAY_ITEM.chip
+                      }`}
+                      title={item.title}
+                    >
+                      {item.title}
+                    </span>
+                  ))}
                 </span>
               )}
             </button>
@@ -312,7 +317,9 @@ export function WeekTimeline({
             {days.map((day) => {
               const column = `relative h-full min-w-0 flex-1 rounded-[10px] wide:rounded-[14px] ${
                 day.allDay && day.allDay.length > 0
-                  ? 'bg-area-work/[0.11] ring-1 ring-area-work/25 ring-inset'
+                  ? day.allDay.length > 1
+                    ? MANY_DAY_ITEMS.column
+                    : ONE_DAY_ITEM.column
                   : day.date === today
                     ? 'bg-accent/[0.06]'
                     : 'bg-card/50'
@@ -627,15 +634,34 @@ function NowLine({ top, thin = false }: { top: number; thin?: boolean }) {
 }
 
 /** The day's all-day items, above its timeline: a birthday, a holiday, "vrij". */
+/**
+ * All-day items are violet, so they read as "about the day". A day with two or more (a holiday
+ * and Christmas inside it) turns a redder shade of violet, so a busy day stands out at a glance.
+ */
+const ONE_DAY_ITEM = {
+  chip: 'bg-area-work-tint text-area-work-soft ring-area-work/50',
+  column: 'bg-area-work/[0.11] ring-1 ring-area-work/25 ring-inset',
+  pill: 'border-area-work/60 bg-area-work-tint text-area-work-soft',
+  dot: 'bg-area-work'
+}
+const MANY_DAY_ITEMS = {
+  chip: 'bg-[#2c1b27] text-[#dba9c9] ring-[#c88ab4]/60',
+  column: 'bg-[#c88ab4]/[0.13] ring-1 ring-[#c88ab4]/30 ring-inset',
+  pill: 'border-[#c88ab4]/70 bg-[#2c1b27] text-[#dba9c9]',
+  dot: 'bg-[#c88ab4]'
+}
+
 export function AllDayRow({ items }: { items: AllDayItem[] }) {
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) => (
         <span
           key={item.id}
-          className="inline-flex items-center gap-2 rounded-pill border-[1.5px] border-area-work/60 bg-area-work-tint px-3.5 py-[7px] text-[14px] font-bold text-area-work-soft wide:text-[15px]"
+          className={`inline-flex items-center gap-2 rounded-pill border-[1.5px] px-3.5 py-[7px] text-[14px] font-bold wide:text-[15px] ${
+            items.length > 1 ? MANY_DAY_ITEMS.pill : ONE_DAY_ITEM.pill
+          }`}
         >
-          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-area-work" />
+          <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${items.length > 1 ? MANY_DAY_ITEMS.dot : ONE_DAY_ITEM.dot}`} />
           {item.title}
         </span>
       ))}
