@@ -56,9 +56,13 @@ struct CheckinLiveActivity: Widget {
             } compactLeading: {
                 CheckinMiniRing(state: context.state, stale: context.isStale)
             } compactTrailing: {
-                CheckinClock(state: context.state, stale: context.isStale)
+                // A timer text claims the width of its widest value and pushed into the camera:
+                // minutes only (no hour field) in a fixed, narrow frame, aligned to the outer edge.
+                CheckinClock(state: context.state, stale: context.isStale, compact: true)
                     .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .frame(maxWidth: 56)
+                    .minimumScaleFactor(0.75)
+                    .lineLimit(1)
+                    .frame(width: 46, alignment: .trailing)
             } minimal: {
                 CheckinMiniRing(state: context.state, stale: context.isStale)
             }
@@ -148,18 +152,20 @@ func checkinTone(_ phase: CheckinPhase, busy: Bool) -> Color {
 struct CheckinClock: View {
     let state: CheckinAttributes.ContentState
     let stale: Bool
+    /** In the compact island: minutes only ("72:05" rather than "1:12:05"), so it stays narrow. */
+    var compact = false
 
     var body: some View {
         let now = Date()
         if now >= state.end {
             Text("klaar?").foregroundStyle(Palette.dangerText)
         } else if now < state.start {
-            Text(timerInterval: now...state.start, countsDown: true)
+            Text(timerInterval: now...state.start, countsDown: true, showsHours: !compact)
                 .monospacedDigit()
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(Palette.dim)
         } else {
-            Text(timerInterval: now...state.end, countsDown: true)
+            Text(timerInterval: now...state.end, countsDown: true, showsHours: !compact)
                 .monospacedDigit()
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(state.busy ? Palette.busyText : Palette.accent)

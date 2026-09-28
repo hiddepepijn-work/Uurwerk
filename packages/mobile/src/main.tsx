@@ -200,7 +200,9 @@ async function start(): Promise<void> {
         if (answer === 'busy' && !(await window.api!.tracking.currentRun())) await window.api!.tracking.startRun(taskId)
       }
       const running = await window.api!.tracking.currentRun()
-      await AudioFocus.liveCheckin({ json: JSON.stringify(liveQueue(backend, running?.segments.at(-1)?.taskId ?? null)) })
+      const segment = running?.segments.at(-1)
+      const current = segment?.taskId ? { taskId: segment.taskId, startedAt: segment.startedAt } : null
+      await AudioFocus.liveCheckin({ json: JSON.stringify(liveQueue(backend, current)) })
     })()
       .catch(() => undefined)
       .finally(() => (liveBusy = false))
@@ -222,6 +224,8 @@ async function start(): Promise<void> {
   }
   bus.on('data:invalidated', ({ domain }) => {
     if (domain === 'planning' || domain === 'tasks' || domain === 'sessions') reschedule()
+    // The lock screen follows the timer at once, not after the 5-second batch.
+    if (domain === 'sessions') refreshLive()
     if (domain === 'tasks') void focus.check()
   })
 

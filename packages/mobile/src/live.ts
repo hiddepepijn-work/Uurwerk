@@ -26,8 +26,19 @@ export interface LiveBlock {
 
 const MIN = 60_000
 
-/** Today's and tomorrow's planned tasks that are not done and not long over, in order. */
-export function liveQueue(backend: Backend, runningTaskId: string | null, now = Date.now()): LiveBlock[] {
+/** What runs on the timer right now, if anything. */
+export interface Running {
+  taskId: string
+  startedAt: number
+}
+
+/**
+ * Today's and tomorrow's planned tasks that are not done and not long over, in order, plus
+ * the task the timer runs on even when no block holds it (reopened after a Klaar, or started
+ * without a plan): that one is what he is doing, so it is what the lock screen shows.
+ */
+export function liveQueue(backend: Backend, running: Running | null, now = Date.now()): LiveBlock[] {
+  const runningTaskId = running?.taskId ?? null
   const out: LiveBlock[] = []
   for (const day of [toIsoDate(now), toIsoDate(now + 86_400_000)]) {
     const plan = backend.store.plans.accepted('day', day)
@@ -47,6 +58,22 @@ export function liveQueue(backend: Backend, runningTaskId: string | null, now = 
         important: isImportant(task, block.date),
         project: block.projectName ?? null,
         busy: block.taskId === runningTaskId
+      })
+    }
+  }
+  if (running && !out.some((block) => block.taskId === running.taskId && block.start <= now && block.end > now)) {
+    const task = backend.store.tasks.get(running.taskId)
+    if (task) {
+      const planned = Math.max(15, task.estimateMin ?? 60)
+      out.push({
+        taskId: task.id,
+        title: task.title,
+        start: running.startedAt,
+        // Its estimate from when the timer started; never already over while it still runs.
+        end: Math.max(running.startedAt + planned * MIN, now + 15 * MIN),
+        important: isImportant(task, toIsoDate(now)),
+        project: null,
+        busy: true
       })
     }
   }
