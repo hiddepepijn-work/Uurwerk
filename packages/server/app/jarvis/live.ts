@@ -252,9 +252,17 @@ export async function openaiSession(options: LiveOptions): Promise<JarvisLiveSes
         format: { type: 'audio/pcm', rate: 24000 },
         transcription: { model: 'gpt-4o-mini-transcribe', language: 'nl' },
         noise_reduction: { type: 'near_field' },
-        // Semantic VAD waits for a finished thought, not for a pause: a breath mid-sentence
-        // does not hand him the turn.
-        turn_detection: { type: 'semantic_vad', eagerness: 'low', create_response: true, interrupt_response: true }
+        // A fixed 1.2 s of silence ends the turn, as with Gemini. Not semantic VAD: it counts
+        // silence in audio it receives, waits up to 8 s, and the app stops sending 2 s after
+        // Hidde does, so the turn only ended when he spoke again.
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 1200,
+          create_response: true,
+          interrupt_response: true
+        }
       },
       output: { format: { type: 'audio/pcm', rate: 24000 }, voice }
     },
@@ -262,9 +270,11 @@ export async function openaiSession(options: LiveOptions): Promise<JarvisLiveSes
       type: 'function',
       name: tool.name,
       description: tool.description,
-      parameters: toSchema(tool.parameters)
+      // Plain JSON Schema, as the tools are written; toSchema is Gemini's dialect.
+      parameters: tool.parameters
     })),
-    tool_choice: 'auto'
+    tool_choice: 'auto',
+    reasoning: { effort: process.env.JARVIS_REALTIME_EFFORT?.trim() || 'low' }
   }
 
   const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {

@@ -132,7 +132,9 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'create_task',
-    description: 'Nieuwe taak; zet alles wat je hoorde in notes.' + PROPOSAL,
+    description:
+      'Nieuwe taak; zet alles wat je hoorde in notes. Moet hij meteen op een tijd: geef date, start en end mee, dan is aanmaken en inplannen één voorstel.' +
+      PROPOSAL,
     parameters: object(
       {
         title: { type: 'string' },
@@ -147,7 +149,10 @@ export const TOOLS: ToolSpec[] = [
           type: 'string',
           enum: ['auto', 'always', 'never'],
           description: 'auto = stage altijd focus, privé vanaf 30 min; always/never als Hidde het anders wil'
-        }
+        },
+        date: { ...date, description: 'Optioneel: meteen inplannen op deze dag (met start en end)' },
+        start: clock,
+        end: clock
       },
       ['title', 'areaId']
     ),
@@ -539,7 +544,7 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
     (typeof id === 'string' && (await api.tasks.get(id).catch(() => null))?.title) || 'onbekende taak'
   switch (name) {
     case 'create_task':
-      return `Nieuwe taak "${String(input.title)}" (${String(input.areaId)}${typeof input.estimateMinutes === 'number' ? `, ${input.estimateMinutes} min` : ''}${input.dueDate ? `, deadline ${String(input.dueDate)}` : ''})`
+      return `Nieuwe taak "${String(input.title)}" (${String(input.areaId)}${typeof input.estimateMinutes === 'number' ? `, ${input.estimateMinutes} min` : ''}${input.dueDate ? `, deadline ${String(input.dueDate)}` : ''})${plannedAt(input) ? `, ingepland op ${String(input.date)} ${String(input.start)}–${String(input.end)}` : ''}`
     case 'update_task': {
       const changes = Object.keys(input).filter((key) => key !== 'taskId')
       return `Taak "${await taskTitle(input.taskId)}" aanpassen: ${changes.join(', ') || 'niets'}`
@@ -571,8 +576,16 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
 }
 
 /** Checks what can be checked before the "ja", so a proposal that cannot work is not asked. */
+/** A new task that is to go into the day right away. */
+const plannedAt = (input: Input): boolean =>
+  typeof input.date === 'string' && typeof input.start === 'string' && typeof input.end === 'string'
+
 async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promise<void> {
   if (name === 'schedule_task') await slotFor(api, input)
+  if (name === 'create_task' && (input.date || input.start || input.end)) {
+    if (!plannedAt(input)) throw new Error('Meteen inplannen vraagt date, start én end.')
+    if (minuteOf(String(input.end)) <= minuteOf(String(input.start))) throw new Error('Het einde ligt voor het begin.')
+  }
   if (name === 'add_rule' && input.type === 'stage_window') {
     if (!Array.isArray(input.days) || typeof input.from !== 'string' || typeof input.to !== 'string') {
       throw new Error('Een stage_window heeft days, from en to nodig.')
@@ -653,7 +666,8 @@ async function confirm(api: TimeTrackerAPI, input: Input): Promise<unknown> {
     executed,
     failed,
     alreadyDone,
-    say: 'Vertel Hidde precies dit: wat gelukt is (met de aantallen hierboven) en wat mislukte. Zeg niets dat hier niet staat.'
+    // Worded as a note, not as a line to say: a model once read "Vertel Hidde precies dit" out loud.
+    note: 'Niet voorlezen. Noem in je eigen woorden alleen wat in executed en failed staat, niets anders.'
   }
 }
 
@@ -670,7 +684,10 @@ function cardsFor(tool: string, input: Input, result: unknown): JarvisCard[] {
   })
   switch (tool) {
     case 'create_task':
-      return [card('taak', 'nieuw', input.title, input.dueDate ? `deadline ${shortDay(String(input.dueDate))}` : null)]
+      return [
+        card('taak', 'nieuw', input.title, input.dueDate ? `deadline ${shortDay(String(input.dueDate))}` : null),
+        ...(out.placed ? [card('planning', 'nieuw', input.title, slot(input.date, input.start, input.end), input.date)] : [])
+      ]
     case 'update_task':
       return [card('taak', input.status === 'done' ? 'af' : 'gewijzigd', out.done ?? out.updated)]
     case 'schedule_task':
@@ -945,7 +962,8 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
   switch (name) {
     case 'create_task': {
       let projectId: string | null = null
-      if (typeof input.projectName === 'string' && input.projectName.trim()) {
+      // "—", "-" or "geen" is a model's way of saying no project.
+      if (typeof input.projectName === 'string' && !/^[\s\-–—]*$|^(geen|none|null)$/i.test(input.projectName.trim())) {
         const wanted = input.projectName.trim().toLowerCase()
         const project = (await api.projects.list()).find((entry) => entry.name.toLowerCase() === wanted)
         if (!project) throw new Error(`Geen project "${input.projectName}". Kies uit list_projects of laat het leeg.`)
@@ -963,7 +981,14 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
         focusMode: (input.focusMode as 'auto' | 'always' | 'never' | undefined) ?? 'auto'
       })
       if (!(await api.tasks.get(task.id))) throw new Error('De taak staat na het aanmaken niet in de database.')
-      return { created: task.title, taskId: task.id, focus: task.focusMode }
+      if (!plannedAt(input)) return { created: task.title, taskId: task.id, focus: task.focusMode }
+      // Made and placed in one go; if the placing fails, the task still stands and he says so.
+      try {
+        const placed = (await execute(api, 'schedule_task', { taskId: task.id, date: input.date, start: input.start, end: input.end })) as Record<string, unknown>
+        return { created: task.title, taskId: task.id, focus: task.focusMode, ...placed }
+      } catch (error) {
+        return { created: task.title, taskId: task.id, notPlaced: error instanceof Error ? error.message : String(error) }
+      }
     }
 
     case 'update_task': {

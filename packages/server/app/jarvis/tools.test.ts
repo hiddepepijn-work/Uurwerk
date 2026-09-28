@@ -161,6 +161,19 @@ describe('Jarvis tools', () => {
     expect(plan.blocks.find((block) => block.taskId === task.id)).toMatchObject({ startMin: 900, endMin: 960, source: 'manual' })
   })
 
+  it('makes a new task and places it in one proposal', async () => {
+    const day = next(2)
+    const done = await proposeAndConfirm('create_task', { title: 'Boodschappen doen', areaId: 'personal', estimateMinutes: 30, date: day, start: '17:00', end: '17:30' })
+    expect(done.failed).toEqual([])
+    expect(done.executed[0]!.summary).toContain('ingepland op')
+    expect(done.executed[0]!.result).toMatchObject({ created: 'Boodschappen doen', placed: `${day} 17:00–17:30` })
+    const blocks = (await api.plans.day(day)).blocks.filter((block) => block.taskTitle === 'Boodschappen doen')
+    expect(blocks.map((block) => [block.startMin, block.endMin])).toEqual([[17 * 60, 17 * 60 + 30]])
+
+    const half = (await runTool(api, 'create_task', { title: 'Half', areaId: 'personal', date: day, start: '18:00' })) as { error?: string }
+    expect(half.error).toContain('date, start én end')
+  })
+
   it('lets tasks run through each other, and says so', async () => {
     const day = next(4)
     const bo = await api.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 60 })

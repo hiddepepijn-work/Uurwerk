@@ -71,7 +71,8 @@ export const DEFAULT_SETTINGS: Settings = {
   serverUrl: '',
   focusShortcuts: false,
   focusBlockedApps: ['steam', 'discord', 'epicgameslauncher', 'spotify'],
-  jarvisWakeWord: true
+  jarvisWakeWord: true,
+  jarvisVoiceModel: 'openai'
 }
 
 export class SettingsRepo {

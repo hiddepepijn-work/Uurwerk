@@ -257,6 +257,7 @@ interface OpenAIEvent {
   error?: { message?: string; code?: string }
   response?: {
     status?: string
+    status_details?: { error?: { code?: string; message?: string } }
     output?: Array<{ type: string; call_id?: string; name?: string; arguments?: string }>
     usage?: OpenAIUsage
   }
@@ -267,6 +268,8 @@ class OpenAIWire implements Wire {
   private socket: WebSocket | null = null
   /** The answer that is playing, for cutting it off where Hidde stopped hearing it. */
   private replyItem: string | null = null
+  /** Answers asked again after the per-minute limit, in a row. */
+  private retries = 0
 
   static open(live: JarvisLiveSession, events: WireEvents): Promise<OpenAIWire> {
     const wire = new OpenAIWire()
@@ -330,6 +333,17 @@ class OpenAIWire implements Wire {
         break
       case 'response.done': {
         const response = event.response
+        // Over the per-minute token limit: OpenAI says how long to wait; then ask again.
+        const limited = response?.status_details?.error
+        if (limited?.code === 'rate_limit_exceeded' && this.retries < 3) {
+          const seconds = Number(/try again in ([\d.]+)\s*s/i.exec(limited.message ?? '')?.[1] ?? 5)
+          this.retries += 1
+          trail(`OpenAI-limiet per minuut; over ${seconds.toFixed(1)} s opnieuw`)
+          events.turnDone(true)
+          setTimeout(() => this.send({ type: 'response.create' }), Math.min(20_000, seconds * 1000 + 500))
+          break
+        }
+        if (response?.status === 'completed') this.retries = 0
         if (response?.usage) {
           const input = response.usage.input_token_details ?? {}
           const output = response.usage.output_token_details ?? {}
@@ -472,7 +486,7 @@ export class LiveCall {
     this.setPhase('thinking')
 
     const [live, stream] = await Promise.all([
-      api.jarvis.liveSession({ moment }),
+      LiveCall.session(moment),
       navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
       })
@@ -508,6 +522,24 @@ export class LiveCall {
     }
   }
 
+  /**
+   * A token for the model chosen in the settings. OpenAI that cannot start (no key, no
+   * credit, an outage) falls back to Gemini instead of leaving Hidde without Jarvis.
+   */
+  private static async session(moment: 'morning' | 'evening' | null): Promise<JarvisLiveSession> {
+    const settings = await Promise.resolve()
+      .then(() => api.settings.get())
+      .catch(() => null)
+    const chosen = settings?.jarvisVoiceModel ?? 'openai'
+    if (chosen === 'gemini') return api.jarvis.liveSession({ moment, provider: 'gemini' })
+    try {
+      return await api.jarvis.liveSession({ moment, provider: 'openai' })
+    } catch (error) {
+      trail(`OpenAI start niet (${error instanceof Error ? error.message : String(error)}); dan Gemini`)
+      return api.jarvis.liveSession({ moment, provider: 'gemini' })
+    }
+  }
+
   /** Opens the connection the server's token is for. */
   private async connect(live: JarvisLiveSession): Promise<void> {
     let wire: GeminiWire | OpenAIWire | null = null
@@ -517,7 +549,8 @@ export class LiveCall {
         this.handlers.onHeard(this.heard.trim())
       },
       interrupted: () => {
-        // Hidde started talking: stop Jarvis mid-sentence.
+        // Hidde started talking: stop Jarvis mid-sentence. What he says now is a new line.
+        this.heard = ''
         if (this.playing.size > 0) this.cutOff()
         this.setPhase('listening')
       },
