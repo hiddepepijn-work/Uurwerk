@@ -62,7 +62,7 @@ struct CheckinLiveActivity: Widget {
             } minimal: {
                 CheckinMiniRing(state: context.state, stale: context.isStale)
             }
-            .keylineTint(Palette.accent)
+            .keylineTint(context.state.busy ? Palette.busyText : Palette.accent)
         }
     }
 }
@@ -133,6 +133,16 @@ enum CheckinPhase {
     }
 }
 
+/// The colour of the ring and the clock: what the moment is, and whether the timer runs.
+@available(iOS 17.0, *)
+func checkinTone(_ phase: CheckinPhase, busy: Bool) -> Color {
+    switch phase {
+    case .before: return Palette.faint
+    case .during: return busy ? Palette.busyText : Palette.accent
+    case .after: return Palette.now
+    }
+}
+
 /// Counts down to the start before the block, to the end during it; "klaar?" afterwards.
 @available(iOS 17.0, *)
 struct CheckinClock: View {
@@ -152,7 +162,7 @@ struct CheckinClock: View {
             Text(timerInterval: now...state.end, countsDown: true)
                 .monospacedDigit()
                 .multilineTextAlignment(.trailing)
-                .foregroundStyle(Palette.accent)
+                .foregroundStyle(state.busy ? Palette.busyText : Palette.accent)
         }
     }
 }
@@ -175,7 +185,7 @@ struct CheckinRing: View {
                 .stroke(Palette.ringTrack, lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: progress(phase: phase, now: now))
-                .stroke(phase == .after ? Palette.now : Palette.accent, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(checkinTone(phase, busy: state.busy), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             VStack(spacing: 0) {
                 switch phase {
@@ -246,11 +256,11 @@ struct CheckinMiniRing: View {
             Circle().stroke(Palette.ringTrack, lineWidth: 3)
             Circle()
                 .trim(from: 0, to: fraction(phase: phase, now: now))
-                .stroke(phase == .after ? Palette.now : Palette.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .stroke(checkinTone(phase, busy: state.busy), style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Image(systemName: phase == .after ? "questionmark" : "checkmark")
                 .font(.system(size: 8, weight: .heavy))
-                .foregroundStyle(phase == .after ? Palette.dangerText : Palette.accentSoft)
+                .foregroundStyle(phase == .after ? Palette.dangerText : checkinTone(phase, busy: state.busy))
         }
         .frame(width: 20, height: 20)
     }
