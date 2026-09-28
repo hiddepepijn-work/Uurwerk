@@ -29,6 +29,8 @@ export interface LiveHandlers {
   onEnd(problem: string | null): void
   /** A tool ran: the laptop's corner shows what a confirm changed. */
   onToolResult?(name: string, result: unknown): void
+  /** He said goodbye (end_conversation) and has finished speaking: the call is over. */
+  onGoodbye?(): void
 }
 
 /** Both models take 24 kHz (Gemini resamples); the context is made before the token is in. */
@@ -552,6 +554,8 @@ export class LiveCall {
   private usage: JarvisLiveUsage = { ...EMPTY }
   private frame = 0
   private closed = false
+  /** end_conversation was called: close once the goodbye has been spoken. */
+  private goodbye = false
   /** How often a dropped connection was picked up (Gemini only: it hands out handles). */
   private resumes = 0
   /** For the trail: loudest the microphone got since the last report, chunks sent. */
@@ -697,10 +701,12 @@ export class LiveCall {
         this.working = working
         this.replyDone = true
         this.muted = false
+        if (this.goodbye && !working) this.leaveAfterSpeaking()
       },
       usage: (usage) => add(this.usage, usage),
       tools: async (calls) => {
         trail(`tools: ${calls.map((call) => call.name).join(', ')}`)
+        if (calls.some((call) => call.name === 'end_conversation')) this.goodbye = true
         this.setPhase('thinking')
         return Promise.all(
           calls.map(async (call) => {
@@ -921,6 +927,22 @@ export class LiveCall {
     this.heard = text
     this.wire?.text(text)
     this.setPhase('thinking')
+  }
+
+  /** Waits until the goodbye has been heard, then ends the call and tells the screen. */
+  private leaveAfterSpeaking(): void {
+    const check = (): void => {
+      if (this.closed) return
+      if (this.playing.size > 0) {
+        setTimeout(check, 200)
+        return
+      }
+      trail('gesprek afgesloten door Jarvis (doei)')
+      this.finish(null)
+      this.handlers.onGoodbye?.()
+    }
+    // A beat after the last word, so the goodbye does not get clipped.
+    setTimeout(check, 600)
   }
 
   private finish(problem: string | null): void {

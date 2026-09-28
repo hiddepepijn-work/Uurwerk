@@ -146,6 +146,12 @@ export const TOOLS: ToolSpec[] = [
     proposes: true
   },
   {
+    name: 'end_conversation',
+    description: 'Het gesprek afsluiten: bij "doei", "dat was het", "sluit jezelf maar af", of een ja op jouw "was dat het?". Zeg in dezelfde beurt kort gedag; daarna sluit het gesprek vanzelf.',
+    parameters: object({}),
+    writes: false
+  },
+  {
     name: 'report_problem',
     description: 'Hidde is niet tevreden over hoe je iets deed ("dat ging fout", "noteer een klacht"): leg het vast, met het gesprek erbij, zodat het verbeterd wordt. Direct, geen voorstel. Zeg daarna kort het nummer.',
     parameters: object(
@@ -1090,6 +1096,10 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
         }))
       }
     }
+
+    case 'end_conversation':
+      // The app closes the conversation once this answer has been spoken (live.ts).
+      return { ending: true, next: 'Zeg kort gedag, één zin. Het gesprek sluit daarna vanzelf.' }
 
     case 'upcoming': {
       const weeks = Math.min(8, Math.max(1, Number(input.weeks) || 4))

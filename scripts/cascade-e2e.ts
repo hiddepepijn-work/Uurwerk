@@ -221,6 +221,12 @@ ${remembers ? '✓' : '✗'} nieuw gesprek, "Wat hebben we net samen ingepland?"
   if (!complaintOk) problems += 1
   console.log(`\n${complaintOk ? '✓' : '✗'} klacht vastgelegd: ${saved?.number ?? 'niet'}, ${saved?.turns.length ?? 0} beurten van dit gesprek, ${saved?.previous?.turns.length ?? 0} van het vorige\n   Jarvis: ${complaint.reply.trim()}`)
 
+  // Goodbye: he closes the conversation himself (the app then shuts the screen).
+  const bye = await say('Oké, dat was het, doei!')
+  const byeOk = bye.tools.includes('end_conversation') && bye.reply.trim().length > 0
+  if (!byeOk) problems += 1
+  console.log(`\n${byeOk ? '✓' : '✗'} doei: tools ${bye.tools.join(', ') || '-'}\n   Jarvis: ${bye.reply.trim()}`)
+
   socket.close(1000)
   await sleep(3000)
   const freeAfter = !voiceBusy()

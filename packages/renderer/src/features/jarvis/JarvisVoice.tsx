@@ -211,6 +211,10 @@ export function JarvisVoice({
             setIsLive(false)
             setProblem(trouble)
             setPhase('idle')
+          },
+          // "Doei": he said goodbye and finished speaking, so the screen closes too.
+          onGoodbye: () => {
+            if (alive.current) onClose()
           }
         })
         if (!alive.current) {
