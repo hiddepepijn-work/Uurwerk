@@ -68,6 +68,11 @@ export function readSpend(usagePath: string): JarvisLiveSpend {
   return { month, usd: 0, capUsd: cap(), live: 0, text: 0 }
 }
 
+/** The cascade's cost, counted on the server (the device reports nothing for it). */
+export function addCostUsd(usagePath: string, usd: number): JarvisLiveSpend {
+  return addSpend(usagePath, 'live', usd)
+}
+
 function addSpend(usagePath: string, kind: 'live' | 'text', usd: number): JarvisLiveSpend {
   const spend = readSpend(usagePath)
   const live = round(spend.live + (kind === 'live' ? usd : 0))

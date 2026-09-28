@@ -37,7 +37,10 @@ import { log, setLogFile } from '@backend/log.js'
 import { syncAllAccounts } from '@backend/calendar/index.js'
 import type { TimeTrackerAPI } from '@core/contract/api.js'
 import type { Host } from '@backend/host.js'
+import type { Duplex } from 'node:stream'
+
 import { createJarvis } from './jarvis/index.js'
+import { handleVoiceUpgrade } from './jarvis/voice.js'
 
 /** What server.js hands over: the published-files store it already has. */
 export interface PublishedStore {
@@ -60,6 +63,8 @@ export interface App {
     method: string,
     device: string
   ): Promise<void>
+  /** A WebSocket upgrade (Jarvis's voice line); false when the path is not ours. */
+  upgrade(request: IncomingMessage, socket: Duplex, head: Buffer, url: URL): boolean
   close(): void
 }
 
@@ -315,6 +320,7 @@ export async function startApp(options: AppOptions): Promise<App> {
 
   return {
     handle,
+    upgrade: handleVoiceUpgrade,
     close() {
       for (const timer of timers) clearInterval(timer)
       backend?.store.db.close()

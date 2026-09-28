@@ -120,6 +120,8 @@ interface WireEvents {
   /** A new answer starts. */
   replyStart(): void
   audio(base64: string): void
+  /** A whole sentence as an encoded file (MP3): decoded and played in order. */
+  audioFile(base64: string): void
   replyText(delta: string): void
   /** An answer is done; `working`: he is still on it (tools running, or "even kijken"). */
   turnDone(working: boolean): void
@@ -413,10 +415,119 @@ class OpenAIWire implements Wire {
   }
 }
 
+/**
+ * Our own voice line (server: app/jarvis/voice.ts): the server hears, thinks with Gemini
+ * Flash and speaks with Edge's voice; this side only streams the microphone, plays the
+ * sentences and runs the tools. The end of Hidde's turn is the gate closing here.
+ */
+class CascadeWire implements Wire {
+  private socket: WebSocket | null = null
+  /** An answer is on its way (thinking or speaking): talking now means cutting it off. */
+  private replying = false
+  /** Set by the call: what cutting him off means on this side (stop the voice, say how much was heard). */
+  bargeIn: () => void = () => undefined
+
+  static open(live: JarvisLiveSession, events: WireEvents): Promise<CascadeWire> {
+    const wire = new CascadeWire()
+    const url = `${String(live.config.url)}?t=${encodeURIComponent(live.token)}`
+    return new Promise((resolve, reject) => {
+      const socket = new WebSocket(url)
+      socket.binaryType = 'arraybuffer'
+      wire.socket = socket
+      let open = false
+      socket.onopen = () => {
+        open = true
+        resolve(wire)
+      }
+      socket.onerror = () => {
+        trail('verbindingsfout (eigen lijn)')
+        if (!open) reject(new Error('Kon geen verbinding maken met Jarvis.'))
+      }
+      socket.onclose = (event) => {
+        if (open) events.closed(event.code, event.reason)
+        else reject(new Error(`Jarvis weigerde de verbinding: ${event.code} ${event.reason}`))
+      }
+      socket.onmessage = (message: MessageEvent<string>) => {
+        let event: { type?: string; text?: string; delta?: string; data?: string; id?: string; name?: string; args?: Record<string, unknown>; message?: string }
+        try {
+          event = JSON.parse(String(message.data)) as typeof event
+        } catch {
+          return
+        }
+        switch (event.type) {
+          case 'heard':
+            events.heard(event.text ?? '')
+            break
+          case 'reply_start':
+            wire.replying = true
+            events.replyStart()
+            break
+          case 'reply_text':
+            events.replyText(event.delta ?? '')
+            break
+          case 'audio_mp3':
+            if (event.data) events.audioFile(event.data)
+            break
+          case 'tool_call': {
+            const call = { id: event.id ?? '', name: event.name ?? '', args: event.args ?? {} }
+            void events.tools([call]).then(([done]) => wire.send({ type: 'tool_result', id: call.id, result: done?.result ?? null }))
+            break
+          }
+          case 'turn_done':
+            wire.replying = false
+            events.turnDone(false)
+            break
+          case 'error':
+            trail(`eigen lijn: ${event.message ?? '?'}`)
+            wire.replying = false
+            events.replyStart()
+            events.replyText(event.message ?? 'Er ging iets mis.')
+            events.turnDone(false)
+            break
+        }
+      }
+    })
+  }
+
+  private send(message: Record<string, unknown>): void {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message))
+  }
+
+  audio(pcm: ArrayBuffer): void {
+    if (this.replying) {
+      // He talks while an answer is coming: that answer stops, this is a new question.
+      this.replying = false
+      this.bargeIn()
+    }
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(pcm)
+  }
+
+  paused(): void {
+    this.send({ type: 'end' })
+  }
+
+  text(text: string): void {
+    this.send({ type: 'text', text })
+  }
+
+  cutOff(playedMs: number): void {
+    this.replying = false
+    this.send({ type: 'cutoff', ms: Math.max(0, Math.round(playedMs)) })
+  }
+
+  close(): void {
+    try {
+      this.socket?.close(1000)
+    } catch {
+      // Already closed.
+    }
+  }
+}
+
 // ------------------------------------------------------------- the call
 
 export class LiveCall {
-  private wire: GeminiWire | OpenAIWire | null = null
+  private wire: GeminiWire | OpenAIWire | CascadeWire | null = null
   private micContext: AudioContext | null = null
   private voiceContext: AudioContext | null = null
   private stream: MediaStream | null = null
@@ -530,19 +641,19 @@ export class LiveCall {
     const settings = await Promise.resolve()
       .then(() => api.settings.get())
       .catch(() => null)
-    const chosen = settings?.jarvisVoiceModel ?? 'openai'
+    const chosen = settings?.jarvisVoiceModel ?? 'cascade'
     if (chosen === 'gemini') return api.jarvis.liveSession({ moment, provider: 'gemini' })
     try {
-      return await api.jarvis.liveSession({ moment, provider: 'openai' })
+      return await api.jarvis.liveSession({ moment, provider: chosen })
     } catch (error) {
-      trail(`OpenAI start niet (${error instanceof Error ? error.message : String(error)}); dan Gemini`)
+      trail(`${chosen} start niet (${error instanceof Error ? error.message : String(error)}); dan Gemini`)
       return api.jarvis.liveSession({ moment, provider: 'gemini' })
     }
   }
 
   /** Opens the connection the server's token is for. */
   private async connect(live: JarvisLiveSession): Promise<void> {
-    let wire: GeminiWire | OpenAIWire | null = null
+    let wire: GeminiWire | OpenAIWire | CascadeWire | null = null
     const events: WireEvents = {
       heard: (delta) => {
         this.heard += delta
@@ -561,6 +672,9 @@ export class LiveCall {
       },
       audio: (data) => {
         if (!this.muted) this.play(data)
+      },
+      audioFile: (data) => {
+        if (!this.muted) this.playFile(data)
       },
       replyText: (delta) => {
         if (this.muted) return
@@ -597,7 +711,20 @@ export class LiveCall {
         void this.resumeOrFinish(code === 1000 ? null : reason || 'De verbinding met Jarvis is gesloten.')
       }
     }
-    wire = live.provider === 'openai' ? await OpenAIWire.open(live, events) : await GeminiWire.open(live, events)
+    if (live.provider === 'cascade') {
+      const cascade = await CascadeWire.open(live, events)
+      // Talking over him: stop his voice here and tell the server how much was heard.
+      cascade.bargeIn = () => {
+        this.heard = ''
+        this.cutOff()
+        this.setPhase('listening')
+      }
+      // The end of a turn is decided here: a short pause is enough, the line waits for nothing.
+      this.gate.hangoverMs = 900
+      wire = cascade
+    } else {
+      wire = live.provider === 'openai' ? await OpenAIWire.open(live, events) : await GeminiWire.open(live, events)
+    }
     this.wire = wire
   }
 
@@ -674,6 +801,20 @@ export class LiveCall {
 
   // --------------------------------------------------------------- voice
 
+  /** Sentences decode in parallel but play in the order they came. */
+  private files: Promise<void> = Promise.resolve()
+
+  private playFile(data: string): void {
+    const context = this.voiceContext
+    if (!context) return
+    const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0))
+    const decoded = context.decodeAudioData(bytes.buffer).catch(() => null)
+    this.files = this.files.then(async () => {
+      const buffer = await decoded
+      if (buffer && !this.muted && !this.closed) this.schedule(buffer)
+    })
+  }
+
   private play(data: string): void {
     const context = this.voiceContext
     if (!context || !this.analyser) return
@@ -681,6 +822,13 @@ export class LiveCall {
     const buffer = context.createBuffer(1, samples.length, VOICE_RATE)
     const channel = buffer.getChannelData(0)
     for (let i = 0; i < samples.length; i++) channel[i] = samples[i]! / 0x8000
+    this.schedule(buffer)
+  }
+
+  /** Plays a piece of his voice right after what is already queued. */
+  private schedule(buffer: AudioBuffer): void {
+    const context = this.voiceContext
+    if (!context || !this.analyser) return
     const source = context.createBufferSource()
     source.buffer = buffer
     source.connect(this.analyser)

@@ -166,6 +166,13 @@ export async function createUurwerkServer(config = readConfig()) {
     })
   })
 
+  // Jarvis's voice line is a WebSocket; it gets in with a one-time ticket (see app/jarvis/voice.ts).
+  server.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
+    if (app?.upgrade?.(request, socket, head, url)) return
+    socket.destroy()
+  })
+
   async function handle(request, response) {
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
     const path = decodeURIComponent(url.pathname)

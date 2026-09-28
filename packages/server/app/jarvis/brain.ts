@@ -126,7 +126,16 @@ export class Brain implements ThinkingBrain {
   }
 
   /** The cache of instruction + tools: made on the first turn, kept alive while talking. */
-  private async ensureCache(): Promise<number> {
+  /** A cache being made or renewed: a second caller waits for it instead of making its own. */
+  private pending: Promise<number> | null = null
+
+  private ensureCache(): Promise<number> {
+    // warm() and the first question can arrive together; one cache, not two.
+    this.pending ??= this.renewCache().finally(() => (this.pending = null))
+    return this.pending
+  }
+
+  private async renewCache(): Promise<number> {
     const now = Date.now()
     if (this.cache && this.cache.until - now > 60_000) return 0
     if (this.cache) {

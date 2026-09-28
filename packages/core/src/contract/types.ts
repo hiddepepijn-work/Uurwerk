@@ -1458,8 +1458,8 @@ export interface Settings {
   // ---------------------------------------------------------------- jarvis
   /** Laptop: listen for "Hey Jarvis". Per device. */
   jarvisWakeWord: boolean
-  /** Which realtime model he talks with: OpenAI's mini (cheap) or Gemini Live (sharper). */
-  jarvisVoiceModel: 'openai' | 'gemini'
+  /** How he talks: our own line (Flash + Edge voice, cheapest), OpenAI's mini, or Gemini Live. */
+  jarvisVoiceModel: 'cascade' | 'openai' | 'gemini'
 }
 
 // ------------------------------------------------------------------ Jarvis

@@ -27,6 +27,7 @@ import { briefForModel } from './brief.js'
 import { claude, compatible, openai, usageListeners, type Conversation, type Effort, type Provider } from './providers.js'
 import { effortFor } from './effort.js'
 import { addTextUsage, addUsage, liveSession, openaiSession, readSpend } from './live.js'
+import { configureVoice, VOICE_PATH, voiceTicket } from './voice.js'
 import { speak, speakFree, speakGemini } from './speech.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 
@@ -108,6 +109,7 @@ export function createJarvis(
   usagePath: string
 ): TimeTrackerAPI['jarvis'] {
   const conversations = new Map<string, Live>()
+  configureVoice({ api, secret: (name) => secrets.get(name), usagePath, system: SYSTEM })
   const model = process.env.JARVIS_MODEL?.trim() || 'claude-opus-5'
   // Low for everyday questions; replanning ("plan de week opnieuw") thinks harder.
   const effort = (process.env.JARVIS_EFFORT as Effort | undefined) ?? 'low'
@@ -278,6 +280,15 @@ export function createJarvis(
     },
 
     async liveSession(input) {
+      if (input.provider === 'cascade') {
+        if (!secrets.get('geminiKey') || !secrets.get('openaiKey')) throw new Error('Voor de eigen lijn zijn geminiKey en openaiKey nodig op de server.')
+        const spend = readSpend(usagePath)
+        if (spend.usd >= spend.capUsd) throw new Error(`Het spraakbudget van deze maand (${spend.capUsd}) is op. Typen werkt nog.`)
+        await markMoment(input.moment)
+        const opening = input.moment ? MOMENT[input.moment] : null
+        const base = process.env.JARVIS_PUBLIC_WS?.trim() || 'wss://uurwerk.duckdns.org'
+        return { provider: 'cascade', token: voiceTicket(opening), apiVersion: '', model: 'cascade', config: { url: `${base}${VOICE_PATH}` }, opening: null, spend }
+      }
       const provider = input.provider ?? (process.env.JARVIS_LIVE_PROVIDER?.trim() === 'openai' ? 'openai' : 'gemini')
       const keyName = provider === 'openai' ? 'openaiKey' : 'geminiKey'
       const key = secrets.get(keyName)

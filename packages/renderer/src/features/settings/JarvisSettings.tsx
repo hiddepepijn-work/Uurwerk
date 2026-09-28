@@ -39,13 +39,14 @@ export function JarvisSettings({
       <SettingRow label="Luisteren naar “Hey Jarvis”" hint="Houdt de microfoon open; Windows toont dan het microfoon-icoontje">
         <Toggle checked={settings.jarvisWakeWord} onChange={(next) => onPatch({ jarvisWakeWord: next })} />
       </SettingRow>
-      <SettingRow label="Stem-model" hint="OpenAI mini kost ongeveer een kwart; Gemini is iets slimmer. Lukt OpenAI niet, dan neemt Gemini het over.">
+      <SettingRow label="Stem-model" hint="Eigen lijn: Gemini Flash denkt, Maarten praat; ruim onder €10 per maand. Lukt die niet, dan neemt Gemini Live het over.">
         <select
           value={settings.jarvisVoiceModel}
           onChange={(event) => onPatch({ jarvisVoiceModel: event.target.value as Settings['jarvisVoiceModel'] })}
           className="rounded-[8px] border border-border bg-bg px-3 py-2 text-[14px] text-text outline-none focus:border-accent"
         >
-          <option value="openai">OpenAI realtime mini · goedkoop</option>
+          <option value="cascade">Eigen lijn · Flash + Maarten (goedkoopst)</option>
+          <option value="openai">OpenAI realtime mini</option>
           <option value="gemini">Gemini Live · slimmer</option>
         </select>
       </SettingRow>

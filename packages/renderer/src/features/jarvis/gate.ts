@@ -29,6 +29,8 @@ export const BARGE_IN = 0.06
 export const HANGOVER_MS = 2000
 
 export class SpeechGate {
+  /** Our own line ends the turn on this pause; the realtime models wanted more silence. */
+  hangoverMs = HANGOVER_MS
   private noise = 0.004
   private open = false
   private lastVoice = 0
@@ -47,7 +49,7 @@ export class SpeechGate {
       return { send: true, opened: true, closed: false, threshold }
     }
     // Open: keep sending through pauses; close once the voice has been gone long enough.
-    if (now - this.lastVoice > HANGOVER_MS) {
+    if (now - this.lastVoice > this.hangoverMs) {
       this.open = false
       return { send: true, opened: false, closed: true, threshold }
     }
