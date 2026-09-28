@@ -79,6 +79,8 @@ export interface BrainOptions {
   key: string
   model?: string
   thinking?: 'low' | 'medium' | 'high'
+  /** Where an earlier conversation left off: carried on instead of starting blank. */
+  history?: unknown[]
   /** The instruction that stays the same (rules, brief); goes into the cache. */
   fixed: string
 }
@@ -112,6 +114,7 @@ export class Brain implements ThinkingBrain {
   constructor(private readonly options: BrainOptions) {
     this.model = options.model ?? 'gemini-3.8-flash'
     this.thinking = options.thinking ?? 'low'
+    if (options.history) this.history = options.history as Content[]
   }
 
   private async call(path: string, body?: unknown, method = 'POST'): Promise<Record<string, unknown>> {
@@ -253,6 +256,11 @@ export class Brain implements ThinkingBrain {
     }
     this.history = lastExchanges(this.history, (content) => content.role === 'user' && content.parts.some((part) => part.text !== undefined))
     return { text: text.trim(), firstTextMs, usage, usd: brainUsd(usage) + cacheUsd }
+  }
+
+  /** The conversation so far, for the next one to carry on from. */
+  get conversation(): unknown[] {
+    return this.history
   }
 
   /** Makes the cache before the first question, so that question does not wait for it. */

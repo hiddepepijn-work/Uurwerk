@@ -20,6 +20,8 @@ export const AudioFocus = registerPlugin<{
   listenStop(): Promise<void>
   /** Keeps the screen on (true) or lets it sleep again (false): a live Jarvis call stops when it locks. */
   keepAwake(options: { on: boolean }): Promise<void>
+  /** A live call: conversation audio, with the AirPods' microphone when they are in. */
+  voiceSession(options: { on: boolean }): Promise<{ input?: string }>
   addListener(
     event: 'speechPartial' | 'speechEnd' | 'speechLevel',
     handler: (data: { text?: string; level?: number }) => void
@@ -35,6 +37,7 @@ export const AudioFocus = registerPlugin<{
     },
     listenStop: async () => undefined,
     keepAwake: async () => undefined,
+    voiceSession: async () => ({}),
     addListener: async () => ({ remove: async () => undefined })
   }
 })

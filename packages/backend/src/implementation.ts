@@ -78,6 +78,17 @@ export function buildImplementation(
     projectOverview
   } = backend
 
+  /**
+   * A task that is done is taken out of the planning from now on (Hidde's rule, 28 Sep
+   * 2026: finished work kept its blocks on later days, and Jarvis could not remove them).
+   */
+  const clearFuturePlanning = (taskId: string): void => {
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const removed = store.plans.removeFutureBlocksOfTask(taskId, today, now.getHours() * 60 + now.getMinutes())
+    if (removed > 0) emitEvent('data:invalidated', { domain: 'planning' })
+  }
+
   const implementation: Implementation = {
     areas: {
       list: async (includeArchived) => store.areas.list(includeArchived ?? false),
@@ -200,11 +211,13 @@ export function buildImplementation(
       },
       update: async (id, patch) => {
         const updated = store.tasks.update(id, patch)
+        if (patch.status === 'done') clearFuturePlanning(id)
         emitEvent('data:invalidated', { domain: 'tasks' })
         return updated
       },
       complete: async (id, done) => {
         const updated = store.tasks.complete(id, done)
+        if (done) clearFuturePlanning(id)
         emitEvent('data:invalidated', { domain: 'tasks' })
         return updated
       },

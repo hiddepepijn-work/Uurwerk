@@ -386,6 +386,17 @@ export class PlanRepo {
   }
 
   /**
+   * A finished task leaves the planning: its blocks from now on go, in every plan. The past
+   * stays, as the record of when it was worked on. Returns how many blocks went.
+   */
+  removeFutureBlocksOfTask(taskId: string, today: string, nowMin: number): number {
+    const where = 'task_id = ? AND (date > ? OR (date = ? AND start_min >= ?))'
+    const count = this.db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM plan_blocks WHERE ${where}`, [taskId, today, today, nowMin])?.n ?? 0
+    if (count > 0) this.db.run(`DELETE FROM plan_blocks WHERE ${where}`, [taskId, today, today, nowMin])
+    return count
+  }
+
+  /**
    * Copies every block of one plan onto another, recording where each came from.
    * The originalBlockId chain is what lets a diff report "moved" instead of
    * "one block disappeared and an unrelated one appeared".

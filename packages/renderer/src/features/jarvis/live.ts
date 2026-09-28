@@ -587,6 +587,11 @@ export class LiveCall {
   private async open(moment: 'morning' | 'evening' | null): Promise<void> {
     // In the car holder the screen must stay on: iOS pauses the call when it locks.
     void window.audioFocus?.keepAwake?.({ on: true }).catch(() => undefined)
+    // Before the microphone opens: on the phone, the AirPods' microphone when they are in.
+    const route = window.audioFocus?.voiceSession?.({ on: true }).catch((error: unknown) => {
+      trail(`audio voor gesprek: ${error instanceof Error ? error.message : String(error)}`)
+      return null
+    })
     // Audio first, while the tap that opened this still counts as a gesture.
     this.micContext = new AudioContext({ sampleRate: MIC_RATE })
     this.voiceContext = new AudioContext()
@@ -597,6 +602,7 @@ export class LiveCall {
     void this.voiceContext.resume()
     this.setPhase('thinking')
 
+    await route
     const [live, stream] = await Promise.all([
       LiveCall.session(moment),
       navigator.mediaDevices.getUserMedia({
@@ -722,8 +728,9 @@ export class LiveCall {
           this.setPhase('listening')
         }
       }
-      // The end of a turn is decided here: a short pause is enough, the line waits for nothing.
-      this.gate.hangoverMs = 900
+      // Flux decides when the turn ends and needs to hear the pause for it: keep sending
+      // 2 s of it. Without Flux the server falls back to the gate closing.
+      this.gate.hangoverMs = 2000
       wire = cascade
     } else {
       wire = live.provider === 'openai' ? await OpenAIWire.open(live, events) : await GeminiWire.open(live, events)
@@ -916,6 +923,7 @@ export class LiveCall {
     if (this.closed) return
     this.closed = true
     void window.audioFocus?.keepAwake?.({ on: false }).catch(() => undefined)
+    void window.audioFocus?.voiceSession?.({ on: false }).catch(() => undefined)
     cancelAnimationFrame(this.frame)
     this.level.current = 0
     this.stopVoice()

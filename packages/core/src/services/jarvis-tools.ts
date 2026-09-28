@@ -203,6 +203,13 @@ export const TOOLS: ToolSpec[] = [
     proposes: true
   },
   {
+    name: 'unschedule_task',
+    description: 'Haalt één taak uit de planning zonder hem af te vinken: op één dag (date), of anders alles vanaf nu. Afvinken (update_task done) doet dit al vanzelf.' + PROPOSAL,
+    parameters: object({ taskId: { type: 'string' }, date: { ...date, description: 'Optioneel: alleen deze dag' } }, ['taskId']),
+    writes: true,
+    proposes: true
+  },
+  {
     name: 'clear_planning',
     description: 'Wist wat planner en Jarvis in een periode zetten; wat Hidde zette blijft.' + PROPOSAL,
     parameters: object({ from: date, to: date }, ['from', 'to']),
@@ -583,6 +590,8 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
       return `Taak "${await taskTitle(input.taskId)}" ${input.move === true ? 'verzetten naar' : 'inplannen op'} ${String(input.date)} ${String(input.start)}–${String(input.end)}`
     case 'plan_range':
       return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} opnieuw laten maken (afspraken en handmatige blokken blijven)`
+    case 'unschedule_task':
+      return `Taak "${await taskTitle(input.taskId)}" uit de planning halen ${input.date ? `op ${String(input.date)}` : 'vanaf nu'}`
     case 'clear_planning':
       return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} wissen (afspraken en wat Hidde zelf zette blijven)`
     case 'create_appointment':
@@ -767,6 +776,8 @@ function cardsFor(tool: string, input: Input, result: unknown): JarvisCard[] {
       )
     case 'plan_range':
       return [card('planning', 'gewijzigd', `${String(out.plannedBlocks)} blokken opnieuw gepland`, `${shortDay(String(out.from))} – ${shortDay(String(out.to))}`, out.from)]
+    case 'unschedule_task':
+      return [card('planning', 'weg', out.task, `${String(out.removedBlocks)} blok(ken) weg`, input.date)]
     case 'clear_planning':
       return [card('planning', 'weg', `${String(out.removedBlocks)} blokken weggehaald`, `${shortDay(String(out.from))} – ${shortDay(String(out.to))}`, out.from)]
     case 'apply_day_plan':
@@ -1130,6 +1141,27 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
         plannedHours: Math.round((result.plannedMin / 60) * 10) / 10,
         notPlaced: result.unplaced.map((entry) => `${entry.taskTitle} (${entry.minutes} min): ${entry.reason}`)
       }
+    }
+
+    case 'unschedule_task': {
+      const taskId = String(input.taskId)
+      const task = await api.tasks.get(taskId)
+      if (!task) throw new Error('Die taak bestaat niet.')
+      const now = new Date()
+      const nowMin = now.getHours() * 60 + now.getMinutes()
+      const today = isoDate(now)
+      // One day, or from now on: the next eight weeks is where planning lives.
+      const days = input.date ? [String(input.date)] : Array.from({ length: 56 }, (_, offset) => isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset)))
+      let removed = 0
+      for (const day of days) {
+        for (const block of (await api.plans.day(day)).blocks) {
+          if (block.taskId !== taskId) continue
+          if (!input.date && day === today && block.startMin < nowMin) continue
+          await api.plans.removeBlock(block.id)
+          removed += 1
+        }
+      }
+      return { task: task.title, removedBlocks: removed }
     }
 
     case 'clear_planning': {

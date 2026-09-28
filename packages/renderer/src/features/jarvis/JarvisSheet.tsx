@@ -25,6 +25,8 @@ declare global {
       release(): Promise<void>
       /** Phone only: keep the screen on during a live call. */
       keepAwake?(options: { on: boolean }): Promise<void>
+      /** Phone only: conversation audio, with the AirPods' microphone when they are in. */
+      voiceSession?(options: { on: boolean }): Promise<{ input?: string }>
     }
     webkitSpeechRecognition?: new () => SpeechRecognitionLike
     SpeechRecognition?: new () => SpeechRecognitionLike

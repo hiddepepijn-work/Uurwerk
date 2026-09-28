@@ -179,6 +179,29 @@ describe('Jarvis tools', () => {
     expect(half.error).toContain('date, start én end')
   })
 
+  it('takes a finished task out of the planning from now on, and keeps the past', async () => {
+    const task = await api.tasks.create({ title: 'Verslag afronden', areaId: 'school', estimateMin: 60 })
+    const later = next(3)
+    const muchLater = next(5)
+    await proposeAndConfirm('schedule_task', { taskId: task.id, date: later, start: '19:00', end: '20:00' })
+    await proposeAndConfirm('schedule_task', { taskId: task.id, date: muchLater, start: '19:00', end: '20:00' })
+    const done = await proposeAndConfirm('update_task', { taskId: task.id, status: 'done' })
+    expect(done.failed).toEqual([])
+    for (const day of [later, muchLater]) {
+      expect((await api.plans.day(day)).blocks.filter((block) => block.taskId === task.id)).toEqual([])
+    }
+  })
+
+  it('takes a task out of the planning of one day without finishing it', async () => {
+    const task = await api.tasks.create({ title: 'Kast schilderen', areaId: 'personal', estimateMin: 60 })
+    const day = next(4)
+    await proposeAndConfirm('schedule_task', { taskId: task.id, date: day, start: '19:00', end: '20:00' })
+    const out = await proposeAndConfirm('unschedule_task', { taskId: task.id, date: day })
+    expect(out.executed[0]!.result).toMatchObject({ removedBlocks: 1 })
+    expect((await api.plans.day(day)).blocks.filter((block) => block.taskId === task.id)).toEqual([])
+    expect((await api.tasks.get(task.id))!.status).not.toBe('done')
+  })
+
   it('marks a deadline in the next days with too little planned for it', async () => {
     const tomorrow = ahead(1)
     const task = await api.tasks.create({ title: 'Scriptie inleveren', areaId: 'school', estimateMin: 180, dueDate: tomorrow })

@@ -46,6 +46,14 @@ export interface VoiceDeps {
 }
 
 let deps: VoiceDeps | null = null
+
+/**
+ * The last conversation, so a new one within half an hour (the same day) carries on from it:
+ * "weet je nog waar we het over hadden" got a blank. One person, so one memory.
+ */
+let recent: { history: unknown[]; endedAt: number; day: string } | null = null
+const CARRY_ON_MS = 30 * 60_000
+const dayKey = (): string => new Date().toDateString()
 const tickets = new Map<string, { expires: number; opening: string | null }>()
 const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 })
 
@@ -354,6 +362,10 @@ class VoiceSession {
   private flux: FluxListener | null = null
   /** Flux handed this utterance over already; the gate closing after it changes nothing. */
   private fluxHandled = false
+  /** After the old way took a sentence, a late Flux turn for it is ignored until then. */
+  private ignoreFluxUntil = 0
+  /** Tools of the running turn, for the log. */
+  private toolNames: string[] = []
   private fillers = 0
   /** The turn that may still speak; older ones finish quietly. */
   private turn = 0
@@ -372,7 +384,14 @@ class VoiceSession {
     const key = deps.secret('geminiKey')
     if (!key) throw new Error('Geen geminiKey op de server.')
     this.parts = instructionParts({ api: deps.api, system: deps.system, opening })
-    this.brain = new Brain({ key, model: process.env.JARVIS_CASCADE_MODEL?.trim() || 'gemini-3.8-flash', thinking: 'low', fixed: this.parts.fixed })
+    const carried = recent && recent.day === dayKey() && Date.now() - recent.endedAt < CARRY_ON_MS ? recent.history : undefined
+    this.brain = new Brain({
+      key,
+      model: process.env.JARVIS_CASCADE_MODEL?.trim() || 'gemini-3.8-flash',
+      thinking: 'low',
+      fixed: this.parts.fixed,
+      history: carried
+    })
 
     ws.on('message', (data, isBinary) => {
       if (isBinary) {
@@ -426,6 +445,8 @@ class VoiceSession {
   /** Flux heard the end of his turn, with the words: straight to the answer. */
   private fluxTurn(text: string): void {
     this.utterance = []
+    // The old way already took this sentence (Flux was late): once is enough.
+    if (Date.now() < this.ignoreFluxUntil) return
     this.fluxHandled = true
     if (!text.trim()) return
     this.send({ type: 'heard', text })
@@ -446,6 +467,7 @@ class VoiceSession {
         return
       }
       log.warn('Jarvis cascade: Flux gave no end of turn; transcribing the old way.')
+      this.ignoreFluxUntil = Date.now() + 5000
     }
     const pcm = Buffer.concat(this.utterance)
     this.utterance = []
@@ -484,6 +506,7 @@ class VoiceSession {
         clearTimeout(timer)
         resolve(result)
       })
+      this.toolNames.push(name)
       this.send({ type: 'tool_call', id, name, args })
     })
   }
@@ -553,6 +576,9 @@ class VoiceSession {
         }
       )
       this.spent += result.usd
+      // The whole exchange, so a conversation can be read back when something went wrong.
+      log.info('Jarvis cascade turn.', { heard: text, reply: result.text, tools: this.toolNames, cut: turn !== this.turn })
+      this.toolNames = []
       if (turn === this.turn) {
         chunker.flush()
         await this.speech
@@ -591,6 +617,7 @@ class VoiceSession {
     this.closed = true
     for (const resolve of this.tools.values()) resolve({ error: 'Het gesprek is gesloten.' })
     this.tools.clear()
+    recent = { history: this.brain.conversation, endedAt: Date.now(), day: dayKey() }
     this.listener?.close()
     this.flux?.close()
     if (this.flux) this.spent += (this.flux.bytes / (SAMPLE_RATE * 2) / 60) * FLUX_PER_MINUTE

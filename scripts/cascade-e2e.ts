@@ -111,17 +111,20 @@ async function main(): Promise<void> {
     return
   }
 
-  const socket = new WebSocket(`ws://localhost:${PORT}${VOICE_PATH}?t=${voiceTicket(null)}`)
-  socket.binaryType = 'arraybuffer'
-  await new Promise<void>((resolve, reject) => {
-    socket.onopen = () => resolve()
-    socket.onerror = () => reject(new Error('geen verbinding'))
-  })
-
+  let socket!: WebSocket
   let turn: Turn | null = null
   let ended = 0
   let done: (() => void) | null = null
-  socket.onmessage = (message) => {
+  const connect = async (): Promise<void> => {
+    socket = new WebSocket(`ws://localhost:${PORT}${VOICE_PATH}?t=${voiceTicket(null)}`)
+    socket.binaryType = 'arraybuffer'
+    await new Promise<void>((resolve, reject) => {
+      socket.onopen = () => resolve()
+      socket.onerror = () => reject(new Error('geen verbinding'))
+    })
+    socket.onmessage = receive
+  }
+  const receive = (message: MessageEvent): void => {
     const event = JSON.parse(String(message.data)) as { type: string; text?: string; delta?: string; data?: string; id?: string; name?: string; args?: Record<string, unknown>; message?: string }
     if (!turn) return
     const since = Date.now() - ended
@@ -164,6 +167,8 @@ async function main(): Promise<void> {
     }
   }
 
+  await connect()
+
   const say = async (text: string): Promise<Turn> => {
     const pcm = await clip(text)
     turn = { said: text, heard: '', reply: '', tools: [], heardMs: null, firstTextMs: null, firstAudioMs: null, doneMs: null, sentences: 0 }
@@ -195,6 +200,16 @@ async function main(): Promise<void> {
     console.log(`   eerste tekst na ${result.firstTextMs ?? '–'} ms (denken ${result.firstTextMs !== null && result.heardMs !== null ? result.firstTextMs - result.heardMs : '–'} ms), eerste woord na ${result.firstAudioMs ?? '–'} ms (stem ${result.firstAudioMs !== null && result.firstTextMs !== null ? result.firstAudioMs - result.firstTextMs : '–'} ms), klaar na ${result.doneMs ?? '–'} ms, ${result.sentences} zinnen, tools: ${result.tools.join(', ') || '-'}`)
     console.log(`   Jarvis: ${result.reply.trim()}`)
   }
+  // A new conversation a moment later carries on from this one.
+  socket.close(1000)
+  await sleep(2000)
+  await connect()
+  const again = await say('Wat hebben we net samen ingepland?')
+  const remembers = /kast/i.test(again.reply)
+  if (!remembers) problems += 1
+  console.log(`
+${remembers ? '✓' : '✗'} nieuw gesprek, "Wat hebben we net samen ingepland?"
+   Jarvis: ${again.reply.trim()}`)
   socket.close(1000)
   await sleep(3000)
   console.log(`\nkosten (server-teller): ${existsSync(usagePath) ? readFileSync(usagePath, 'utf8') : '–'}`)

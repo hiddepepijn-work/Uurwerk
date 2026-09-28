@@ -26,7 +26,8 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setWidgetData", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "listenStart", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "listenStop", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "keepAwake", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "keepAwake", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "voiceSession", returnType: CAPPluginReturnPromise)
     ]
 
     private var audioEngine: AVAudioEngine?
@@ -164,6 +165,31 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             UIApplication.shared.isIdleTimerDisabled = on
             call.resolve()
+        }
+    }
+
+    /// A live Jarvis call: record and play as a conversation. With AirPods (or any Bluetooth
+    /// headset) connected, their microphone and speakers are used; otherwise the loudspeaker.
+    /// The web view on its own picked the iPhone microphone even with AirPods in.
+    @objc func voiceSession(_ call: CAPPluginCall) {
+        let on = call.getBool("on") ?? false
+        DispatchQueue.main.async {
+            do {
+                let session = AVAudioSession.sharedInstance()
+                if on {
+                    try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .defaultToSpeaker])
+                    try session.setActive(true)
+                    if let headset = session.availableInputs?.first(where: { $0.portType == .bluetoothHFP }) {
+                        try session.setPreferredInput(headset)
+                    }
+                } else {
+                    try session.setActive(false, options: .notifyOthersOnDeactivation)
+                    try session.setCategory(.ambient, mode: .default, options: [])
+                }
+                call.resolve(["input": session.currentRoute.inputs.first?.portName ?? ""])
+            } catch {
+                call.reject("Kon de audio voor het gesprek niet instellen: \(error.localizedDescription)")
+            }
         }
     }
 
