@@ -8,7 +8,7 @@ import { TOOLS } from '@core/services/jarvis-tools.js'
 
 import { writeFileSync } from 'node:fs'
 
-import { addTextUsage, addUsage, readSpend, toSchema } from './live.js'
+import { addTextUsage, addUsage, readSpend, toSchema, usageUsd } from './live.js'
 
 let dir: string
 let path: string
@@ -47,6 +47,11 @@ describe('live spend', () => {
       thoughts: 0
     })
     expect(spend.usd).toBeCloseTo(0.3 + 0.03 + 0.3 + 2.4 + 20)
+  })
+
+  it('prices the full realtime model at its own, higher rates', () => {
+    const usd = usageUsd({ provider: 'openai', textIn: 1_000_000, audioIn: 0, textOut: 1_000_000, audioOut: 1_000_000, thoughts: 0 }, 'gpt-realtime-2.1')
+    expect(usd).toBeCloseTo(4 + 24 + 64)
   })
 
   it('ignores nonsense counts', () => {

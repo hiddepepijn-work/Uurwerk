@@ -22,8 +22,10 @@ import { runTool, TOOLS } from '@core/services/jarvis-tools.js'
 
 /** Gemini 3.8 Live prices per million tokens; thinking counts as text output. */
 const PRICE = { textIn: 0.75, audioIn: 3, textOut: 4.5, audioOut: 12, thoughts: 4.5 } as const
-/** OpenAI gpt-realtime-2.1-mini per million tokens; what comes from its cache costs a fraction. */
-const OPENAI_PRICE = { textIn: 0.6, textInCached: 0.06, audioIn: 10, audioInCached: 0.3, textOut: 2.4, audioOut: 20 } as const
+/** OpenAI Realtime per million tokens; what comes from its cache costs a fraction. */
+const OPENAI_MINI = { textIn: 0.6, textInCached: 0.06, audioIn: 10, audioInCached: 0.3, textOut: 2.4, audioOut: 20 } as const
+const OPENAI_FULL = { textIn: 4, textInCached: 0.4, audioIn: 32, audioInCached: 0.4, textOut: 24, audioOut: 64 } as const
+export const openaiModel = (): string => process.env.JARVIS_REALTIME_MODEL?.trim() || 'gpt-realtime-2.1-mini'
 
 const API_VERSION = 'v1alpha'
 
@@ -91,13 +93,13 @@ export function addUsage(usagePath: string, usage: JarvisLiveUsage): JarvisLiveS
 }
 
 /** What one conversation's tokens cost, at its provider's prices. */
-export function usageUsd(usage: JarvisLiveUsage): number {
+export function usageUsd(usage: JarvisLiveUsage, model = openaiModel()): number {
   const clean = (value: number | undefined): number => (Number.isFinite(value) && value! > 0 ? value! : 0)
   if (usage.provider === 'openai') {
     // Cached input is part of the input count, and billed at the cached price instead.
     const textCached = Math.min(clean(usage.textInCached), clean(usage.textIn))
     const audioCached = Math.min(clean(usage.audioInCached), clean(usage.audioIn))
-    const P = OPENAI_PRICE
+    const P = /mini/.test(model) ? OPENAI_MINI : OPENAI_FULL
     return (
       ((clean(usage.textIn) - textCached) * P.textIn +
         textCached * P.textInCached +
@@ -238,7 +240,7 @@ export async function openaiSession(options: LiveOptions): Promise<JarvisLiveSes
   if (spend.usd >= spend.capUsd) {
     throw new Error(`Het spraakbudget van deze maand ($${spend.capUsd}) is op. Typen werkt nog.`)
   }
-  const model = process.env.JARVIS_REALTIME_MODEL?.trim() || 'gpt-realtime-2.1-mini'
+  const model = openaiModel()
   const voice = process.env.JARVIS_REALTIME_VOICE?.trim() || 'cedar'
   const instruction = await instructionFor(options)
 
