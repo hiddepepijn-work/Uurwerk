@@ -90,11 +90,11 @@ export function PendingPlans({ open, onClose }: { open: boolean; onClose: () => 
       footer={
         confirmingDiscard ? (
           <>
-            <span className="text-[13px] text-prio-high">
+            <span className="text-[14px] font-semibold text-danger-text">
               Delete {chosen.size} day{chosen.size === 1 ? '' : 's'} of planning —{' '}
               {formatDuration(totalMin)} — for good? Tracked hours are kept.
             </span>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2">
               <Button variant="ghost" onClick={() => setConfirmingDiscard(false)} disabled={busy}>
                 Keep them
               </Button>
@@ -109,12 +109,12 @@ export function PendingPlans({ open, onClose }: { open: boolean; onClose: () => 
           </>
         ) : (
           <>
-            <span className="text-[13px] text-text-dim">
+            <span className="text-[14px] text-text-dim">
               {chosen.size === 0
                 ? 'Nothing selected.'
                 : `${chosen.size} day${chosen.size === 1 ? '' : 's'} · ${formatDuration(totalMin)} planned`}
             </span>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2">
               <Button variant="ghost" onClick={onClose} disabled={busy}>
                 {outcome ? 'Close' : 'Cancel'}
               </Button>
@@ -138,13 +138,13 @@ export function PendingPlans({ open, onClose }: { open: boolean; onClose: () => 
       }
     >
       {problem && (
-        <div className="mb-5 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
+        <div className="mb-5 rounded-input bg-warn-soft px-4 py-3 text-[14px] font-semibold text-warn">
           {problem}
         </div>
       )}
 
       {outcome && (
-        <div className="mb-5 rounded-[10px] border border-accent/30 bg-accent/5 px-4 py-3 text-[13px] text-text">
+        <div className="mb-5 rounded-input bg-area-stage-tint px-4 py-3 text-[14px] font-semibold text-accent-soft">
           {outcome.count} day{outcome.count === 1 ? '' : 's'} {outcome.verb}.{' '}
           {outcome.verb === 'accepted'
             ? 'They are in your week now.'
@@ -153,18 +153,18 @@ export function PendingPlans({ open, onClose }: { open: boolean; onClose: () => 
       )}
 
       {drafts.length === 0 ? (
-        <p className="py-6 text-center text-[13px] text-text-faint">
+        <p className="py-6 text-center text-[14px] text-text-faint">
           Nothing is waiting. Every plan you have made has been accepted.
         </p>
       ) : (
-        <ul className="flex flex-col gap-1">
+        <ul className="flex flex-col gap-1.5">
           {drafts.map((draft) => {
             const ticked = chosen.has(draft.planId)
             return (
               <li key={draft.planId}>
                 <label
-                  className={`flex cursor-pointer items-center gap-3 rounded-[10px] border px-3.5 py-3 transition-colors ${
-                    ticked ? 'border-accent/40 bg-rail-active' : 'border-border hover:bg-card-hover'
+                  className={`flex cursor-pointer items-center gap-3 rounded-[14px] px-4 py-3 transition-colors ${
+                    ticked ? 'bg-area-stage-tint shadow-[inset_0_0_0_1.5px_rgb(93_174_134/0.45)]' : 'bg-input hover:bg-secondary-hover'
                   }`}
                 >
                   <input
@@ -175,16 +175,16 @@ export function PendingPlans({ open, onClose }: { open: boolean; onClose: () => 
                   />
 
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] text-text">{longDate(draft.periodKey)}</span>
-                    <span className="mt-0.5 block text-[12px] text-text-dim">
+                    <span className="block text-[14px] font-bold text-text">{longDate(draft.periodKey)}</span>
+                    <span className="mt-0.5 block text-[13px] text-text-dim">
                       {draft.blockCount} block{draft.blockCount === 1 ? '' : 's'}
                       {draft.replacesAccepted && (
-                        <span className="text-prio-med"> · replaces the plan already in force</span>
+                        <span className="font-semibold text-warn"> · replaces the plan already in force</span>
                       )}
                     </span>
                   </span>
 
-                  <span className="shrink-0 font-mono text-[13px] text-text-dim tabular-nums">
+                  <span className="shrink-0 font-mono text-[14px] font-bold text-text-dim tabular-nums">
                     {formatDuration(draft.plannedMin)}
                   </span>
                 </label>
@@ -194,7 +194,7 @@ export function PendingPlans({ open, onClose }: { open: boolean; onClose: () => 
         </ul>
       )}
 
-      <p className="mt-5 text-[12px] leading-relaxed text-text-faint">
+      <p className="mt-5 text-[13px] leading-[1.5] text-text-faint">
         Accepting makes a day the plan in force. The first plan you ever accept for a day stays
         reachable as its baseline, so the report can still show what you originally intended
         alongside what you ended up doing. Deleting throws the draft away instead — useful for a

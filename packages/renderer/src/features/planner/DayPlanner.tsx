@@ -9,7 +9,7 @@ import { Button } from '../../ui/Button.js'
 import { Modal } from '../../ui/Modal.js'
 import { TimeField } from '../../ui/TimeField.js'
 import { PriorityDot } from '../../ui/PriorityDot.js'
-import { CalendarIcon, CheckIcon, PlusIcon, SparkIcon } from '../../ui/icons.js'
+import { CalendarIcon, CheckIcon, CloseIcon, PlusIcon, SparkIcon } from '../../ui/icons.js'
 import { formatDuration, formatLongDate, formatMinuteOfDay } from '../../lib/format.js'
 import { DayGrid } from './DayGrid.js'
 
@@ -343,7 +343,7 @@ export function DayPlanner({ date, open, onClose }: Props) {
       footer={
         confirmingClear ? (
           <>
-            <span className="text-[13px] text-prio-high">
+            <span className="text-[14px] font-semibold text-danger-text">
               Leave this day with no plan at all? Tracked hours are kept.
             </span>
             <div className="flex gap-3">
@@ -357,13 +357,16 @@ export function DayPlanner({ date, open, onClose }: Props) {
           </>
         ) : (
           <>
-            <span className="text-[13px] text-text-dim">
-              {formatDuration(planned)} planned of {formatDuration(available)} available
+            <span className="text-[14px] text-text-dim">
+              <span className="font-bold text-text tabular-nums">
+                {formatDuration(planned)} planned
+              </span>{' '}
+              of {formatDuration(available)} available
               {planned > available && (
-                <span className="ml-2 text-prio-med">— more than fits in the day</span>
+                <span className="ml-2 font-semibold text-warn">— more than fits in the day</span>
               )}
             </span>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2">
               {/* Two different retreats, and conflating them is what made this look broken.
                   Discard drops the edits and falls back to the plan in force; Clear says
                   there should be no plan here at all. The second is only offered when there
@@ -381,7 +384,8 @@ export function DayPlanner({ date, open, onClose }: Props) {
               </Button>
               <Button
                 variant="primary"
-                icon={<CheckIcon size={15} />}
+                className="px-5! text-[15px]!"
+                icon={<CheckIcon size={16} />}
                 onClick={() => void accept()}
                 disabled={busy || blocks.length === 0}
               >
@@ -393,19 +397,19 @@ export function DayPlanner({ date, open, onClose }: Props) {
       }
     >
       {problem && (
-        <div className="mb-5 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
+        <div className="mb-5 rounded-input bg-warn-soft px-4 py-3 text-[14px] font-semibold text-warn">
           {problem}
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 wide:grid-cols-[300px_minmax(0,1fr)]">
         {/* ------------------------------------------------------- sidebar */}
-        <div className="flex min-h-0 flex-col gap-5">
-          <div className="rounded-[12px] border border-border bg-bg p-4">
-            <h3 className="mb-3 text-[14px] font-semibold">Working hours today</h3>
+        <div className="flex min-h-0 flex-col gap-3">
+          <div className="flex flex-col gap-3 rounded-card border border-border p-4">
+            <h3 className="text-[15px] font-bold">Working hours today</h3>
             <div className="flex items-center gap-2">
               <TimeField value={startMin} onChange={(next) => void saveHours(next, endMin)} />
-              <span className="text-text-dim">to</span>
+              <span className="text-[13px] text-text-faint">to</span>
               {/* A day may legitimately end at midnight; the native input rejected 24:00. */}
               <TimeField
                 value={endMin}
@@ -413,14 +417,14 @@ export function DayPlanner({ date, open, onClose }: Props) {
                 onChange={(next) => void saveHours(startMin, next)}
               />
             </div>
-            <p className="mt-2 text-[12px] text-text-faint">
+            <p className="text-[13px] leading-[1.45] text-text-dim">
               {formatDuration(available)} available. Set it to whatever today really is — early,
               late, or a short day.
             </p>
             <Button
               variant="secondary"
               size="sm"
-              className="mt-3 w-full"
+              className="self-start"
               icon={<PlusIcon size={14} />}
               onClick={() => void addBreak()}
             >
@@ -428,9 +432,9 @@ export function DayPlanner({ date, open, onClose }: Props) {
             </Button>
           </div>
 
-          <div className="rounded-[12px] border border-border bg-bg p-4">
-            <h3 className="mb-1 text-[14px] font-semibold">Meetings and appointments</h3>
-            <p className="mb-3 text-[12px] leading-relaxed text-text-dim">
+          <div className="flex flex-col gap-2.5 rounded-card border border-border p-4">
+            <h3 className="text-[15px] font-bold">Meetings and appointments</h3>
+            <p className="text-[13px] leading-[1.45] text-text-dim">
               Times you are committed elsewhere. The planner schedules around them and never
               moves them, and they survive every replan.
             </p>
@@ -440,12 +444,12 @@ export function DayPlanner({ date, open, onClose }: Props) {
               onChange={(event) => setMeetingTitle(event.target.value)}
               onKeyDown={(event) => event.key === 'Enter' && void addMeeting()}
               placeholder="Meeting with Margriet"
-              className="mb-2 w-full rounded-[8px] border border-border bg-card px-3 py-2 text-[13px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+              className="h-10 w-full rounded-input bg-input px-3 text-[14px] font-medium text-text outline-none placeholder:text-text-faint focus:ring-2 focus:ring-accent/40"
             />
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <TimeField value={meetingFrom} onChange={setMeetingFrom} />
-              <span className="text-text-dim">to</span>
+              <span className="text-[13px] text-text-faint">to</span>
               <TimeField value={meetingTo} onChange={setMeetingTo} />
               <Button
                 variant="secondary"
@@ -459,22 +463,25 @@ export function DayPlanner({ date, open, onClose }: Props) {
             </div>
 
             {events.length > 0 && (
-              <ul className="mt-3 flex flex-col gap-1">
+              <ul className="flex flex-col gap-1.5">
                 {events.map((event) => (
                   <li
                     key={event.id}
-                    className="flex items-center gap-2 rounded-[8px] px-2 py-1.5 text-[12px] hover:bg-card-hover"
+                    className="flex h-10 items-center gap-2.5 rounded-input bg-warn-soft pr-1.5 pl-3"
                   >
-                    <span className="min-w-0 flex-1 truncate text-text">{event.title}</span>
-                    <span className="shrink-0 font-mono text-text-dim">
+                    <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-text">
+                      {event.title}
+                    </span>
+                    <span className="shrink-0 font-mono text-[13px] font-bold text-warn">
                       {formatMinuteOfDay(event.startMin)}–{formatMinuteOfDay(event.endMin)}
                     </span>
                     <button
                       onClick={() => void removeMeeting(event.id)}
                       title="Remove"
-                      className="shrink-0 rounded p-0.5 text-text-faint hover:text-prio-high"
+                      aria-label="Remove"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-text-dim transition-colors hover:bg-danger-soft hover:text-danger-text"
                     >
-                      ✕
+                      <CloseIcon size={12} />
                     </button>
                   </li>
                 ))}
@@ -482,18 +489,18 @@ export function DayPlanner({ date, open, onClose }: Props) {
             )}
           </div>
 
-          <div className="rounded-[12px] border border-accent/30 bg-rail-active p-4">
-            <h3 className="mb-1 text-[14px] font-semibold">Let Uurwerk plan it</h3>
-            <p className="mb-3 text-[12px] leading-relaxed text-text-dim">
+          <div className="flex flex-col gap-2.5 rounded-card bg-area-stage-tint p-4">
+            <h3 className="text-[15px] font-bold text-accent-soft">Let Uurwerk plan it</h3>
+            <p className="text-[13px] leading-[1.45] text-text-dim">
               Fills the free time using deadlines, priorities and dependencies. Anything you
               placed or locked yourself stays where it is, and you can still change everything
               afterwards.
             </p>
             <Button
               variant="primary"
-              size="sm"
-              className="w-full"
-              icon={<SparkIcon size={14} />}
+              size="md"
+              className="h-[46px]! w-full text-[15px]!"
+              icon={<SparkIcon size={16} />}
               onClick={() => void propose()}
               disabled={busy}
             >
@@ -506,7 +513,7 @@ export function DayPlanner({ date, open, onClose }: Props) {
               <Button
                 variant="secondary"
                 size="sm"
-                className="mt-2 w-full"
+                className="h-10! w-full text-[14px]!"
                 onClick={() => void replanRest()}
                 disabled={busy}
               >
@@ -514,7 +521,7 @@ export function DayPlanner({ date, open, onClose }: Props) {
               </Button>
             )}
             {proposal && (
-              <p className="mt-2 text-[12px] text-text-dim">
+              <p className="text-[13px] leading-[1.45] text-accent-soft">
                 Planned {formatDuration(proposal.plannedMin)}, kept{' '}
                 {formatDuration(proposal.bufferMin)} as buffer.
                 {proposal.unplaced.length > 0 && (
@@ -524,10 +531,10 @@ export function DayPlanner({ date, open, onClose }: Props) {
             )}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col rounded-[12px] border border-border bg-bg p-4">
-            <h3 className="mb-3 text-[14px] font-semibold">
+          <div className="flex min-h-0 flex-1 flex-col rounded-card border border-border px-4 pt-4 pb-2.5">
+            <h3 className="mb-1.5 flex items-center justify-between text-[15px] font-bold">
               Not planned yet
-              <span className="ml-2 text-[12px] font-normal text-text-dim">
+              <span className="rounded-pill bg-input px-2.5 py-0.5 text-[13px] font-bold text-text-dim tabular-nums">
                 {unscheduled.length}
               </span>
             </h3>
@@ -538,18 +545,18 @@ export function DayPlanner({ date, open, onClose }: Props) {
                   Everything on your list is in the plan.
                 </p>
               ) : (
-                <ul className="flex flex-col gap-1">
+                <ul className="flex flex-col gap-0.5">
                   {unscheduled.map((task) => (
                     <li key={task.id}>
                       <button
                         onClick={() => void addTask(task)}
-                        className="flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-card-hover"
+                        className="flex h-9 w-full items-center gap-2.5 rounded-[10px] px-1.5 text-left transition-colors hover:bg-card-hover"
                       >
                         <PriorityDot priority={task.priority} />
-                        <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+                        <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text">
                           {task.title}
                         </span>
-                        <span className="shrink-0 font-mono text-[11px] text-text-dim">
+                        <span className="shrink-0 font-mono text-[13px] font-bold text-text-dim">
                           {task.estimateMin ? formatDuration(task.estimateMin) : '—'}
                         </span>
                       </button>
@@ -563,12 +570,12 @@ export function DayPlanner({ date, open, onClose }: Props) {
 
         {/* ---------------------------------------------------------- grid */}
         <div className="min-w-0">
-          <div className="mb-3 flex items-center gap-2 text-[12px] text-text-dim">
+          <div className="mb-2.5 flex items-center gap-2 text-[13px] text-text-faint">
             <CalendarIcon size={14} />
             Drag a block to move it, pull its bottom edge to change how long it takes.
           </div>
 
-          <div className="max-h-[52vh] overflow-y-auto pr-1">
+          <div className="max-h-[52vh] overflow-y-auto rounded-card border border-border py-3.5 pr-3.5">
             <DayGrid
               startMin={startMin}
               endMin={endMin}

@@ -44,8 +44,8 @@ export function ScreenshotGrid({ screenshots, onToggle, onApproveAll, onDelete }
     <div>
       <div className="mb-4 flex items-center justify-between">
         <p className="text-[13px] text-text-dim">
-          <span className="font-mono text-text">{included}</span> of{' '}
-          <span className="font-mono text-text">{screenshots.length}</span> approved. Click a tile
+          <span className="font-mono font-bold text-text">{included}</span> of{' '}
+          <span className="font-mono font-bold text-text">{screenshots.length}</span> approved. Click a tile
           to include or exclude it; click the time to see it full size.
         </p>
         <div className="flex gap-2">
@@ -58,12 +58,12 @@ export function ScreenshotGrid({ screenshots, onToggle, onApproveAll, onDelete }
         </div>
       </div>
 
-      <div className="grid max-h-[46vh] grid-cols-2 gap-3 overflow-y-auto pr-1 wide:grid-cols-3 wide:gap-4">
+      <div className="grid max-h-[46vh] grid-cols-2 gap-3 overflow-y-auto p-0.5 pr-1 wide:grid-cols-3">
         {screenshots.map((shot) => (
           <div
             key={shot.id}
-            className={`group relative overflow-hidden rounded-[10px] border transition-colors
-              ${shot.included ? 'border-accent/50' : 'border-border opacity-55 hover:opacity-90'}`}
+            className={`group relative overflow-hidden rounded-button bg-input transition-[opacity,box-shadow]
+              ${shot.included ? 'ring-[1.5px] ring-accent' : 'opacity-55 hover:opacity-90'}`}
           >
             <button onClick={() => onToggle(shot.id, !shot.included)} className="block w-full text-left">
               <img
@@ -74,26 +74,26 @@ export function ScreenshotGrid({ screenshots, onToggle, onApproveAll, onDelete }
               />
               <span
                 className={`absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full
-                  ${shot.included ? 'bg-accent text-accent-ink' : 'bg-card text-text-dim'}`}
+                  ${shot.included ? 'bg-accent text-accent-ink' : 'bg-secondary text-text-dim'}`}
               >
                 {shot.included ? <CheckIcon size={13} /> : <CloseIcon size={13} />}
               </span>
             </button>
 
             <div className="flex items-center justify-between gap-2 px-3 py-2 text-[12px]">
-              <span className="min-w-0 flex-1 truncate text-text-dim" title={shot.taskTitle ?? ''}>
+              <span className="min-w-0 flex-1 truncate font-semibold text-text-dim" title={shot.taskTitle ?? ''}>
                 {shot.taskTitle ?? 'No task'}
               </span>
               <button
                 onClick={() => setZoomed(shot)}
-                className="shrink-0 font-mono text-text-faint hover:text-text"
+                className="shrink-0 font-mono font-bold text-text-faint hover:text-text"
               >
                 {formatClock(shot.capturedAt)}
               </button>
               <button
                 onClick={() => onDelete(shot.id)}
                 title="Delete this frame from disk"
-                className="shrink-0 text-text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-prio-high"
+                className="shrink-0 text-text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-danger-text"
               >
                 <TrashIcon size={14} />
               </button>
@@ -110,9 +110,9 @@ export function ScreenshotGrid({ screenshots, onToggle, onApproveAll, onDelete }
       {zoomed && (
         <button
           onClick={() => setZoomed(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-8"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-8"
         >
-          <img src={`file://${zoomed.path}`} alt="" className="max-h-full max-w-full rounded-[10px]" />
+          <img src={`file://${zoomed.path}`} alt="" className="max-h-full max-w-full rounded-card" />
         </button>
       )}
     </div>

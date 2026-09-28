@@ -2,7 +2,7 @@ import type { Area, Priority, Task } from '@core/contract/types.js'
 import { Card } from '../../ui/Card.js'
 import { EmptyState } from '../../ui/EmptyState.js'
 import { PriorityDot, PRIORITY_LABEL } from '../../ui/PriorityDot.js'
-import { FolderIcon, GearIcon } from '../../ui/icons.js'
+import { GearIcon } from '../../ui/icons.js'
 import { formatDuration } from '../../lib/format.js'
 
 const ORDER: Priority[] = ['high', 'medium', 'low']
@@ -31,9 +31,15 @@ export function PriorityView({
   onStart: (task: Task) => void
   onEdit: (task: Task) => void
 }) {
+  const today = todayIso()
+
   return (
-    <Card title="Priority view" padded={false} className="flex min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-1">
+    <Card padded={false} className="flex min-h-0 flex-col overflow-hidden pt-4 pb-1.5 wide:p-[18px]">
+      <h2 className="px-4 pb-1 font-display text-[20px] font-bold text-text wide:px-0 wide:pb-3.5 wide:font-sans wide:text-[16px]">
+        Priority view
+      </h2>
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto wide:gap-3.5">
         {tasks.length === 0 ? (
           <EmptyState title="No tasks yet." />
         ) : (
@@ -42,81 +48,77 @@ export function PriorityView({
             if (group.length === 0) return null
 
             return (
-              <section key={priority} className="mb-5 overflow-hidden rounded-[10px] border border-border">
-                <header className="flex items-center gap-2.5 border-b border-border bg-bg px-4 py-2.5">
+              <section key={priority} className="flex flex-col wide:gap-1">
+                <header className="flex items-center gap-2 pt-2.5 pr-1.5 pb-1.5 pl-4 wide:border-b wide:border-border wide:px-1 wide:pt-1">
                   <PriorityDot priority={priority} />
-                  <span className="text-[13px] font-medium text-text">{PRIORITY_LABEL[priority]}</span>
-                  <span className="rounded-full bg-card px-2 py-0.5 text-[11px] text-text-dim">
+                  <span className="text-[15px] font-bold text-text wide:text-[14px]">{PRIORITY_LABEL[priority]}</span>
+                  <span className="rounded-pill bg-input px-2 py-px text-[12px] font-bold text-text-dim">
                     {group.length}
                   </span>
-                  <span className="ml-auto flex gap-10 text-[12px] text-text-dim">
-                    <span>Due</span>
-                    <span>Logged</span>
+                  <span className="ml-auto flex items-center gap-2.5 text-[12px] font-bold tracking-[0.6px] text-text-faint wide:gap-3">
+                    <span className="w-[52px] wide:w-16 wide:text-right">Due</span>
+                    <span className="w-[104px] wide:w-[92px] wide:text-right">Logged</span>
+                    <span className="hidden w-8 wide:block" />
                   </span>
                 </header>
 
                 <ul>
-                  {group.map((task) => (
-                    <li
-                      key={task.id}
-                      className={`flex items-center gap-3.5 border-b border-border px-4 py-3 last:border-b-0
-                        ${task.id === activeTaskId ? 'bg-rail-active' : ''}`}
-                    >
-                      <button
-                        onClick={() => onToggleComplete(task)}
-                        aria-label="Toggle complete"
-                        className={`h-[17px] w-[17px] shrink-0 rounded-full border transition-colors
-                          ${task.status === 'done' ? 'border-accent bg-accent' : 'border-border-strong hover:border-accent'}`}
-                      />
-                      <button onClick={() => onStart(task)} className="min-w-0 flex-1 text-left">
-                        <div className="truncate text-[14px] text-text">{task.title}</div>
-                        <div className="mt-1 flex items-center gap-2 truncate text-[12px] text-text-dim">
-                          {task.projectName && (
-                            <span className="flex items-center gap-1.5 truncate">
-                              <FolderIcon size={12} />
-                              {task.projectName}
-                            </span>
-                          )}
-                          {(() => {
-                            const area = task.areaId ? areaById.get(task.areaId) : null
-                            if (!area) return null
-                            return (
-                              <span
-                                className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                                  area.countsAsStageHours
-                                    ? 'border-accent/30 bg-accent/10 text-accent'
-                                    : 'border-border bg-bg text-text-dim'
-                                }`}
-                              >
-                                {area.name}
-                              </span>
-                            )
-                          })()}
-                          {(waitingOnByTask?.get(task.id) ?? 0) > 0 && task.status !== 'done' && (
-                            <span
-                              title="The planner leaves this out until its prerequisites are finished."
-                              className="rounded-full border border-border bg-bg px-2 py-0.5 text-[11px] text-text-dim"
-                            >
-                              waits for {waitingOnByTask!.get(task.id)}
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                      <span className="w-20 shrink-0 text-right text-[13px] text-text-dim">
-                        {task.dueDate ? formatDue(task.dueDate) : '—'}
-                      </span>
-                      <span className="w-28 shrink-0 text-right font-mono text-[13px] text-text-dim">
-                        {formatDuration(task.loggedMin)} logged
-                      </span>
-                      <button
-                        onClick={() => onEdit(task)}
-                        aria-label="Edit task"
-                        className="shrink-0 rounded-md p-1.5 text-text-faint transition-colors hover:bg-card hover:text-text"
+                  {group.map((task) => {
+                    const area = task.areaId ? areaById.get(task.areaId) : null
+                    const waitingOn = waitingOnByTask?.get(task.id) ?? 0
+                    const overdue = Boolean(task.dueDate && task.dueDate < today && task.status !== 'done')
+
+                    return (
+                      <li
+                        key={task.id}
+                        className={`flex items-center gap-2.5 border-t border-border py-2.5 pr-1.5 pl-4
+                          wide:gap-3 wide:rounded-input wide:border-t-0 wide:px-1 wide:py-2
+                          ${task.id === activeTaskId ? 'bg-rail-active' : ''}`}
                       >
-                        <GearIcon size={14} />
-                      </button>
-                    </li>
-                  ))}
+                        <button
+                          onClick={() => onToggleComplete(task)}
+                          aria-label="Toggle complete"
+                          className={`h-[18px] w-[18px] shrink-0 rounded-full border-2 transition-colors
+                            ${task.status === 'done' ? 'border-accent bg-accent' : 'border-text-faint/70 hover:border-accent'}`}
+                        />
+                        <button onClick={() => onStart(task)} className="min-w-0 flex-1 text-left">
+                          <div className="text-[14px] leading-tight font-bold text-text wide:truncate wide:text-[15px]">
+                            {task.title}
+                          </div>
+                          <div className="mt-0.5 truncate text-[12px] font-semibold text-text-dim wide:text-[13px] wide:font-normal">
+                            {[task.projectName, area?.name].filter(Boolean).join(' · ')}
+                            {waitingOn > 0 && task.status !== 'done' && (
+                              <span title="The planner leaves this out until its prerequisites are finished.">
+                                {task.projectName || area ? ' · ' : ''}waits for {waitingOn}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                        <span
+                          className={`w-[52px] shrink-0 font-mono text-[13px] font-bold wide:w-16 wide:text-right wide:text-[14px] wide:font-semibold ${
+                            !task.dueDate
+                              ? 'text-text-faint'
+                              : overdue
+                                ? 'text-danger-text'
+                                : 'text-text wide:text-text-dim'
+                          }`}
+                        >
+                          {task.dueDate ? formatDue(task.dueDate) : '—'}
+                        </span>
+                        <span className="w-[66px] shrink-0 font-mono text-[12px] font-semibold text-text-dim wide:w-[92px] wide:text-right wide:text-[14px]">
+                          {formatDuration(task.loggedMin)} logged
+                        </span>
+                        <button
+                          onClick={() => onEdit(task)}
+                          aria-label="Edit task"
+                          title="Edit task"
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] text-text-faint transition-colors hover:bg-input hover:text-text wide:h-8 wide:w-8"
+                        >
+                          <GearIcon size={16} />
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               </section>
             )
@@ -133,4 +135,11 @@ function formatDue(isoDate: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(
     new Date(y!, (m ?? 1) - 1, d ?? 1)
   )
+}
+
+/** Local calendar date as YYYY-MM-DD, to colour a due date that has already passed. */
+function todayIso(): string {
+  const d = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }

@@ -15,7 +15,7 @@ export function StatCard({ icon, label, value, sub, progress }: Props) {
     <div className="flex flex-col gap-2 rounded-card bg-card p-4">
       <div className="flex items-center gap-[7px]">
         <span className="text-accent-soft">{icon}</span>
-        <span className="text-[13px] font-bold text-text-dim">{label}</span>
+        <span className="text-[12px] font-bold tracking-[0.8px] text-text-faint uppercase">{label}</span>
       </div>
       <div className="font-display text-[30px] leading-none font-bold tracking-[-0.6px] text-text tabular-nums">
         {value}

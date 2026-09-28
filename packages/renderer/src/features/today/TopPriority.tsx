@@ -21,28 +21,33 @@ export function TopPriority({ tasks, activeTaskId, onSelect, onSeeAll }: Props) 
       {tasks.length === 0 ? (
         <EmptyState title="No open tasks." hint="Press Ctrl+Alt+T to add one without leaving what you are doing." />
       ) : (
-        <ul className="flex flex-col gap-2 p-5 pt-4">
+        <ul className="flex flex-col gap-2 px-4 pt-3 pb-4 wide:gap-2.5 wide:px-5 wide:pb-5">
           {tasks.map((task) => {
             const isActive = task.id === activeTaskId
             return (
               <li key={task.id}>
                 <button
                   onClick={() => onSelect(task)}
-                  className={`flex w-full items-center gap-3 rounded-[10px] border p-3.5 text-left transition-colors
+                  className={`flex w-full items-center gap-3 rounded-[16px] border-[1.5px] p-3 text-left transition-colors
+                    wide:rounded-button wide:py-2.5
                     ${
                       isActive
-                        ? 'border-accent/40 bg-rail-active'
-                        : 'border-border bg-bg hover:bg-card-hover'
+                        ? 'border-accent bg-rail-active'
+                        : 'border-transparent bg-card-hover hover:bg-secondary'
                     }`}
                 >
                   <PriorityDot priority={task.priority} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[14px] text-text">{task.title}</div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div className="truncate text-[15px] font-bold text-text">{task.title}</div>
                     {task.projectName && (
-                      <div className="mt-0.5 truncate text-[12px] text-text-dim">{task.projectName}</div>
+                      <div className="truncate text-[13px] font-medium text-text-dim">{task.projectName}</div>
                     )}
                   </div>
-                  <div className="shrink-0 font-mono text-[13px] text-text-dim">
+                  <div
+                    className={`shrink-0 font-mono text-[14px] font-bold ${
+                      isActive ? 'text-accent-soft' : 'text-text-dim'
+                    }`}
+                  >
                     {task.estimateMin ? formatDuration(task.estimateMin) : formatDuration(task.loggedMin)}
                   </div>
                 </button>

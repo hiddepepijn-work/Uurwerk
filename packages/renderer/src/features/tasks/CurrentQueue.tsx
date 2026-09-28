@@ -29,8 +29,13 @@ export function CurrentQueue({
   const estimated = tasks.reduce((sum, task) => sum + (task.estimateMin ?? 0), 0)
 
   return (
-    <Card title="Current queue" padded={false} className="flex min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-1 pb-2">
+    <Card padded={false} className="flex min-h-0 flex-col overflow-hidden wide:px-[18px] wide:pt-[18px] wide:pb-3.5">
+      {/* Phone: a Bricolage heading like the other cards; wide: the quieter panel label. */}
+      <h2 className="px-4 pt-4 pb-2 font-display text-[20px] font-bold text-text wide:p-0 wide:pb-2.5 wide:font-sans wide:text-[16px]">
+        Current queue
+      </h2>
+
+      <div className="min-h-0 flex-1 overflow-y-auto wide:flex wide:flex-col wide:gap-1">
         {tasks.length === 0 ? (
           <EmptyState title="Nothing in the queue." hint="Add a task to start tracking against it." />
         ) : (
@@ -50,7 +55,7 @@ export function CurrentQueue({
         )}
       </div>
 
-      <footer className="flex items-center justify-between border-t border-border px-5 py-3.5 text-[13px] text-text-dim">
+      <footer className="flex items-center justify-between border-t border-border px-4 py-3 font-mono text-[13px] font-bold text-text-faint wide:mt-2.5 wide:px-0 wide:pt-2.5 wide:pb-0 wide:font-normal">
         <span>
           {tasks.length} task{tasks.length === 1 ? '' : 's'}
         </span>

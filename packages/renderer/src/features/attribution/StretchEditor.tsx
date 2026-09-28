@@ -144,7 +144,7 @@ export function StretchEditor({ target, onClose, onDone }: Props) {
         <>
           {!adding && !running ? (
             confirmingDelete ? (
-              <span className="text-[13px] text-prio-high">Delete these hours for good?</span>
+              <span className="text-[14px] font-semibold text-danger-text">Delete these hours for good?</span>
             ) : (
               <Button variant="danger" onClick={() => setConfirmingDelete(true)} disabled={busy}>
                 Delete
@@ -154,7 +154,7 @@ export function StretchEditor({ target, onClose, onDone }: Props) {
             <span />
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {confirmingDelete ? (
               <>
                 <Button variant="ghost" onClick={() => setConfirmingDelete(false)} disabled={busy}>
@@ -183,7 +183,7 @@ export function StretchEditor({ target, onClose, onDone }: Props) {
       }
     >
       {problem && (
-        <div className="mb-5 rounded-[10px] border border-prio-high/40 bg-prio-high/10 px-4 py-3 text-[13px] leading-relaxed text-prio-high">
+        <div className="mb-5 rounded-input bg-danger-soft px-4 py-3 text-[14px] leading-[1.45] font-semibold text-danger-text">
           {problem}
         </div>
       )}
@@ -204,20 +204,20 @@ export function StretchEditor({ target, onClose, onDone }: Props) {
           </div>
           <div className="flex flex-col gap-2">
             <span className="text-[13px] text-text-dim">Length</span>
-            <div className="rounded-[8px] border border-border bg-card px-2.5 py-1.5 font-mono text-[13px] text-text">
+            <div className="rounded-[10px] bg-input px-2.5 py-1.5 font-mono text-[13px] font-bold text-accent-soft">
               {durationMin <= 0 ? '—' : formatDuration(durationMin)}
             </div>
           </div>
         </div>
 
         {durationMin <= 0 && (
-          <p className="text-[12px] text-prio-med">
+          <p className="text-[13px] font-semibold text-warn">
             The end has to be later than the start. Equal times are no time at all.
           </p>
         )}
 
         {spansMidnight && (
-          <p className="text-[12px] text-text-dim">
+          <p className="text-[13px] text-text-dim">
             This ends the following morning. That is allowed — it is counted against both days
             where the totals need it.
           </p>
@@ -225,14 +225,14 @@ export function StretchEditor({ target, onClose, onDone }: Props) {
 
         <div>
           <div className="mb-2 flex items-baseline justify-between">
-            <h3 className="text-[15px] font-semibold">What did that time go to?</h3>
+            <h3 className="text-[15px] font-bold">What did that time go to?</h3>
             <span className="text-[13px] text-text-dim">
               {shares.length === 0
                 ? 'optional'
                 : `${formatDuration(assignedMin)} of ${formatDuration(durationMin)} assigned`}
             </span>
           </div>
-          <div className="rounded-[12px] border border-border bg-card p-4">
+          <div className="rounded-card border border-border p-4">
             <TaskShareList
               shares={shares}
               onChange={setShares}
@@ -251,12 +251,12 @@ export function StretchEditor({ target, onClose, onDone }: Props) {
             value={note}
             onChange={(event) => setNote(event.target.value)}
             placeholder="Optional — e.g. forgot to start the timer"
-            className="w-full rounded-[10px] border border-border bg-bg px-3.5 py-2.5 text-[14px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+            className="h-11 w-full rounded-input bg-input px-3.5 text-[14px] font-medium text-text outline-none placeholder:text-text-faint focus:ring-2 focus:ring-accent/40"
           />
         </label>
 
         {!adding && loaded?.attribution === 'estimated' && (
-          <p className="text-[12px] leading-relaxed text-text-faint">
+          <p className="text-[13px] leading-[1.5] text-text-faint">
             These minutes were measured but divided afterwards. Changing the shares leaves that
             as it is; changing the times makes the whole stretch hand-entered, because from
             then on the span is yours rather than the clock&apos;s.

@@ -3,7 +3,19 @@ import type { CalendarAccount, CalendarSource } from '@core/contract/types.js'
 import { api } from '../../api/client.js'
 import { useLiveQuery } from '../../hooks/useLiveQuery.js'
 import { Button } from '../../ui/Button.js'
-import { SettingRow, SettingsSection, Toggle, textField } from './SettingsSection.js'
+import {
+  SettingRow,
+  SettingsCard,
+  SettingsSection,
+  Toggle,
+  problemNote,
+  rowSelect,
+  successNote,
+  textField
+} from './SettingsSection.js'
+
+/** An input that grows to share a wrapping line with its neighbours. */
+const inputField = `${textField} h-11 w-auto min-w-0 flex-1`
 
 /**
  * Connected calendars.
@@ -133,55 +145,48 @@ export function CalendarSettings() {
         )
       }
     >
-      {problem && (
-        <div className="mb-4 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
-          {problem}
-        </div>
-      )}
-      {notice && (
-        <div className="mb-4 rounded-[10px] border border-accent/30 bg-accent/5 px-4 py-3 text-[13px] text-text">
-          {notice}
-        </div>
-      )}
+      {problem && <div className={problemNote}>{problem}</div>}
+      {notice && <div className={successNote}>{notice}</div>}
 
       {(accounts ?? []).map((account) => {
         const own = (calendars ?? []).filter((calendar) => calendar.accountId === account.id)
 
         return (
-          <div key={account.id} className="mb-4 rounded-[12px] border border-border bg-bg p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-[14px] text-text">
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      account.status === 'connected' ? 'bg-accent' : 'bg-prio-med'
-                    }`}
-                  />
-                  {account.displayName}
+          <SettingsCard key={account.id}>
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2.5 px-4 py-3.5 wide:px-5">
+              <div className="flex min-w-0 flex-1 basis-[220px] items-start gap-2.5">
+                <span
+                  className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                    account.status === 'connected' ? 'bg-accent' : 'bg-warn'
+                  }`}
+                />
+                <div className="min-w-0">
+                  <div className="text-[16px] font-bold text-text">{account.displayName}</div>
+                  <div className="mt-0.5 text-[13px] font-medium text-text-faint">
+                    Subscribed link{account.accountIdentifier ? ` · ${account.accountIdentifier}` : ''}
+                    {account.lastSyncAt
+                      ? ` · last synced ${new Date(account.lastSyncAt).toLocaleString('en-GB')}`
+                      : ' · never synced'}
+                  </div>
+                  {account.lastError && (
+                    <div className="mt-0.5 text-[13px] font-semibold text-warn">{account.lastError}</div>
+                  )}
                 </div>
-                <div className="mt-1 text-[12px] text-text-dim">
-                  Subscribed link{account.accountIdentifier ? ` · ${account.accountIdentifier}` : ''}
-                  {account.lastSyncAt
-                    ? ` · last synced ${new Date(account.lastSyncAt).toLocaleString('en-GB')}`
-                    : ' · never synced'}
-                </div>
-                {account.lastError && (
-                  <div className="mt-1 text-[12px] text-prio-med">{account.lastError}</div>
-                )}
               </div>
 
               <div className="flex shrink-0 gap-2">
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void syncNow(account.id)}>
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => void syncNow(account.id)}>
                   Sync
                 </Button>
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void disconnect(account)}>
+                <Button variant="danger" size="sm" disabled={busy} onClick={() => void disconnect(account)}>
                   Disconnect
                 </Button>
               </div>
             </div>
 
             {own.map((calendar) => (
-              <div key={calendar.id} className="mt-3 border-t border-border pt-3">
+              // One hairline above each calendar; its two rows sit together beneath it.
+              <div key={calendar.id} className="border-t border-border [&>div]:border-t-0">
                 <SettingRow
                   label={calendar.name}
                   hint="A default area means events from this calendar arrive classified instead of asking"
@@ -194,7 +199,7 @@ export function CalendarSettings() {
                           defaultAreaId: event.target.value || null
                         })
                       }
-                      className="rounded-[8px] border border-border bg-bg px-2.5 py-1.5 text-[13px] text-text-dim outline-none focus:border-accent"
+                      className={rowSelect}
                     >
                       <option value="">No default area</option>
                       {(areas ?? []).map((area) => (
@@ -219,23 +224,23 @@ export function CalendarSettings() {
                 </SettingRow>
               </div>
             ))}
-          </div>
+          </SettingsCard>
         )
       })}
 
       {/* iCloud is the only connection that can be written to, so it gets its own card
           rather than hiding behind the subscribe box that cannot. */}
-      <div className="mb-4 rounded-[12px] border border-accent/30 bg-accent/5 p-4">
-        <h3 className="mb-1 text-[14px] font-semibold">Connect iCloud</h3>
-        <p className="mb-3 max-w-xl text-[12px] leading-relaxed text-text-dim">
+      <div className="flex flex-col gap-2.5 rounded-card bg-area-stage-tint p-4 wide:p-5">
+        <h3 className="text-[16px] font-bold text-accent-soft">Connect iCloud</h3>
+        <p className="max-w-xl text-[14px] leading-[1.45] font-medium text-text-dim">
           The only connection that works in both directions. Uurwerk reads your calendars and
           writes your plan to a separate <strong className="text-text">Uurwerk</strong> calendar
           it creates — your own calendars are never written to.
         </p>
-        <p className="mb-3 max-w-xl text-[12px] leading-relaxed text-text-dim">
+        <p className="max-w-xl text-[14px] leading-[1.45] font-medium text-text-dim">
           You need an <strong className="text-text">app-specific password</strong>, not your
           Apple ID password. On your iPhone: Settings → your name → Sign-In &amp; Security →
-          App-Specific Passwords. It looks like <span className="font-mono">abcd-efgh-ijkl-mnop</span>.
+          App-Specific Passwords. It looks like <span className="font-code text-[13px]">abcd-efgh-ijkl-mnop</span>.
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -244,7 +249,7 @@ export function CalendarSettings() {
             onChange={(event) => setAppleId(event.target.value)}
             placeholder="Apple ID (e-mail)"
             autoComplete="off"
-            className="min-w-[220px] flex-1 rounded-[8px] border border-border bg-card px-3 py-2 text-[13px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+            className={`${inputField} basis-[220px]`}
           />
           <input
             value={appPassword}
@@ -254,11 +259,11 @@ export function CalendarSettings() {
             // Masked like any other credential: this is a real key to your iCloud data.
             type="password"
             autoComplete="off"
-            className="min-w-[200px] flex-1 rounded-[8px] border border-border bg-card px-3 py-2 font-mono text-[13px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+            className={`${inputField} basis-[200px] font-code`}
           />
           <Button
             variant="primary"
-            size="sm"
+            className="w-full wide:w-auto"
             disabled={busy || !appleId.trim() || !appPassword.trim()}
             onClick={() => void connectIcloud()}
           >
@@ -266,16 +271,16 @@ export function CalendarSettings() {
           </Button>
         </div>
 
-        <p className="mt-3 text-[12px] text-text-faint">
+        <p className="text-[12px] leading-[1.45] font-medium text-accent-soft">
           The password is encrypted with Windows DPAPI and never written to the database. Revoke
           it any time from the same Apple screen — it grants access to iCloud data only, and
           cannot change your account.
         </p>
       </div>
 
-      <div className="rounded-[12px] border border-border bg-bg p-4">
-        <h3 className="mb-1 text-[14px] font-semibold">Subscribe to a calendar</h3>
-        <p className="mb-3 max-w-xl text-[12px] leading-relaxed text-text-dim">
+      <SettingsCard className="flex flex-col gap-2.5 p-4 wide:p-5">
+        <h3 className="text-[16px] font-bold text-text">Subscribe to a calendar</h3>
+        <p className="max-w-xl text-[14px] leading-[1.45] font-medium text-text-dim">
           In Outlook on the web: Settings → Calendar → Shared calendars → Publish a calendar,
           choose <strong className="text-text">Can view all details</strong>, and copy the{' '}
           <strong className="text-text">ICS</strong> link. Anything that publishes an .ics works —
@@ -288,25 +293,30 @@ export function CalendarSettings() {
             onChange={(event) => setUrl(event.target.value)}
             onKeyDown={(event) => event.key === 'Enter' && void connect()}
             placeholder="https://outlook.office365.com/owa/calendar/…/calendar.ics"
-            className="min-w-[280px] flex-1 rounded-[8px] border border-border bg-card px-3 py-2 text-[13px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+            className={`${inputField} basis-[280px]`}
           />
           <input
             value={label}
             onChange={(event) => setLabel(event.target.value)}
             placeholder="Name (optional)"
-            className={textField}
+            className={`${inputField} basis-[180px]`}
           />
-          <Button variant="primary" size="sm" disabled={busy || !url.trim()} onClick={() => void connect()}>
+          <Button
+            variant="primary"
+            className="w-full wide:w-auto"
+            disabled={busy || !url.trim()}
+            onClick={() => void connect()}
+          >
             Subscribe
           </Button>
         </div>
 
-        <p className="mt-3 text-[12px] text-text-faint">
+        <p className="text-[12px] leading-[1.45] font-medium text-text-faint">
           The publisher decides how fresh this is — Microsoft regenerates a published calendar on
           its own schedule, sometimes hours behind. The link is stored encrypted, like your other
           credentials.
         </p>
-      </div>
+      </SettingsCard>
     </SettingsSection>
   )
 }

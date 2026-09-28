@@ -27,12 +27,14 @@ interface ShownCard extends JarvisCard {
   key: number
 }
 
-const KIND: Record<JarvisCard['kind'], { label: string; color: string; icon: ReactNode }> = {
+/** Each kind in a muted Inkt colour: `color` for the icon and label, `tile` behind the icon. */
+const KIND: Record<JarvisCard['kind'], { label: string; color: string; tile: string; icon: ReactNode }> = {
   afspraak: {
     label: 'Afspraak',
-    color: '#5fd0c5',
+    color: '#6fb5ad',
+    tile: '#172624',
     icon: (
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
         <rect x="3.5" y="5" width="17" height="15" rx="3" />
         <path d="M3.5 10h17M8 3v4M16 3v4" />
       </svg>
@@ -40,9 +42,10 @@ const KIND: Record<JarvisCard['kind'], { label: string; color: string; icon: Rea
   },
   planning: {
     label: 'Planning',
-    color: '#3ecf73',
+    color: '#5dae86',
+    tile: '#1b2721',
     icon: (
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
         <circle cx="12" cy="12" r="8.5" />
         <path d="M12 7.5V12l3 2" />
       </svg>
@@ -50,9 +53,10 @@ const KIND: Record<JarvisCard['kind'], { label: string; color: string; icon: Rea
   },
   taak: {
     label: 'Taak',
-    color: '#9b8cff',
+    color: '#a997cf',
+    tile: '#221e2c',
     icon: (
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
         <rect x="4" y="4" width="16" height="16" rx="4" />
         <path d="M8.5 12.5l2.5 2.5 4.5-5" />
       </svg>
@@ -60,18 +64,20 @@ const KIND: Record<JarvisCard['kind'], { label: string; color: string; icon: Rea
   },
   regel: {
     label: 'Regel',
-    color: '#f5b453',
+    color: '#d1a55a',
+    tile: '#2b2416',
     icon: (
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
         <path d="M6 4h12M6 20h12M8 4v5l4 3-4 3v5M16 4v5l-4 3 4 3v5" />
       </svg>
     )
   },
   timer: {
     label: 'Timer',
-    color: '#3ecf73',
+    color: '#5dae86',
+    tile: '#1b2721',
     icon: (
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
         <circle cx="12" cy="13" r="7.5" />
         <path d="M12 9.5V13M9.5 3h5" />
       </svg>
@@ -84,6 +90,14 @@ const ACTION: Record<JarvisCard['action'], string> = {
   gewijzigd: 'Gewijzigd',
   af: 'Af',
   weg: 'Weg'
+}
+
+/** The action chip's tint: new and done read as green, a change as amber, removed as red. */
+const ACTION_TONE: Record<JarvisCard['action'], string> = {
+  nieuw: 'bg-area-stage-tint text-accent-soft',
+  gewijzigd: 'bg-warn-soft text-warn',
+  af: 'bg-area-stage-tint text-accent-soft',
+  weg: 'bg-danger-soft text-danger-text'
 }
 
 /** An error as a sentence: without Electron's "Error invoking remote method …" wrapping. */
@@ -299,24 +313,28 @@ export function JarvisCorner() {
               onClick={() => open(card)}
               onMouseEnter={interactive(true)}
               onMouseLeave={interactive(false)}
-              className="corner-glass corner-card corner-card-in pointer-events-auto flex items-start gap-3 rounded-[16px] px-3.5 py-3 text-left"
+              className="corner-glass corner-card corner-card-in pointer-events-auto flex items-start gap-3 rounded-[18px] p-3 text-left"
               style={{ animationDelay: `${index * 90}ms` }}
             >
               <span
-                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]"
-                style={{ color: kind.color, background: `${kind.color}1f` }}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-input"
+                style={{ color: kind.color, background: kind.tile }}
               >
                 {kind.icon}
               </span>
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="flex items-center gap-2 text-[11px] font-medium tracking-wide uppercase" style={{ color: kind.color }}>
+              <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                <span className="flex items-center gap-2 text-[11px] font-bold tracking-[1px] uppercase" style={{ color: kind.color }}>
                   {kind.label}
-                  <span className="rounded-full bg-white/8 px-1.5 py-px text-[10px] text-text-dim normal-case">{ACTION[card.action]}</span>
+                  <span className={`rounded-pill px-2 py-0.5 text-[11px] font-bold tracking-normal normal-case ${ACTION_TONE[card.action]}`}>
+                    {ACTION[card.action]}
+                  </span>
                 </span>
-                <span className={`truncate text-[14px] font-semibold text-text ${card.action === 'weg' ? 'line-through opacity-70' : ''}`}>
+                <span
+                  className={`truncate text-[15px] leading-[1.25] font-bold text-text ${card.action === 'weg' ? 'line-through opacity-70' : ''}`}
+                >
                   {card.title}
                 </span>
-                {card.when && <span className="text-[12px] text-text-dim">{card.when}</span>}
+                {card.when && <span className="text-[13px] text-text-dim tabular-nums">{card.when}</span>}
               </span>
             </button>
           )
@@ -329,8 +347,8 @@ export function JarvisCorner() {
             key={caption.length > 0 ? 'caption' : 'none'}
             onMouseEnter={interactive(true)}
             onMouseLeave={interactive(false)}
-            className={`corner-glass corner-caption-in pointer-events-auto mb-4 max-w-[230px] rounded-[18px] rounded-br-[6px] px-3.5 py-2.5 text-[13px] leading-snug ${
-              problem ? 'text-prio-med' : reply ? 'text-text' : 'text-text-dim'
+            className={`corner-glass corner-caption-in pointer-events-auto mb-4 max-w-[250px] rounded-[20px] rounded-br-[6px] px-4 py-3 text-[15px] leading-[1.4] font-semibold ${
+              problem ? 'text-warn' : reply ? 'text-text' : 'text-text-dim'
             }`}
           >
             {caption}
@@ -345,7 +363,7 @@ export function JarvisCorner() {
           <button
             onClick={tapOrb}
             aria-label={phase === 'speaking' ? 'Onderbreek Jarvis' : 'Jarvis'}
-            className={`corner-glass flex h-[128px] w-[128px] items-center justify-center rounded-full ${
+            className={`corner-orb-shell flex h-[128px] w-[128px] items-center justify-center overflow-hidden rounded-full ${
               phase === 'listening' ? 'corner-listening' : ''
             }`}
           >
@@ -354,9 +372,9 @@ export function JarvisCorner() {
           <button
             onClick={() => void leave()}
             aria-label="Jarvis wegsturen"
-            className="corner-glass absolute -top-1 -left-1 flex h-7 w-7 items-center justify-center rounded-full text-text-dim opacity-0 transition-opacity group-hover:opacity-100"
+            className="corner-close absolute top-0.5 right-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-input text-text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-text"
           >
-            <CloseIcon size={14} />
+            <CloseIcon size={12} />
           </button>
         </div>
       </div>

@@ -4,9 +4,10 @@ import { api } from '../../api/client.js'
 import { Button } from '../../ui/Button.js'
 import { EmptyState } from '../../ui/EmptyState.js'
 import { FolderIcon, PlusIcon } from '../../ui/icons.js'
-import { SettingsSection } from './SettingsSection.js'
+import { SettingsCard, SettingsSection, rowSelect, selectField } from './SettingsSection.js'
 
-const COLORS = ['#1B3A5C', '#14493F', '#4A3A1C', '#3B2A4A', '#4A1C1C', '#22C55E']
+/** Muted Inkt tones: school blue, teal, amber, work purple, clay, stage green. */
+const COLORS = ['#7F9FD6', '#5E9E97', '#D1A55A', '#A997CF', '#CC6F62', '#5DAE86']
 
 /**
  * Projects, and the three things about them that matter beyond the name: who the work is
@@ -64,8 +65,9 @@ export function ProjectSettings({
     onChanged()
   }
 
-  const field =
-    'rounded-[8px] border border-border bg-bg px-3 py-2 text-[14px] text-text outline-none focus:border-accent'
+  const field = `${selectField} h-11 w-full min-w-0 px-3 font-medium`
+  /** On a phone the two selects share a second line under the name; wide, they sit inline. */
+  const rowSelectInList = `${rowSelect} order-last min-w-0 flex-1 basis-[calc(50%-6px)] wide:order-none wide:flex-none wide:basis-auto`
 
   return (
     <SettingsSection
@@ -85,9 +87,9 @@ export function ProjectSettings({
       }
     >
       {creating && (
-        <div className="mb-5 flex flex-wrap items-end gap-3 rounded-[12px] border border-border bg-bg p-4">
-          <label className="flex min-w-[220px] flex-1 flex-col gap-1.5">
-            <span className="text-[12px] text-text-dim">Name</span>
+        <SettingsCard className="flex flex-col gap-3 p-4 wide:p-5">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[14px] font-semibold text-text">Name</span>
             <input
               autoFocus
               value={name}
@@ -98,74 +100,73 @@ export function ProjectSettings({
             />
           </label>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] text-text-dim">Organization</span>
-            <select
-              value={organizationId}
-              onChange={(e) => setOrganizationId(e.target.value)}
-              className={field}
-            >
-              <option value="">No organization</option>
-              {organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[14px] font-semibold text-text">Organization</span>
+              <select
+                value={organizationId}
+                onChange={(e) => setOrganizationId(e.target.value)}
+                className={field}
+              >
+                <option value="">No organization</option>
+                {organizations.map((organization) => (
+                  <option key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] text-text-dim">Area</span>
-            <select value={areaId} onChange={(e) => setAreaId(e.target.value)} className={field}>
-              {areas.map((area) => (
-                <option key={area.id} value={area.id}>
-                  {area.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[14px] font-semibold text-text">Area</span>
+              <select value={areaId} onChange={(e) => setAreaId(e.target.value)} className={field}>
+                {areas.map((area) => (
+                  <option key={area.id} value={area.id}>
+                    {area.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[12px] text-text-dim">Colour</span>
-            <div className="flex gap-1.5 py-1.5">
+          <div className="flex flex-col gap-2">
+            <span className="text-[14px] font-semibold text-text">Colour</span>
+            <div className="flex flex-wrap gap-2.5">
               {COLORS.map((option) => (
                 <button
                   key={option}
                   onClick={() => setColor(option)}
                   aria-label={option}
                   style={{ background: option }}
-                  className={`h-6 w-6 rounded-full transition-all ${
-                    color === option ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : ''
+                  className={`h-9 w-9 rounded-full transition-all ${
+                    color === option ? 'ring-2 ring-text ring-offset-2 ring-offset-card' : ''
                   }`}
                 />
               ))}
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setCreating(false)} disabled={busy}>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setCreating(false)} disabled={busy}>
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => void create()}
-              disabled={busy || !name.trim()}
-            >
+            <Button variant="primary" onClick={() => void create()} disabled={busy || !name.trim()}>
               Create
             </Button>
           </div>
-        </div>
+        </SettingsCard>
       )}
 
       {projects.length === 0 && !creating ? (
-        <EmptyState
-          icon={<FolderIcon size={24} />}
-          title="No projects yet."
-          hint="Tasks work fine without one, but a project keeps the weekly report readable."
-        />
+        <SettingsCard>
+          <EmptyState
+            icon={<FolderIcon size={24} />}
+            title="No projects yet."
+            hint="Tasks work fine without one, but a project keeps the weekly report readable."
+          />
+        </SettingsCard>
       ) : (
-        <div className="overflow-hidden rounded-[12px] border border-border">
+        <SettingsCard>
           {projects.map((project) => {
             const area = areaById.get(project.areaId ?? '') ?? null
             const areaAllowsSharing = area?.defaultShareSupervisor ?? false
@@ -173,13 +174,13 @@ export function ProjectSettings({
             return (
               <div
                 key={project.id}
-                className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-b-0"
+                className="flex flex-wrap items-center gap-x-3 gap-y-2.5 border-t border-border px-4 py-3.5 first:border-t-0 wide:flex-nowrap wide:px-5"
               >
                 <span
-                  className="h-3 w-3 shrink-0 rounded-full"
+                  className="h-3 w-3 shrink-0 rounded-full shadow-[inset_0_0_0_1px_rgb(255_255_255/0.12)]"
                   style={{ background: project.color }}
                 />
-                <span className="min-w-0 flex-1 truncate text-[14px] text-text">{project.name}</span>
+                <span className="min-w-0 flex-1 truncate text-[16px] font-bold text-text">{project.name}</span>
 
                 {/* Who it is for. Changing this never changes what the hours count as —
                     that is the area beside it, and past segments keep their own record. */}
@@ -189,7 +190,7 @@ export function ProjectSettings({
                     void update(project, { organizationId: event.target.value || null })
                   }
                   title="Who this work is for. It does not decide whether the hours count toward your internship."
-                  className="rounded-[8px] border border-border bg-bg px-2.5 py-1.5 text-[13px] text-text-dim outline-none focus:border-accent"
+                  className={rowSelectInList}
                 >
                   <option value="">No organization</option>
                   {organizations.map((organization) => (
@@ -202,7 +203,7 @@ export function ProjectSettings({
                 <select
                   value={project.areaId ?? ''}
                   onChange={(event) => void update(project, { areaId: event.target.value })}
-                  className="rounded-[8px] border border-border bg-bg px-2.5 py-1.5 text-[13px] text-text-dim outline-none focus:border-accent"
+                  className={rowSelectInList}
                 >
                   {areas.map((option) => (
                     <option key={option.id} value={option.id}>
@@ -212,7 +213,7 @@ export function ProjectSettings({
                 </select>
 
                 <label
-                  className={`flex items-center gap-2 text-[13px] ${
+                  className={`flex items-center gap-2 text-[13px] font-semibold ${
                     areaAllowsSharing ? 'text-text-dim' : 'text-text-faint'
                   }`}
                   title={
@@ -226,14 +227,14 @@ export function ProjectSettings({
                     checked={project.shareable && areaAllowsSharing}
                     disabled={!areaAllowsSharing}
                     onChange={(event) => void update(project, { shareable: event.target.checked })}
-                    className="accent-accent disabled:opacity-40"
+                    className="h-[18px] w-[18px] accent-accent disabled:opacity-40"
                   />
                   Shareable
                 </label>
               </div>
             )
           })}
-        </div>
+        </SettingsCard>
       )}
     </SettingsSection>
   )

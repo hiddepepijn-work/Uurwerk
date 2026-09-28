@@ -101,43 +101,53 @@ export function ReportsScreen() {
   const delta = report.totalTrackedMin - report.totalPlannedMin
 
   return (
-    <div className="p-4 wide:p-8">
-      <header className="mb-7 flex items-start justify-between gap-6">
-        <div>
-          <h1 className="text-[32px] leading-tight font-semibold">Report</h1>
-          <p className="mt-1 text-[14px] text-text-dim">
+    <div className="px-4 pt-4 pb-6 wide:px-8 wide:py-7">
+      <header className="mb-4 flex flex-col gap-4 wide:mb-5 wide:flex-row wide:items-end wide:justify-between wide:gap-6">
+        <div className="min-w-0">
+          <h1 className="display-title text-[34px] wide:text-[40px]">Report</h1>
+          <p className="mt-1.5 text-[14px] leading-snug font-medium text-text-dim wide:text-[15px] wide:font-normal">
             {report.from} – {report.to} · written in Dutch, for your supervisor
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1">
-            <Button variant="secondary" size="sm" onClick={() => setWeek(previousWeek(week))}>
-              ←
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setWeek(toIsoWeek(Date.now()))}>
-              This week
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setWeek(nextWeek(week))}>
-              →
-            </Button>
-          </div>
+        <div className="flex shrink-0 gap-2 wide:gap-1.5 wide:rounded-button wide:bg-card wide:p-1">
+          <Button
+            variant="secondary"
+            className="text-[17px] wide:h-[38px] wide:rounded-[11px] wide:text-[16px]"
+            onClick={() => setWeek(previousWeek(week))}
+          >
+            ←
+          </Button>
+          <Button
+            variant="secondary"
+            className="flex-1 text-[15px] wide:h-[38px] wide:flex-none wide:rounded-[11px] wide:text-[14px]"
+            onClick={() => setWeek(toIsoWeek(Date.now()))}
+          >
+            This week
+          </Button>
+          <Button
+            variant="secondary"
+            className="text-[17px] wide:h-[38px] wide:rounded-[11px] wide:text-[16px]"
+            onClick={() => setWeek(nextWeek(week))}
+          >
+            →
+          </Button>
         </div>
       </header>
 
       {problem && (
-        <div className="mb-6 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
+        <div className="mb-4 rounded-[16px] bg-warn-soft px-3.5 py-3 text-[14px] leading-snug font-semibold text-warn wide:mb-5">
           {problem}
         </div>
       )}
 
       {notice && (
-        <div className="mb-6 rounded-[10px] border border-accent/30 bg-accent/5 px-4 py-3 text-[13px] text-text">
+        <div className="mb-4 rounded-[16px] bg-rail-active px-3.5 py-3 text-[14px] leading-snug font-semibold text-accent-soft wide:mb-5">
           {notice}
         </div>
       )}
 
-      <div className="mb-7 grid grid-cols-2 gap-3 wide:grid-cols-4 wide:gap-4">
+      <div className="mb-4 grid grid-cols-2 gap-2.5 wide:mb-5 wide:grid-cols-4 wide:gap-3.5">
         <StatCard
           icon={<ClockIcon size={16} />}
           label="Tracked"
@@ -185,55 +195,61 @@ export function ReportsScreen() {
         />
       </Section>
 
-      <Section
-        title="Summary"
-        hint="Written for you from the week's numbers — rewrite it in your own words. This is the part your supervisor actually reads."
-      >
-        <textarea
-          value={summary}
-          maxLength={SUMMARY_MAX}
-          onChange={(event) => {
-            setSummary(event.target.value)
-            setDirty(true)
-          }}
-          onBlur={() => {
-            if (dirty) void saveSummary()
-          }}
-          rows={8}
-          className="w-full resize-none rounded-[10px] border border-border bg-bg p-4 text-[14px]
-            leading-relaxed text-text outline-none placeholder:text-text-faint focus:border-accent"
-        />
-        <div className="mt-2 flex items-center justify-between text-[12px]">
-          <span className={dirty ? 'text-prio-med' : 'text-text-faint'}>
-            {dirty ? 'Unsaved — saves when you click away' : 'Saved'}
-          </span>
-          <span className="text-text-faint">
-            {summary.length} / {SUMMARY_MAX}
-          </span>
-        </div>
-      </Section>
+      {/* Side by side once the window is wide enough for two columns of prose. */}
+      <div className="min-[1180px]:grid min-[1180px]:grid-cols-2 min-[1180px]:gap-5">
+        <Section
+          title="Summary"
+          hint="Written for you from the week's numbers — rewrite it in your own words. This is the part your supervisor actually reads."
+        >
+          <textarea
+            value={summary}
+            maxLength={SUMMARY_MAX}
+            onChange={(event) => {
+              setSummary(event.target.value)
+              setDirty(true)
+            }}
+            onBlur={() => {
+              if (dirty) void saveSummary()
+            }}
+            rows={8}
+            className="w-full resize-none rounded-input bg-input p-3.5 text-[15px] leading-normal font-medium
+              text-text outline-none placeholder:text-text-faint wide:text-[14px] wide:font-normal"
+          />
+          <div className="mt-2 flex items-center justify-between text-[13px] font-semibold wide:font-bold">
+            <span className={dirty ? 'text-warn' : 'text-accent-soft'}>
+              {dirty ? 'Unsaved — saves when you click away' : 'Saved'}
+            </span>
+            <span className="text-text-faint tabular-nums">
+              {summary.length} / {SUMMARY_MAX}
+            </span>
+          </div>
+        </Section>
 
-      <Section title="Next week" hint="Copied into the document so your supervisor knows what is coming.">
-        <NextWeekPlan blocks={report.nextWeekPlanning} />
-      </Section>
+        <Section title="Next week" hint="Copied into the document so your supervisor knows what is coming.">
+          <NextWeekPlan blocks={report.nextWeekPlanning} />
+        </Section>
+      </div>
 
-      <div className="mt-8 flex items-center justify-between rounded-[12px] border border-border bg-card p-5">
-        <div className="min-w-0">
-          <div className="text-[14px] text-text">
+      <div className="flex flex-col gap-3.5 rounded-[22px] bg-card p-4 wide:flex-row wide:items-center wide:gap-[18px] wide:px-6 wide:py-5">
+        <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-button bg-input text-text-dim wide:flex">
+          <DocumentIcon size={20} />
+        </span>
+        <div className="min-w-0 wide:flex-1">
+          <div className="text-[16px] font-bold text-text">
             {generated ? 'Document written' : 'No document for this week yet'}
           </div>
-          <div className="mt-0.5 truncate text-[13px] text-text-dim">
+          <div className="mt-1 text-[13px] font-medium break-all text-text-dim wide:truncate wide:font-normal wide:break-normal">
             {generated ?? 'Generating writes a .docx you can attach or print.'}
           </div>
           {/* Only ever set by a real send; opening a draft deliberately leaves it blank. */}
           {report.sentAt && (
-            <div className="mt-1 text-[13px] text-accent">
+            <div className="mt-1 text-[13px] font-bold text-accent-soft">
               Sent {new Date(report.sentAt).toLocaleString('en-GB')}
             </div>
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 wide:gap-2.5">
           {generated && (
             <Button variant="ghost" onClick={() => void api.reports.openFile(generated)}>
               Open
@@ -241,7 +257,8 @@ export function ReportsScreen() {
           )}
           <Button
             variant="secondary"
-            icon={<DocumentIcon size={15} />}
+            className="flex-1 wide:flex-none"
+            icon={<DocumentIcon size={17} />}
             disabled={busy}
             onClick={() => void generate()}
           >
@@ -249,7 +266,7 @@ export function ReportsScreen() {
           </Button>
           <Button
             variant="primary"
-            icon={<SendIcon size={15} />}
+            icon={<SendIcon size={17} />}
             disabled={busy}
             onClick={() => void send()}
           >
@@ -271,10 +288,18 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <section className="mb-8">
-      <h2 className="text-[16px] font-semibold">{title}</h2>
-      {hint && <p className="mt-1 mb-4 max-w-2xl text-[13px] leading-relaxed text-text-dim">{hint}</p>}
-      {!hint && <div className="mb-4" />}
+    // A plain section on the phone, where the table inside is the card; a card of its own on
+    // the desktop, where the table sits flat inside it.
+    <section className="mb-4 wide:mb-5 wide:rounded-[22px] wide:bg-card wide:px-6 wide:py-[22px]">
+      <h2 className="font-display text-[24px] font-bold tracking-[-0.4px] wide:text-[22px] wide:tracking-normal">
+        {title}
+      </h2>
+      {hint && (
+        <p className="mt-[3px] mb-2.5 max-w-2xl text-[14px] leading-snug font-medium text-text-dim wide:mt-1 wide:mb-4 wide:font-normal">
+          {hint}
+        </p>
+      )}
+      {!hint && <div className="mb-2.5 wide:mb-4" />}
       {children}
     </section>
   )

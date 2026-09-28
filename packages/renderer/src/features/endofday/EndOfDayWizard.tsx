@@ -40,6 +40,9 @@ const BASE_STEPS: StepKey[] = ['review', 'screenshots', 'summary', 'publish']
 
 const SUMMARY_MAX = 1000
 
+/** A panel inside the modal: outlined rather than filled, since the modal is already a card. */
+const PANEL = 'rounded-card border border-border p-[18px]'
+
 interface Props {
   date: string
   open: boolean
@@ -262,7 +265,7 @@ export function EndOfDayWizard({ date, open, onClose }: Props) {
       <Steps steps={steps} current={step} onSelect={setStep} />
 
       {problem && (
-        <div className="mb-6 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
+        <div className="mb-6 rounded-input bg-warn-soft px-4 py-3 text-[13px] font-semibold text-warn">
           {problem}
         </div>
       )}
@@ -282,13 +285,13 @@ export function EndOfDayWizard({ date, open, onClose }: Props) {
       )}
 
       {current === 'review' && review && (
-        <div className="grid grid-cols-1 gap-6 wide:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-          <div className="flex flex-col gap-5">
+        <div className="grid grid-cols-1 gap-4 wide:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+          <div className="flex flex-col gap-3">
             <DaySummaryCard date={date} review={review} />
             <TopActivitiesCard review={review} />
           </div>
 
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3">
             <SummaryBox value={summary} onChange={setSummary} />
             <PublishSelection
               flags={flags}
@@ -321,8 +324,8 @@ export function EndOfDayWizard({ date, open, onClose }: Props) {
 
       {current === 'summary' && review && (
         <div className="flex flex-col gap-5">
-          <h3 className="text-[15px] font-semibold">Day summary</h3>
-          <div className="rounded-[12px] border border-border bg-bg p-5 text-[14px] leading-relaxed whitespace-pre-wrap text-text" data-selectable>
+          <h3 className="text-[15px] font-bold">Day summary</h3>
+          <div className={`${PANEL} text-[14px] leading-relaxed whitespace-pre-wrap text-text`} data-selectable>
             {summary.trim() || <span className="text-text-faint">No summary written.</span>}
           </div>
           <DaySummaryCard date={date} review={review} />
@@ -359,35 +362,43 @@ function Steps({
   onSelect: (step: number) => void
 }) {
   return (
-    <ol className="mb-7 flex items-center gap-3 border-b border-border pb-6">
+    <ol className="mb-6 flex items-center gap-2.5">
       {steps.map((key, index) => {
         const label = LABELS[key]
         const state = index === current ? 'active' : index < current ? 'done' : 'todo'
         return (
-          <li key={label} className="flex flex-1 items-center gap-3">
+          <li key={label} className="flex flex-1 items-center gap-2.5 last:flex-none">
             <button
               onClick={() => onSelect(index)}
-              className="flex items-center gap-2.5 whitespace-nowrap"
+              className="flex items-center gap-2 whitespace-nowrap"
             >
               <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-semibold
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold
                   ${
                     state === 'active'
                       ? 'bg-accent text-accent-ink'
                       : state === 'done'
-                        ? 'bg-accent/20 text-accent'
-                        : 'border border-border-strong text-text-faint'
+                        ? 'bg-rail-active text-accent-soft'
+                        : 'border-[1.5px] border-border-strong text-text-faint'
                   }`}
               >
-                {state === 'done' ? <CheckIcon size={12} /> : index + 1}
+                {state === 'done' ? <CheckIcon size={14} /> : index + 1}
               </span>
               <span
-                className={`text-[13px] ${state === 'active' ? 'font-medium text-accent' : 'text-text-dim'}`}
+                className={`text-[14px] ${
+                  state === 'active'
+                    ? 'font-bold text-text'
+                    : state === 'done'
+                      ? 'font-semibold text-accent-soft'
+                      : 'font-semibold text-text-faint'
+                }`}
               >
                 {label}
               </span>
             </button>
-            {index < steps.length - 1 && <span className="h-px flex-1 bg-border" />}
+            {index < steps.length - 1 && (
+              <span className={`h-0.5 min-w-4 flex-1 rounded-full ${index < current ? 'bg-accent' : 'bg-border'}`} />
+            )}
           </li>
         )
       })}
@@ -398,21 +409,21 @@ function Steps({
 function DaySummaryCard({ date, review }: { date: string; review: DayReview }) {
   const rows: Array<[string, string, string?]> = [
     ['Total tracked time', formatDuration(review.trackedMin)],
-    ['Focus time', formatDuration(review.focusMin), 'text-accent'],
-    ['Break time', formatDuration(review.breakMin), 'text-prio-med'],
+    ['Focus time', formatDuration(review.focusMin), 'text-accent-soft'],
+    ['Break time', formatDuration(review.breakMin), 'text-warn'],
     ['Sessions', String(review.sessionCount)],
     ['Completed tasks', `${review.completedTasks} / ${review.totalTasks}`]
   ]
 
   return (
-    <div className="rounded-[12px] border border-border bg-bg p-5">
-      <h3 className="mb-1 text-[15px] font-semibold">Day summary</h3>
-      <p className="mb-4 text-[13px] text-text-dim">{formatLongDate(new Date(`${date}T12:00:00`))}</p>
-      <dl className="flex flex-col gap-3">
+    <div className={PANEL}>
+      <h3 className="mb-1 text-[15px] font-bold">Day summary</h3>
+      <p className="mb-2 text-[13px] text-text-faint">{formatLongDate(new Date(`${date}T12:00:00`))}</p>
+      <dl className="flex flex-col">
         {rows.map(([label, value, tone]) => (
-          <div key={label} className="flex items-center justify-between text-[14px]">
-            <dt className={tone ?? 'text-text-dim'}>{label}</dt>
-            <dd className={`font-mono ${tone ?? 'text-text'}`}>{value}</dd>
+          <div key={label} className="flex h-[34px] items-center justify-between border-t border-input text-[14px]">
+            <dt className="text-text-dim">{label}</dt>
+            <dd className={`font-mono text-[15px] font-bold ${tone ?? 'text-text'}`}>{value}</dd>
           </div>
         ))}
       </dl>
@@ -422,23 +433,23 @@ function DaySummaryCard({ date, review }: { date: string; review: DayReview }) {
 
 function TopActivitiesCard({ review }: { review: DayReview }) {
   return (
-    <div className="rounded-[12px] border border-border bg-bg p-5">
-      <h3 className="mb-4 text-[15px] font-semibold">Top activities</h3>
+    <div className={PANEL}>
+      <h3 className="mb-2 text-[15px] font-bold">Top activities</h3>
       {review.topActivities.length === 0 ? (
         <p className="text-[13px] text-text-faint">Nothing tracked today.</p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col">
           {review.topActivities.map((activity) => (
-            <li key={activity.taskId ?? activity.taskTitle} className="flex items-start gap-3">
+            <li key={activity.taskId ?? activity.taskTitle} className="flex min-h-[34px] items-center gap-2.5">
               {activity.priority ? (
-                <span className="pt-1.5">
+                <span className="flex">
                   <PriorityDot priority={activity.priority} />
                 </span>
               ) : (
-                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-text-faint" />
+                <span className="h-2 w-2 shrink-0 rounded-full bg-text-faint" />
               )}
-              <span className="min-w-0 flex-1 text-[14px] text-text">{activity.taskTitle}</span>
-              <span className="shrink-0 font-mono text-[13px] text-text-dim">
+              <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text">{activity.taskTitle}</span>
+              <span className="shrink-0 font-mono text-[14px] font-bold text-text-dim">
                 {formatDuration(activity.minutes)}
               </span>
             </li>
@@ -479,14 +490,14 @@ function TimelapsePanel({
   const seconds = Math.max(1, Math.round(approvedCount / Math.max(1, fps)))
 
   return (
-    <div className="rounded-[12px] border border-border bg-bg p-5">
+    <div className={PANEL}>
       <div className="flex items-start justify-between gap-6">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
             <span className="text-text-dim">
               <FilmIcon size={15} />
             </span>
-            <h3 className="text-[15px] font-semibold">Timelapse</h3>
+            <h3 className="text-[15px] font-bold">Timelapse</h3>
           </div>
           <p className="max-w-lg text-[13px] leading-relaxed text-text-dim">
             {tooFew
@@ -508,7 +519,7 @@ function TimelapsePanel({
 
       {encoding && (
         <div className="mt-4">
-          <div className="h-1.5 overflow-hidden rounded-full bg-card">
+          <div className="h-1.5 overflow-hidden rounded-full bg-track">
             <div
               className="h-full bg-accent transition-[width] duration-200"
               style={{ width: `${Math.round((encoding.done / Math.max(1, encoding.total)) * 100)}%` }}
@@ -521,8 +532,8 @@ function TimelapsePanel({
       )}
 
       {timelapse && !encoding && (
-        <div className="mt-4 flex items-center justify-between rounded-[10px] border border-accent/30 bg-accent/5 px-4 py-3">
-          <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+        <div className="mt-4 flex items-center justify-between rounded-input bg-rail-active px-4 py-3">
+          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-accent-soft">
             Ready — {timelapse.path.split(/[\\/]/).pop()}
           </span>
           <Button variant="ghost" size="sm" onClick={() => onOpen(timelapse.path)}>
@@ -536,18 +547,18 @@ function TimelapsePanel({
 
 function SummaryBox({ value, onChange }: { value: string; onChange: (next: string) => void }) {
   return (
-    <div className="rounded-[12px] border border-border bg-bg p-5">
-      <h3 className="mb-4 text-[15px] font-semibold">Write your daily summary</h3>
+    <div className={PANEL}>
+      <h3 className="mb-2.5 text-[15px] font-bold">Write your daily summary</h3>
       <textarea
         value={value}
         maxLength={SUMMARY_MAX}
         onChange={(event) => onChange(event.target.value)}
         rows={7}
         placeholder="What did you work on, what went well, what is next?"
-        className="w-full resize-none rounded-[10px] border border-accent/60 bg-card p-4 text-[14px]
-          leading-relaxed text-text outline-none placeholder:text-text-faint focus:border-accent"
+        className="w-full resize-none rounded-button border-[1.5px] border-accent bg-input px-3.5 py-3 text-[14px]
+          leading-normal font-medium text-text outline-none placeholder:text-text-faint"
       />
-      <p className="mt-2 text-right text-[12px] text-text-faint">
+      <p className="mt-2 text-right font-mono text-[12px] font-bold text-text-faint">
         {value.length} / {SUMMARY_MAX} characters
       </p>
     </div>
@@ -578,10 +589,10 @@ function PublishPreview({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="rounded-[12px] border border-border bg-bg p-5">
-        <div className="mb-3 flex items-center gap-2 text-accent">
+      <div className={PANEL}>
+        <div className="mb-3 flex items-center gap-2 text-accent-soft">
           <ShieldIcon size={15} />
-          <h3 className="text-[15px] font-semibold text-text">About to be published — {date}</h3>
+          <h3 className="text-[15px] font-bold text-text">About to be published — {date}</h3>
         </div>
 
         {lines.length === 0 ? (
@@ -591,8 +602,8 @@ function PublishPreview({
         ) : (
           <ul className="flex flex-col gap-2">
             {lines.map((line) => (
-              <li key={line} className="flex items-center gap-2.5 text-[14px] text-text">
-                <span className="text-accent">
+              <li key={line} className="flex items-center gap-2.5 text-[14px] font-semibold text-text">
+                <span className="text-accent-soft">
                   <CheckIcon size={14} />
                 </span>
                 {line}
@@ -608,9 +619,9 @@ function PublishPreview({
       </div>
 
       {publishedAt && (
-        <div className="flex items-center justify-between rounded-[12px] border border-accent/30 bg-accent/5 p-5">
+        <div className="flex items-center justify-between rounded-card bg-rail-active p-[18px]">
           <div className="text-[14px]">
-            <div className="font-medium text-accent">Published</div>
+            <div className="font-bold text-accent-soft">Published</div>
             <div className="mt-0.5 text-[13px] text-text-dim">
               {formatLongDate(publishedAt)} — visible to your supervisor.
             </div>

@@ -20,8 +20,8 @@ const DURATIONS = [30, 60, 90, 120]
 const AREAS = ['stage', 'school', 'personal', 'work'] as const
 
 const chip = (active: boolean): string =>
-  `h-10 rounded-full px-4 text-[14px] font-medium transition-colors ${
-    active ? 'bg-accent text-bg' : 'bg-bg text-text-dim hover:text-text'
+  `h-[38px] rounded-pill px-4 text-[14px] font-bold transition-colors ${
+    active ? 'bg-text text-bg' : 'bg-input text-text hover:bg-secondary-hover'
   }`
 
 // --------------------------------------------------------------- empty slot
@@ -81,8 +81,8 @@ export function SlotSheet({ date, minute, onClose }: { date: IsoDate; minute: nu
 
   return (
     <Modal open title={`${hhmm(minute)} · ${dayLabel(date)}`} subtitle="Wat komt hier?" onClose={onClose} width={520}>
-      <div className="flex flex-col gap-4 px-4 py-4 wide:px-7">
-        <div className="flex rounded-[12px] bg-bg p-1">
+      <div className="flex flex-col gap-5">
+        <div className="flex rounded-button bg-tabbar p-[3px] wide:bg-input">
           {(
             [
               ['new', 'Nieuwe taak'],
@@ -93,8 +93,8 @@ export function SlotSheet({ date, minute, onClose }: { date: IsoDate; minute: nu
             <button
               key={value}
               onClick={() => setMode(value)}
-              className={`h-10 flex-1 rounded-[9px] text-[14px] font-medium ${
-                mode === value ? 'bg-rail-active text-accent' : 'text-text-dim'
+              className={`h-10 flex-1 rounded-[11px] text-[14px] font-bold transition-colors ${
+                mode === value ? 'bg-rail-active text-accent-soft' : 'text-text-dim'
               }`}
             >
               {label}
@@ -103,7 +103,7 @@ export function SlotSheet({ date, minute, onClose }: { date: IsoDate; minute: nu
         </div>
 
         {problem && (
-          <div className="rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-3.5 py-2.5 text-[13px] text-prio-med">
+          <div className="rounded-input bg-warn-soft px-3.5 py-2.5 text-[14px] font-semibold text-warn">
             {problem}
           </div>
         )}
@@ -117,7 +117,7 @@ export function SlotSheet({ date, minute, onClose }: { date: IsoDate; minute: nu
               onKeyDown={(event) => event.key === 'Enter' && void createTask()}
               placeholder="Wat ga je doen?"
               aria-label="Naam van de taak"
-              className="h-12 rounded-[12px] border border-border bg-bg px-4 text-[16px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+              className="h-[52px] rounded-input bg-input px-4 text-[17px] font-medium text-text outline-none placeholder:text-text-faint focus:outline-2 focus:outline-accent"
             />
             <div className="flex flex-wrap gap-2">
               {DURATIONS.map((minutes) => (
@@ -131,10 +131,10 @@ export function SlotSheet({ date, minute, onClose }: { date: IsoDate; minute: nu
                 <button
                   key={value}
                   onClick={() => setArea(value)}
-                  className="flex h-10 items-center gap-2 rounded-full px-4 text-[14px] font-medium"
+                  className="flex h-[38px] items-center gap-2 rounded-pill px-3.5 text-[14px] font-bold transition-colors"
                   style={{
-                    background: area === value ? `${AREA_COLORS[value]!.fill}33` : 'var(--color-bg)',
-                    color: area === value ? AREA_COLORS[value]!.fill : 'var(--color-text-dim)'
+                    background: area === value ? AREA_COLORS[value]!.tint : 'var(--color-input)',
+                    color: area === value ? AREA_COLORS[value]!.soft : 'var(--color-text-dim)'
                   }}
                 >
                   <span className="h-2 w-2 rounded-full" style={{ background: AREA_COLORS[value]!.fill }} />
@@ -145,7 +145,7 @@ export function SlotSheet({ date, minute, onClose }: { date: IsoDate; minute: nu
             <button
               onClick={() => void createTask()}
               disabled={busy || !title.trim()}
-              className="h-12 rounded-full bg-accent text-[15px] font-semibold text-bg disabled:opacity-40"
+              className="mt-2 h-[54px] rounded-pill bg-accent text-[16px] font-bold text-accent-ink disabled:opacity-40"
             >
               Inplannen om {hhmm(minute)}–{hhmm(Math.min(24 * 60, minute + duration))}
             </button>
@@ -160,7 +160,7 @@ export function SlotSheet({ date, minute, onClose }: { date: IsoDate; minute: nu
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Zoek een taak"
               aria-label="Zoek een taak"
-              className="h-12 rounded-[12px] border border-border bg-bg px-4 text-[16px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+              className="h-[52px] rounded-input bg-input px-4 text-[17px] font-medium text-text outline-none placeholder:text-text-faint focus:outline-2 focus:outline-accent"
             />
             <div className="flex max-h-[46vh] flex-col gap-1.5 overflow-y-auto">
               {shown.map((task) => (
@@ -168,11 +168,11 @@ export function SlotSheet({ date, minute, onClose }: { date: IsoDate; minute: nu
                   key={task.id}
                   disabled={busy}
                   onClick={() => void planExisting(task)}
-                  className="flex items-center gap-3 rounded-[12px] bg-bg px-3.5 py-3 text-left hover:bg-card-hover"
+                  className="flex items-center gap-3 rounded-input bg-card px-3.5 py-3 text-left transition-colors hover:bg-card-hover wide:bg-input wide:hover:bg-secondary-hover"
                 >
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colorFor(task.areaId).fill }} />
-                  <span className="min-w-0 flex-1 truncate text-[15px] text-text">{task.title}</span>
-                  <span className="shrink-0 text-[12px] text-text-dim">
+                  <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-text">{task.title}</span>
+                  <span className="shrink-0 text-[13px] font-semibold text-text-dim tabular-nums">
                     {task.estimateMin ? `${Math.min(task.estimateMin, 120)} min` : '1 uur'}
                   </span>
                 </button>
@@ -243,28 +243,43 @@ export function ItemSheet({ item, onClose }: { item: AgendaItem; onClose: () => 
     if (source.parentId) rows.push(['Reis', item.title])
   }
   const notes = source.type === 'block' ? task?.notes : event?.description
+  // The colour of the "Gebied" row: the event's own area where it has one.
+  const areaColor = source.type === 'event' && event ? colorFor(event.areaId) : color
 
   const title = source.type === 'block' ? (task?.title ?? item.title) : (event?.title ?? item.title)
   const kind = source.type === 'block' ? 'Taak in de planning' : source.parentId ? 'Reis voor een afspraak' : 'Afspraak'
 
   return (
     <Modal open title={title} subtitle={kind} onClose={onClose} width={520}>
-      <div className="flex flex-col gap-4 px-4 py-4 wide:px-7">
-        <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-5">
+        <div className="rounded-card bg-card px-4 py-1 wide:bg-input">
           {rows.map(([label, value]) => (
-            <div key={label} className="flex gap-3 text-[14px]">
-              <span className="w-24 shrink-0 text-text-dim">{label}</span>
-              <span className="text-text">{value}</span>
+            <div
+              key={label}
+              className="flex min-h-[50px] items-center justify-between gap-4 border-b border-border py-2 last:border-b-0"
+            >
+              <span className="shrink-0 text-[14px] font-semibold text-text-dim">{label}</span>
+              <span
+                className={`flex items-center gap-2 text-right text-[15px] font-bold tabular-nums ${
+                  label === 'Deadline' ? 'text-danger-text' : 'text-text'
+                }`}
+                style={label === 'Gebied' ? { color: areaColor.soft } : undefined}
+              >
+                {label === 'Gebied' && (
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: areaColor.fill }} />
+                )}
+                {value}
+              </span>
             </div>
           ))}
         </div>
 
         {notes && (
-          <div className="rounded-[12px] bg-bg px-3.5 py-3 text-[14px] leading-relaxed whitespace-pre-wrap text-text">{notes}</div>
+          <div className="rounded-card bg-card p-4 text-[15px] leading-[1.5] font-medium whitespace-pre-wrap text-text/85 wide:bg-input">{notes}</div>
         )}
 
         {problem && (
-          <div className="rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-3.5 py-2.5 text-[13px] text-prio-med">
+          <div className="rounded-input bg-warn-soft px-3.5 py-2.5 text-[14px] font-semibold text-warn">
             {problem}
           </div>
         )}
@@ -275,21 +290,27 @@ export function ItemSheet({ item, onClose }: { item: AgendaItem; onClose: () => 
               <button
                 disabled={busy}
                 onClick={() => void run(() => api.tracking.startRun(source.taskId))}
-                className="h-11 rounded-full bg-accent px-5 text-[14px] font-semibold text-bg"
+                className="flex h-12 items-center gap-2 rounded-pill bg-accent px-[22px] text-[15px] font-bold text-accent-ink disabled:opacity-40"
               >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M7 4.5v15l12.5-7.5z" />
+                </svg>
                 Timer starten
               </button>
               <button
                 disabled={busy}
                 onClick={() => void run(() => api.tasks.complete(source.taskId!, true))}
-                className="h-11 rounded-full bg-bg px-5 text-[14px] font-medium text-text"
+                className="flex h-12 items-center gap-2 rounded-pill bg-input px-5 text-[15px] font-bold text-text transition-colors hover:bg-secondary-hover disabled:opacity-40"
               >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12l4 4L19 6" />
+                </svg>
                 Afgerond
               </button>
               <button
                 disabled={busy}
                 onClick={() => void run(() => api.plans.removeBlock(source.blockId))}
-                className="h-11 rounded-full bg-bg px-5 text-[14px] font-medium text-text-dim"
+                className="h-12 rounded-pill px-4 text-[15px] font-bold text-text-dim transition-colors hover:text-text disabled:opacity-40"
               >
                 Uit de planning
               </button>
@@ -298,22 +319,22 @@ export function ItemSheet({ item, onClose }: { item: AgendaItem; onClose: () => 
           {source.type === 'event' && event && (
             confirming ? (
               <>
-                <span className="self-center text-[14px] text-text">{event.title} verwijderen?</span>
+                <span className="self-center text-[15px] font-semibold text-text">{event.title} verwijderen?</span>
                 <button
                   disabled={busy}
                   onClick={() => void run(() => api.calendar.deleteEvent(event.id))}
-                  className="h-11 rounded-full bg-prio-high px-5 text-[14px] font-semibold text-bg"
+                  className="h-12 rounded-pill bg-danger-soft px-5 text-[15px] font-bold text-danger-text disabled:opacity-40"
                 >
                   Ja, verwijder
                 </button>
-                <button onClick={() => setConfirming(false)} className="h-11 rounded-full bg-bg px-5 text-[14px] text-text-dim">
+                <button onClick={() => setConfirming(false)} className="h-12 rounded-pill bg-input px-5 text-[15px] font-bold text-text-dim">
                   Nee
                 </button>
               </>
             ) : (
               <button
                 onClick={() => setConfirming(true)}
-                className="h-11 rounded-full bg-bg px-5 text-[14px] font-medium text-prio-high"
+                className="h-12 rounded-pill bg-danger-soft px-5 text-[15px] font-bold text-danger-text"
               >
                 Afspraak verwijderen
               </button>

@@ -33,9 +33,12 @@ export function IdeasPanel({ projects }: { projects: Project[] }) {
   }
 
   return (
-    <Card title={`Ideeën${ideas?.length ? ` · ${ideas.length}` : ''}`} className="flex min-h-0 flex-col">
+    <Card className="flex min-h-0 flex-col gap-3.5 p-4 wide:gap-3 wide:p-[18px]" padded={false}>
+      <h2 className="font-display text-[20px] font-bold text-text wide:font-sans wide:text-[16px]">
+        {`Ideeën${ideas?.length ? ` · ${ideas.length}` : ''}`}
+      </h2>
       <form
-        className="mb-3 flex flex-wrap gap-2"
+        className="flex flex-col gap-2 wide:flex-row"
         onSubmit={(event) => {
           event.preventDefault()
           void add()
@@ -45,12 +48,12 @@ export function IdeasPanel({ projects }: { projects: Project[] }) {
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="Nieuw idee…"
-          className="min-w-0 flex-1 rounded-[8px] border border-border bg-bg px-3 py-2 text-[14px] text-text outline-none focus:border-accent"
+          className="h-11 min-w-0 shrink-0 rounded-input bg-input px-3.5 wide:flex-1 text-[15px] font-medium text-text outline-none wide:h-[42px] wide:text-[14px]"
         />
         <select
           value={projectId}
           onChange={(event) => setProjectId(event.target.value)}
-          className="rounded-[8px] border border-border bg-bg px-2 py-2 text-[13px] text-text outline-none focus:border-accent"
+          className="h-11 rounded-input bg-input px-3 text-[15px] font-semibold text-text-dim outline-none wide:h-[42px] wide:text-[14px]"
         >
           <option value="">Zonder project</option>
           {projects.map((project) => (
@@ -64,17 +67,22 @@ export function IdeasPanel({ projects }: { projects: Project[] }) {
       {groups.length === 0 ? (
         <p className="text-[13px] text-text-dim">Nog geen ideeën. Zeg tegen Jarvis: "voeg dit idee toe voor …".</p>
       ) : (
-        <div className="flex max-h-[320px] flex-col gap-4 overflow-y-auto">
+        <div className="flex max-h-[320px] flex-col gap-3.5 overflow-y-auto wide:gap-2">
           {groups.map((group) => (
-            <section key={group.id}>
-              <h3 className="mb-1.5 text-[12px] font-semibold tracking-wide text-text-dim uppercase">{group.name}</h3>
-              <ul className="flex flex-col gap-1">
+            <section key={group.id} className="flex flex-col">
+              <h3 className="label-caps pb-1 wide:pb-0.5">{group.name}</h3>
+              <ul className="flex flex-col">
                 {group.list.map((idea) => (
-                  <li key={idea.id} className="group flex items-start gap-2 rounded-[8px] px-2 py-1.5 hover:bg-bg">
-                    <span className="flex-1 text-[14px] leading-snug text-text">{idea.text}</span>
+                  <li
+                    key={idea.id}
+                    className="group flex items-center gap-2.5 border-t border-border py-[9px] wide:gap-3 wide:border-t-0 wide:py-1"
+                  >
+                    <span className="flex-1 text-[15px] leading-snug font-medium text-text wide:text-[14px] wide:font-normal">
+                      {idea.text}
+                    </span>
                     <button
                       type="button"
-                      className="shrink-0 text-[12px] text-text-dim hover:text-accent"
+                      className="shrink-0 text-[13px] font-bold text-accent-soft transition-opacity hover:opacity-80"
                       title="Er is iets mee gedaan"
                       onClick={() => void api.ideas.update(idea.id, { status: 'done' })}
                     >
@@ -82,7 +90,7 @@ export function IdeasPanel({ projects }: { projects: Project[] }) {
                     </button>
                     <button
                       type="button"
-                      className="shrink-0 text-[12px] text-text-dim hover:text-text"
+                      className="shrink-0 text-[13px] font-bold text-text-faint transition-colors hover:text-text-dim"
                       title="Laten gaan"
                       onClick={() => void api.ideas.update(idea.id, { status: 'dropped' })}
                     >

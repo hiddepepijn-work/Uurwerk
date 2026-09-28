@@ -12,7 +12,9 @@ import { Button } from '../../ui/Button.js'
 import { Modal } from '../../ui/Modal.js'
 import { DateField } from '../../ui/DateField.js'
 import { TimeField } from '../../ui/TimeField.js'
+import { CheckIcon } from '../../ui/icons.js'
 import { Toggle } from '../settings/SettingsSection.js'
+import { AREA_COLORS, areaFill } from '../agenda/agenda-model.js'
 import { formatDuration } from '../../lib/format.js'
 
 const MINUTE = 60_000
@@ -195,9 +197,11 @@ export function EventClassifier({
   }
 
   const field =
-    'w-full rounded-[10px] border border-border bg-bg px-3.5 py-2.5 text-[14px] text-text outline-none focus:border-accent'
+    'h-11 w-full rounded-input bg-input px-3 text-[14px] font-semibold text-text outline-none focus:ring-2 focus:ring-accent/40'
   const readOnly =
-    'w-full rounded-[10px] border border-border bg-card px-3.5 py-2.5 text-[14px] text-text-dim'
+    'flex min-h-11 w-full items-center rounded-input border border-border px-3.5 py-2 text-[15px] font-semibold text-text'
+  /** Shown, not edited: a figure rather than a field. */
+  const lengthFigure = 'flex h-11 items-center font-display text-[22px] font-bold whitespace-nowrap tabular-nums text-text'
 
   return (
     <Modal
@@ -231,28 +235,28 @@ export function EventClassifier({
       }
     >
       {problem && (
-        <div className="mb-5 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
+        <div className="mb-5 rounded-input bg-warn-soft px-4 py-3 text-[13px] font-semibold text-warn">
           {problem}
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 wide:grid-cols-[minmax(0,1fr)_320px]">
         {/* ------------------------------------------------------------ left */}
-        <div className="flex flex-col gap-5">
-          <div className="rounded-[12px] border border-border bg-bg px-4 py-3">
-            <div className="text-[13px] text-text">
-              From: <span className="font-medium">{movable ? 'Uurwerk' : sourceName}</span>
+        <div className="flex flex-col gap-4">
+          <div className="rounded-[16px] bg-input px-3.5 py-3">
+            <div className="text-[14px] font-bold text-text">
+              From: <span>{movable ? 'Uurwerk' : sourceName}</span>
             </div>
-            <div className="mt-0.5 text-[12px] text-text-dim">
+            <div className="mt-0.5 text-[13px] text-text-faint">
               {movable
                 ? 'Created here · yours to change'
                 : 'Imported automatically · read-only subscription'}
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">Title</span>
-            <div className={readOnly}>{event.title}</div>
+          <div className="flex flex-col gap-1.5">
+            <span className="label-caps">Title</span>
+            <div className={`${readOnly} font-bold`}>{event.title}</div>
             {!movable && (
               <span className="text-[12px] text-text-faint">
                 The title and times come from your calendar, so changing them here would be undone
@@ -263,22 +267,22 @@ export function EventClassifier({
 
           {movable ? (
             <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-2">
-                <span className="text-[13px] text-text-dim">Day</span>
+              <div className="flex flex-col gap-1.5">
+                <span className="label-caps">Day</span>
                 <DateField value={date} onChange={setDate} />
               </div>
               <div className="flex items-end gap-4">
-                <div className="flex flex-col gap-2">
-                  <span className="text-[13px] text-text-dim">From</span>
+                <div className="flex flex-col gap-1.5">
+                  <span className="label-caps">From</span>
                   <TimeField value={startMin} onChange={setStartMin} />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <span className="text-[13px] text-text-dim">To</span>
+                <div className="flex flex-col gap-1.5">
+                  <span className="label-caps">To</span>
                   <TimeField value={endMin} onChange={setEndMin} allowEndOfDay />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <span className="text-[13px] text-text-dim">Length</span>
-                  <div className="rounded-[8px] border border-border bg-card px-2.5 py-1.5 font-mono text-[13px] text-text">
+                <div className="flex flex-col gap-1.5">
+                  <span className="label-caps">Length</span>
+                  <div className={lengthFigure}>
                     {formatDuration(durationMin)}
                   </div>
                 </div>
@@ -288,18 +292,18 @@ export function EventClassifier({
               </span>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 wide:grid-cols-[1fr_1fr_auto]">
-              <div className="flex flex-col gap-2">
-                <span className="text-[13px] text-text-dim">Start</span>
-                <div className={readOnly}>{formatMoment(event.startsAt)}</div>
+            <div className="grid grid-cols-1 gap-2.5 wide:grid-cols-[1fr_1fr_120px]">
+              <div className="flex flex-col gap-1.5">
+                <span className="label-caps">Start</span>
+                <div className={`${readOnly} tabular-nums`}>{formatMoment(event.startsAt)}</div>
               </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-[13px] text-text-dim">End</span>
-                <div className={readOnly}>{formatMoment(event.endsAt)}</div>
+              <div className="flex flex-col gap-1.5">
+                <span className="label-caps">End</span>
+                <div className={`${readOnly} tabular-nums`}>{formatMoment(event.endsAt)}</div>
               </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-[13px] text-text-dim">Length</span>
-                <div className={`${readOnly} font-mono whitespace-nowrap`}>
+              <div className="flex flex-col gap-1.5">
+                <span className="label-caps">Length</span>
+                <div className={lengthFigure}>
                   {formatDuration(durationMin)}
                 </div>
               </div>
@@ -307,20 +311,23 @@ export function EventClassifier({
           )}
 
           {suggestion && suggestion.confidence > 0 && (
-            <div className="rounded-[12px] border border-accent/30 bg-rail-active p-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-[13px] font-medium text-text">
+            <div className="rounded-card bg-rail-active px-[18px] py-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[14px] font-bold text-accent-soft">
                   Suggested based on earlier events
                 </span>
-                <span className="shrink-0 text-[13px] text-accent">
+                <span className="shrink-0 rounded-pill bg-accent px-3 py-1 text-[13px] font-bold text-accent-ink">
                   {suggestion.confidence}% match
                 </span>
               </div>
               {suggestion.reasons.length > 0 && (
                 <ul className="mt-2 flex flex-col gap-1">
                   {suggestion.reasons.map((reason) => (
-                    <li key={reason} className="text-[12px] text-text-dim">
-                      {reason}
+                    <li key={reason} className="flex items-start gap-2 text-[13px] leading-[1.45] text-text-dim">
+                      <span className="mt-[3px] shrink-0 text-accent-soft">
+                        <CheckIcon size={14} />
+                      </span>
+                      <span>{reason}</span>
                     </li>
                   ))}
                 </ul>
@@ -329,32 +336,43 @@ export function EventClassifier({
           )}
 
           <div className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">Area</span>
+            <span className="label-caps">Area</span>
             <div className="flex gap-2">
-              {areas.map((entry) => (
-                <button
-                  key={entry.id}
-                  onClick={() => setAreaId(entry.id)}
-                  className={`flex-1 rounded-[10px] border py-2.5 text-[13px] transition-colors ${
-                    areaId === entry.id
-                      ? 'border-accent/50 bg-rail-active text-text'
-                      : 'border-border bg-bg text-text-dim hover:bg-card-hover'
-                  }`}
-                >
-                  {entry.name}
-                </button>
-              ))}
+              {areas.map((entry) => {
+                const selected = areaId === entry.id
+                const colors = AREA_COLORS[entry.id]
+                return (
+                  <button
+                    key={entry.id}
+                    onClick={() => setAreaId(entry.id)}
+                    className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-button border-[1.5px] text-[14px] font-bold transition-colors ${
+                      selected ? 'bg-rail-active text-text' : 'border-transparent bg-input text-text-dim hover:bg-secondary-hover'
+                    }`}
+                    style={
+                      selected
+                        ? {
+                            borderColor: areaFill(entry),
+                            ...(colors ? { background: colors.tint, color: colors.soft } : {})
+                          }
+                        : undefined
+                    }
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: areaFill(entry) }} />
+                    {entry.name}
+                  </button>
+                )
+              })}
             </div>
-            <span className="text-[12px] text-text-faint">
+            <span className={`text-[12px] ${area?.countsAsStageHours ? 'text-accent-soft' : 'text-text-faint'}`}>
               {area?.countsAsStageHours
                 ? 'This event counts toward your internship hours.'
                 : 'Time on this event is tracked, but does not count toward internship hours.'}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <label className="flex flex-col gap-2">
-              <span className="text-[13px] text-text-dim">Project</span>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="label-caps">Project</span>
               <select
                 value={projectId ?? ''}
                 onChange={(event_) => setProjectId(event_.target.value || null)}
@@ -367,13 +385,13 @@ export function EventClassifier({
                   </option>
                 ))}
               </select>
-              <span className="text-[12px] text-text-faint">
+              <span className="text-[12px] leading-[1.4] text-text-faint">
                 The project decides who the work is for. It does not decide the area.
               </span>
             </label>
 
-            <label className="flex flex-col gap-2">
-              <span className="text-[13px] text-text-dim">Work type</span>
+            <label className="flex flex-col gap-1.5">
+              <span className="label-caps">Work type</span>
               <select
                 value={workTypeId ?? ''}
                 onChange={(event_) => setWorkTypeId(event_.target.value || null)}
@@ -386,17 +404,17 @@ export function EventClassifier({
                   </option>
                 ))}
               </select>
-              <span className="text-[12px] text-text-faint">
+              <span className="text-[12px] leading-[1.4] text-text-faint">
                 What kind of activity this is, across every area.
               </span>
             </label>
           </div>
 
-          <div className="rounded-[12px] border border-border bg-bg p-4">
-            <div className="flex items-center justify-between gap-4">
+          <div className="rounded-[16px] border border-border px-4 py-3">
+            <div className="flex items-center justify-between gap-3.5">
               <div className="min-w-0">
-                <div className="text-[14px] text-text">Add to Uurwerk planning</div>
-                <div className="mt-0.5 text-[12px] text-text-dim">
+                <div className="text-[14px] font-bold text-text">Add to Uurwerk planning</div>
+                <div className="mt-0.5 text-[13px] text-text-faint">
                   Blocks this time, so the planner does not schedule work on top of it.
                 </div>
               </div>
@@ -406,11 +424,11 @@ export function EventClassifier({
         </div>
 
         {/* ----------------------------------------------------------- right */}
-        <div className="flex flex-col gap-5">
-          <section className="rounded-[12px] border border-border bg-bg p-4">
-            <h3 className="mb-3 text-[14px] font-semibold">Hours to register</h3>
+        <div className="flex flex-col gap-3">
+          <section className="rounded-card border border-border p-4">
+            <h3 className="mb-1.5 text-[15px] font-bold">Hours to register</h3>
 
-            <dl className="flex flex-col gap-2 text-[13px]">
+            <dl className="flex flex-col text-[14px]">
               <Row label="Event duration" value={formatDuration(durationMin)} muted={registrationMode === 'none'} />
               {travelOn && (
                 <>
@@ -418,9 +436,9 @@ export function EventClassifier({
                   <Row label="Travel back" value={formatDuration(returnMin)} muted={!travelCounts} />
                 </>
               )}
-              <div className="mt-1 flex items-center justify-between border-t border-border pt-2">
-                <dt className="text-text">Counted as worked</dt>
-                <dd className="font-mono text-text">{formatDuration(registrableMin)}</dd>
+              <div className="mt-1 flex items-center justify-between border-t border-border pt-2.5">
+                <dt className="font-bold text-text">Counted as worked</dt>
+                <dd className="font-display text-[22px] font-bold tabular-nums text-accent-soft">{formatDuration(registrableMin)}</dd>
               </div>
             </dl>
 
@@ -435,10 +453,10 @@ export function EventClassifier({
                 <button
                   key={mode}
                   onClick={() => setRegistrationMode(mode)}
-                  className={`rounded-[8px] border px-3 py-2 text-left text-[12px] transition-colors ${
+                  className={`min-h-10 rounded-input border-[1.5px] px-3 py-2 text-left text-[13px] transition-colors ${
                     registrationMode === mode
-                      ? 'border-accent/50 bg-rail-active text-text'
-                      : 'border-border text-text-dim hover:text-text'
+                      ? 'border-accent bg-rail-active font-bold text-accent-soft'
+                      : 'border-transparent bg-input font-semibold text-text-dim hover:text-text'
                   }`}
                 >
                   {label}
@@ -447,46 +465,46 @@ export function EventClassifier({
             </div>
           </section>
 
-          <section className="rounded-[12px] border border-border bg-bg p-4">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="text-[14px] font-semibold">Travel time</h3>
+          <section className="rounded-card border border-border p-4">
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <h3 className="text-[15px] font-bold">Travel time</h3>
               <Toggle checked={travelOn} onChange={setTravelOn} />
             </div>
 
             {travelOn ? (
               <>
-                <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <TravelRow label="To location" value={outboundMin} onChange={setOutboundMin} />
                   <TravelRow label="Back" value={returnMin} onChange={setReturnMin} />
                 </div>
 
-                <label className="mt-3 flex items-center gap-2 text-[12px] text-text-dim">
+                <label className="mt-3 flex items-center gap-2.5 text-[14px] font-semibold text-text">
                   <input
                     type="checkbox"
                     checked={travelCounts}
                     onChange={(event_) => setTravelCounts(event_.target.checked)}
-                    className="accent-accent"
+                    className="h-4 w-4 shrink-0 accent-accent"
                   />
                   Travel counts toward worked hours
                 </label>
 
-                <p className="mt-2 text-[12px] leading-relaxed text-text-faint">
+                <p className="mt-2.5 text-[12px] leading-[1.45] text-text-faint">
                   Travel is added as its own blocks either side of the appointment, so it shows in
                   your week and blocks planning even when it is not paid.
                 </p>
               </>
             ) : (
-              <p className="text-[12px] leading-relaxed text-text-dim">
+              <p className="text-[13px] leading-normal text-text-dim">
                 No journey. Turn this on for an appointment you have to travel to.
               </p>
             )}
           </section>
 
-          <section className="rounded-[12px] border border-border bg-bg p-4">
-            <h3 className="mb-1 text-[14px] font-semibold">Classification</h3>
-            <p className="text-[12px] leading-relaxed text-text-dim">
-              <strong className="text-text">Save label</strong> remembers this for events like it,
-              so the same weekly meeting stops asking. <strong className="text-text">Only once</strong>{' '}
+          <section className="rounded-card border border-border p-4">
+            <h3 className="mb-1.5 text-[15px] font-bold">Classification</h3>
+            <p className="text-[13px] leading-normal text-text-dim">
+              <strong className="font-bold text-text">Save label</strong> remembers this for events like it,
+              so the same weekly meeting stops asking. <strong className="font-bold text-text">Only once</strong>{' '}
               applies it here and learns nothing.
             </p>
           </section>
@@ -498,9 +516,9 @@ export function EventClassifier({
 
 function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex h-7 items-center justify-between">
       <dt className={muted ? 'text-text-faint line-through' : 'text-text-dim'}>{label}</dt>
-      <dd className={`font-mono ${muted ? 'text-text-faint line-through' : 'text-text-dim'}`}>
+      <dd className={`font-mono font-bold ${muted ? 'text-text-faint line-through' : 'text-text-dim'}`}>
         {value}
       </dd>
     </div>
@@ -517,12 +535,12 @@ function TravelRow({
   onChange: (minutes: number) => void
 }) {
   return (
-    <label className="flex items-center justify-between gap-3">
-      <span className="text-[13px] text-text-dim">{label}</span>
+    <label className="flex flex-col gap-1">
+      <span className="text-[12px] font-bold text-text-faint">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="rounded-[8px] border border-border bg-card px-2.5 py-1.5 text-[13px] text-text outline-none focus:border-accent"
+        className="h-10 w-full rounded-input bg-input px-2.5 text-[14px] font-semibold text-text outline-none focus:ring-2 focus:ring-accent/40"
       >
         {TRAVEL_CHOICES.map((minutes) => (
           <option key={minutes} value={minutes}>

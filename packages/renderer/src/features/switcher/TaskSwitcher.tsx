@@ -7,7 +7,9 @@ import type { Tracking } from '../../hooks/useTracking.js'
 import { Button } from '../../ui/Button.js'
 import { Modal } from '../../ui/Modal.js'
 import { PriorityDot } from '../../ui/PriorityDot.js'
-import { CheckIcon, ClockIcon, PlayIcon, PlusIcon, SearchIcon, ShieldIcon } from '../../ui/icons.js'
+import { CheckIcon, PlayIcon, PlusIcon, SearchIcon, ShieldIcon } from '../../ui/icons.js'
+import { colorFor } from '../agenda/agenda-model.js'
+import { AreaChip } from '../tasks/AreaChip.js'
 import { formatDuration, formatMinuteOfDay } from '../../lib/format.js'
 
 interface Props {
@@ -199,7 +201,7 @@ export function TaskSwitcher({ open, tracking, onClose }: Props) {
           busy={busy}
         />
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4 wide:gap-3.5">
           {current && (
             <CurrentTask
               title={current.taskTitle ?? 'Unassigned activity'}
@@ -213,10 +215,8 @@ export function TaskSwitcher({ open, tracking, onClose }: Props) {
             />
           )}
 
-          <div className="relative">
-            <span className="absolute top-1/2 left-3.5 -translate-y-1/2 text-text-dim">
-              <SearchIcon size={16} />
-            </span>
+          <label className="flex h-12 items-center gap-2.5 rounded-input bg-input px-3.5 text-text-faint focus-within:shadow-[inset_0_0_0_1.5px_var(--color-accent)] wide:rounded-button">
+            <SearchIcon size={18} />
             <input
               ref={inputRef}
               value={search}
@@ -227,9 +227,10 @@ export function TaskSwitcher({ open, tracking, onClose }: Props) {
                 else if (search.trim()) void createAndStart()
               }}
               placeholder="Search tasks, or type a new one and press Enter..."
-              className="w-full rounded-[10px] border border-border bg-bg py-3 pr-4 pl-10 text-[14px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+              aria-label="Search tasks"
+              className="min-w-0 flex-1 bg-transparent text-[14px] font-medium text-text outline-none focus-visible:outline-none wide:text-[15px]"
             />
-          </div>
+          </label>
 
           {search.trim() ? (
             <Group title={`Matches for "${search.trim()}"`}>
@@ -244,12 +245,12 @@ export function TaskSwitcher({ open, tracking, onClose }: Props) {
               <button
                 onClick={() => void createAndStart()}
                 disabled={busy}
-                className="flex w-full items-center gap-3 rounded-[10px] border border-dashed border-border px-4 py-3 text-left transition-colors hover:bg-card-hover"
+                className="flex w-full items-center gap-3 rounded-button border-[1.5px] border-dashed border-border-strong px-4 py-3 text-left transition-colors hover:bg-input disabled:opacity-40"
               >
-                <span className="text-accent">
+                <span className="text-accent-soft">
                   <PlusIcon size={16} />
                 </span>
-                <span className="text-[14px] text-text">
+                <span className="text-[15px] font-bold text-text">
                   Create and start &ldquo;{search.trim()}&rdquo;
                 </span>
               </button>
@@ -266,6 +267,7 @@ export function TaskSwitcher({ open, tracking, onClose }: Props) {
                         : null
                     }
                     hint={`${formatMinuteOfDay(nextPlanned.startMin)} – ${formatMinuteOfDay(nextPlanned.endMin)}`}
+                    highlight
                     onSelect={choose}
                   />
                 </Group>
@@ -306,7 +308,7 @@ export function TaskSwitcher({ open, tracking, onClose }: Props) {
               )}
 
               {tracking.running && (
-                <div className="flex justify-between border-t border-border pt-5">
+                <div className="flex justify-center wide:justify-end wide:border-t wide:border-border wide:pt-3">
                   <Button variant="ghost" onClick={() => void run(null)} disabled={busy}>
                     Take a break — stop tracking
                   </Button>
@@ -325,26 +327,9 @@ export function TaskSwitcher({ open, tracking, onClose }: Props) {
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2 px-1 text-[12px] font-medium tracking-wide text-text-dim uppercase">
-        {title}
-      </h3>
-      <div className="flex flex-col gap-1">{children}</div>
+      <h3 className="label-caps px-1 pb-1.5 wide:pb-1">{title}</h3>
+      <div className="flex flex-col gap-1.5 wide:gap-1">{children}</div>
     </section>
-  )
-}
-
-function AreaBadge({ area }: { area: Area | null }) {
-  if (!area) return null
-  return (
-    <span
-      className={`rounded-full border px-2 py-0.5 text-[11px] ${
-        area.countsAsStageHours
-          ? 'border-accent/30 bg-accent/10 text-accent'
-          : 'border-border bg-bg text-text-dim'
-      }`}
-    >
-      {area.name}
-    </span>
   )
 }
 
@@ -352,28 +337,44 @@ function TaskOption({
   task,
   area,
   hint,
+  highlight = false,
   onSelect
 }: {
   task: Task
   area: Area | null
   hint?: string
+  /** The one the plan says is next: drawn a step forward. */
+  highlight?: boolean
   onSelect: (task: Task) => void
 }) {
   return (
+    // Phone: each option its own card on the sheet. Wide: flat single-line rows in the dialog.
     <button
       onClick={() => onSelect(task)}
-      className="flex w-full items-center gap-3 rounded-[10px] px-4 py-3 text-left transition-colors hover:bg-card-hover"
+      className={`flex w-full items-center gap-3 rounded-[18px] bg-card px-3.5 py-3 text-left transition-colors
+        wide:h-[46px] wide:rounded-button wide:px-3 wide:py-0 wide:hover:bg-input
+        ${highlight ? 'wide:bg-input' : 'wide:bg-transparent'}`}
     >
       <PriorityDot priority={task.priority} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[14px] text-text">{task.title}</div>
-        <div className="mt-0.5 flex items-center gap-2 text-[12px] text-text-dim">
-          {task.projectName && <span className="truncate">{task.projectName}</span>}
-          <AreaBadge area={area} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1 wide:flex-row wide:items-center wide:gap-2.5">
+        <div className="truncate text-[15px] leading-tight font-bold text-text wide:font-semibold">{task.title}</div>
+        <div className="flex min-w-0 items-center gap-1.5 wide:gap-2.5">
+          {task.projectName && (
+            <span className="truncate text-[13px] font-semibold text-text-dim wide:font-medium wide:text-text-faint">
+              {task.projectName}
+            </span>
+          )}
+          <AreaChip area={area} />
         </div>
       </div>
-      {hint && <span className="shrink-0 font-mono text-[12px] text-text-dim">{hint}</span>}
-      <span className="shrink-0 text-text-faint">
+      {hint && (
+        <span className="shrink-0 font-mono text-[13px] font-bold whitespace-nowrap text-text-dim">{hint}</span>
+      )}
+      <span
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full wide:h-[30px] wide:w-[30px] wide:rounded-[10px] ${
+          highlight ? 'bg-accent text-accent-ink' : 'bg-input text-accent-soft wide:text-text-dim'
+        }`}
+      >
         <PlayIcon size={13} />
       </span>
     </button>
@@ -405,32 +406,52 @@ function CurrentTask({
     { id: 'block', label: 'Block & switch' }
   ]
 
+  // Phone: the quiet "running" tint. Wide: a solid block in the area's own colour, like the
+  // agenda draws a running task.
+  const color = colorFor(area?.id ?? null)
+  const areaVars = { '--area-fill': color.fill, '--area-ink': color.ink } as React.CSSProperties
+
   return (
-    <div className="rounded-[12px] border border-accent/30 bg-rail-active p-5">
-      <div className="mb-3 flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="mb-1 text-[12px] tracking-wide text-accent uppercase">Currently tracking</p>
-          <p className="truncate text-[16px] font-medium text-text">{title}</p>
-          <div className="mt-1 flex items-center gap-2 text-[12px] text-text-dim">
+    <div
+      style={areaVars}
+      className="flex flex-col gap-3 rounded-modal bg-rail-active p-4 wide:rounded-card wide:bg-(--area-fill) wide:px-[18px] wide:text-(--area-ink)"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-[12px] font-bold tracking-[1px] text-accent-soft uppercase wide:text-(--area-ink)">
+            Currently tracking
+          </p>
+          <p className="truncate font-display text-[24px] leading-[1.1] font-bold tracking-[-0.3px] text-text wide:text-(--area-ink)">
+            {title}
+          </p>
+          <div className="flex items-center gap-2 text-[14px] font-semibold text-text-dim wide:text-[13px] wide:text-(--area-ink)">
             {project && <span className="truncate">{project}</span>}
-            <AreaBadge area={area} />
+            {area && (
+              <>
+                <span className="wide:hidden">
+                  <AreaChip area={area} />
+                </span>
+                <span className="hidden wide:inline">
+                  <AreaChip area={area} onFill />
+                </span>
+              </>
+            )}
           </div>
         </div>
-        <span className="flex shrink-0 items-center gap-2 font-mono text-[15px] text-accent">
-          <ClockIcon size={14} />
+        <span className="shrink-0 font-display text-[22px] font-bold text-accent-soft tabular-nums wide:text-[30px] wide:text-(--area-ink)">
           {formatDuration(Math.floor(elapsedSec / 60))}
         </span>
       </div>
 
-      <div className="flex gap-2">
+      <div className="grid grid-cols-3 gap-1.5 wide:gap-2">
         {options.map((option) => (
           <button
             key={option.id}
             onClick={() => onAction(option.id)}
-            className={`flex-1 rounded-[8px] border py-2 text-[12px] transition-colors ${
+            className={`flex h-11 items-center justify-center rounded-button px-1.5 text-[13px] leading-[1.15] font-bold transition-colors wide:h-[42px] wide:text-[14px] ${
               action === option.id
-                ? 'border-accent/50 bg-card text-text'
-                : 'border-border text-text-dim hover:text-text'
+                ? 'bg-accent text-accent-ink wide:bg-(--area-ink) wide:text-(--area-fill)'
+                : 'bg-bg/55 text-text hover:bg-bg/80 wide:bg-black/15 wide:text-(--area-ink) wide:hover:bg-black/25'
             }`}
           >
             {option.id === 'complete' && action === option.id && (
@@ -446,7 +467,7 @@ function CurrentTask({
           value={blockReason}
           onChange={(event) => onBlockReason(event.target.value)}
           placeholder="Why is it blocked?"
-          className="mt-3 w-full rounded-[8px] border border-border bg-bg px-3 py-2 text-[13px] text-text outline-none focus:border-accent"
+          className="h-11 w-full rounded-input bg-bg/55 px-3.5 text-[14px] font-medium text-text outline-none wide:bg-black/15 wide:text-(--area-ink) wide:placeholder:text-(--area-ink)/60"
         />
       )}
     </div>
@@ -480,15 +501,15 @@ function LeaveStageConfirm({
 }) {
   return (
     <div className="flex flex-col gap-5">
-      <div className="rounded-[12px] border border-prio-med/40 bg-prio-med/10 p-5">
-        <div className="mb-2 flex items-center gap-2 text-prio-med">
+      <div className="rounded-card bg-warn-soft p-5">
+        <div className="mb-2 flex items-center gap-2 text-warn">
           <ShieldIcon size={16} />
-          <h3 className="text-[15px] font-semibold">This stops counting internship hours</h3>
+          <h3 className="text-[15px] font-bold">This stops counting internship hours</h3>
         </div>
-        <p className="text-[13px] leading-relaxed text-text-dim">
-          You are tracking in <strong className="text-text">{fromArea}</strong>, which counts toward
-          your internship. <strong className="text-text">{task.title}</strong> is{' '}
-          <strong className="text-text">
+        <p className="text-[14px] leading-relaxed text-text-dim">
+          You are tracking in <strong className="font-bold text-text">{fromArea}</strong>, which counts toward
+          your internship. <strong className="font-bold text-text">{task.title}</strong> is{' '}
+          <strong className="font-bold text-text">
             {toArea}
             {toOrganization ? ` for ${toOrganization}` : ''}
           </strong>
@@ -497,7 +518,7 @@ function LeaveStageConfirm({
         </p>
       </div>
 
-      <div className="flex justify-end gap-3">
+      <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={onCancel} disabled={busy}>
           Stay on the current task
         </Button>

@@ -6,6 +6,7 @@ import { Modal } from '../../ui/Modal.js'
 import { DateField } from '../../ui/DateField.js'
 import { TimeField } from '../../ui/TimeField.js'
 import { formatDuration } from '../../lib/format.js'
+import { AREA_COLORS } from '../agenda/agenda-model.js'
 
 const MINUTE = 60_000
 
@@ -123,7 +124,7 @@ export function EventComposer({
   }
 
   const field =
-    'w-full rounded-[10px] border border-border bg-bg px-3.5 py-2.5 text-[14px] text-text outline-none placeholder:text-text-faint focus:border-accent'
+    'w-full rounded-input bg-input px-3.5 text-[16px] font-semibold text-text outline-none placeholder:font-medium placeholder:text-text-faint focus:outline-2 focus:outline-accent'
 
   return (
     <Modal
@@ -134,7 +135,7 @@ export function EventComposer({
       subtitle="Yours, in Uurwerk. Subscribed calendars are read-only, so this never leaves the app."
       footer={
         <>
-          <span className="text-[13px] text-text-dim">
+          <span className="font-display text-[20px] font-bold text-text-dim">
             {durationMin > 0 ? formatDuration(durationMin) : 'Ends before it starts'}
           </span>
           <div className="flex gap-3">
@@ -153,76 +154,80 @@ export function EventComposer({
       }
     >
       {problem && (
-        <div className="mb-5 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
+        <div className="mb-5 rounded-input bg-warn-soft px-4 py-3 text-[14px] font-semibold text-warn">
           {problem}
         </div>
       )}
 
       <div className="flex flex-col gap-5">
         <label className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Title</span>
+          <span className="label-caps tracking-[0.8px]">Title</span>
           <input
             autoFocus
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             onKeyDown={(event) => event.key === 'Enter' && void create()}
             placeholder="Projectoverleg Maasarend"
-            className={field}
+            className={`${field} h-12`}
           />
         </label>
 
         <div className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Day</span>
+          <span className="label-caps tracking-[0.8px]">Day</span>
           <DateField value={date} onChange={setDate} />
         </div>
 
-        <div className="flex items-end gap-4">
+        <div className="grid grid-cols-2 gap-2.5">
           <div className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">From</span>
+            <span className="label-caps tracking-[0.8px]">From</span>
             <TimeField value={startMin} onChange={setStartMin} />
           </div>
           <div className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">To</span>
+            <span className="label-caps tracking-[0.8px]">To</span>
             <TimeField value={endMin} onChange={setEndMin} allowEndOfDay />
           </div>
         </div>
 
         <label className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Location</span>
+          <span className="label-caps tracking-[0.8px]">Location</span>
           <input
             value={location}
             onChange={(event) => setLocation(event.target.value)}
             placeholder="Optional"
-            className={field}
+            className={`${field} h-12`}
           />
-          <span className="text-[12px] text-text-faint">
+          <span className="text-[13px] font-medium text-text-faint">
             Used when guessing what this is, alongside the title.
           </span>
         </label>
 
         <label className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Notes</span>
+          <span className="label-caps tracking-[0.8px]">Notes</span>
           <textarea
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             rows={3}
             placeholder="What to bring or prepare, who is there, particulars"
-            className={`${field} resize-y`}
+            className={`${field} resize-y py-3 text-[15px] leading-[1.4] font-medium`}
           />
         </label>
 
         <div className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">For</span>
+          <span className="label-caps tracking-[0.8px]">For</span>
           <div className="flex flex-wrap gap-2">
             {AREAS.map((area) => (
               <button
                 key={area.id}
                 type="button"
                 onClick={() => setAreaId(areaId === area.id ? null : area.id)}
-                className={`h-10 rounded-full border px-4 text-[14px] ${
-                  areaId === area.id ? 'border-accent bg-rail-active text-accent' : 'border-border text-text-dim'
-                }`}
+                aria-pressed={areaId === area.id}
+                className="flex h-[38px] items-center gap-2 rounded-pill px-3.5 text-[14px] font-bold transition-colors"
+                style={{
+                  background: areaId === area.id ? AREA_COLORS[area.id]!.tint : 'var(--color-input)',
+                  color: areaId === area.id ? AREA_COLORS[area.id]!.soft : 'var(--color-text-dim)'
+                }}
               >
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: AREA_COLORS[area.id]!.fill }} />
                 {area.label}
               </button>
             ))}
@@ -230,15 +235,15 @@ export function EventComposer({
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Travel time</span>
+          <span className="label-caps tracking-[0.8px]">Travel time</span>
           <div className="flex flex-wrap items-center gap-2">
             {TRAVEL_OPTIONS.map((minutes) => (
               <button
                 key={minutes}
                 type="button"
                 onClick={() => setTravelMin(minutes)}
-                className={`h-10 min-w-12 rounded-full border px-3 text-[14px] ${
-                  travelMin === minutes ? 'border-accent bg-rail-active text-accent' : 'border-border text-text-dim'
+                className={`h-9 min-w-12 rounded-pill px-3 text-[13px] font-bold transition-colors ${
+                  travelMin === minutes ? 'bg-text text-bg' : 'bg-input text-text hover:bg-secondary-hover'
                 }`}
               >
                 {minutes === 0 ? 'None' : `${minutes} min`}
@@ -252,18 +257,29 @@ export function EventComposer({
               value={travelMin || ''}
               onChange={(event) => setTravelMin(Math.max(0, Number(event.target.value) || 0))}
               placeholder="min"
-              className="h-10 w-20 rounded-full border border-border bg-bg px-3 text-[14px] text-text outline-none focus:border-accent"
+              className="h-9 w-[62px] rounded-input bg-input px-2.5 text-[14px] font-semibold text-text outline-none placeholder:text-text-faint focus:outline-2 focus:outline-accent"
             />
           </div>
           {travelMin > 0 && (
-            <label className="flex items-center gap-2 text-[13px] text-text-dim">
-              <input type="checkbox" checked={travelBack} onChange={(event) => setTravelBack(event.target.checked)} />
+            <label className="flex items-center gap-2.5 text-[15px] font-semibold text-text">
+              <input
+                type="checkbox"
+                checked={travelBack}
+                onChange={(event) => setTravelBack(event.target.checked)}
+                className="h-[22px] w-[22px] shrink-0 accent-accent"
+              />
               Same journey back afterwards
             </label>
           )}
           {travelMin > 0 && durationMin > 0 && (
-            <span className="text-[13px] text-accent">
+            <span className="flex items-center gap-2.5 rounded-button bg-rail-active px-3.5 py-3 text-[14px] font-semibold text-accent-soft">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" className="shrink-0">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 11v5M12 8h.01" />
+              </svg>
+              <span>
               Leave at {formatClock(startMin - travelMin)} — reminders at {formatClock(startMin - travelMin - 30)} and {formatClock(startMin - travelMin - 15)}.
+              </span>
             </span>
           )}
         </div>

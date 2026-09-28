@@ -35,7 +35,7 @@ export function Modal({ open, title, subtitle, onClose, children, footer, width 
         className="flex h-full max-h-full w-full flex-col overflow-hidden bg-bg wide:h-auto wide:rounded-modal wide:bg-card wide:shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
         style={{ maxWidth: width }}
       >
-        <header className="flex items-start justify-between gap-3 border-b border-border px-5 pt-4 pb-4 wide:px-7 wide:pt-7 wide:pb-5">
+        <header className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 wide:px-7 wide:pt-7 wide:pb-5">
           <div className="min-w-0">
             <h2 className="display-title text-[28px] leading-[1.05] tracking-[-0.4px] text-text">{title}</h2>
             {subtitle && <p className="mt-1 text-[14px] font-medium text-text-dim">{subtitle}</p>}

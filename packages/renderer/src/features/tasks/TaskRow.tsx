@@ -2,6 +2,7 @@ import type { Area, Task } from '@core/contract/types.js'
 import { PriorityDot } from '../../ui/PriorityDot.js'
 import { FolderIcon, GearIcon } from '../../ui/icons.js'
 import { formatDuration } from '../../lib/format.js'
+import { AreaChip } from './AreaChip.js'
 
 interface Props {
   task: Task
@@ -36,53 +37,64 @@ export function TaskRow({
   const done = task.status === 'done'
 
   return (
+    // Phone: full-width rows split by hairlines. Wide: separate rounded rows inside the card.
     <div
-      className={`flex items-center gap-3.5 rounded-[10px] border px-4 py-3.5 transition-colors
-        ${active ? 'border-accent/40 bg-rail-active' : 'border-transparent hover:bg-card-hover'}`}
+      className={`relative flex items-start gap-3 border-t border-border py-3 pr-3.5 pl-4 transition-colors
+        wide:items-center wide:rounded-button wide:border-t-0 wide:py-2.5 wide:pr-2.5
+        ${active ? 'bg-rail-active' : 'hover:bg-card-hover'}`}
     >
-      {active && <span className="-my-3.5 -ml-4 mr-0 h-[52px] w-[3px] shrink-0 rounded-r bg-accent" />}
+      {active && (
+        <span className="absolute top-0 bottom-0 left-0 w-[3px] bg-accent wide:top-2.5 wide:bottom-2.5 wide:rounded-r-sm" />
+      )}
 
       <button
         onClick={() => onToggleComplete(task)}
         aria-label={done ? 'Reopen task' : 'Complete task'}
-        className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border transition-colors
-          ${done ? 'border-accent bg-accent text-accent-ink' : 'border-border-strong hover:border-accent'}`}
+        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors wide:mt-0 wide:h-[18px] wide:w-[18px]
+          ${done ? 'border-accent bg-accent text-accent-ink' : 'border-text-faint/70 hover:border-accent'}`}
       >
         {done && (
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M20 6 9 17l-5-5" />
           </svg>
         )}
       </button>
 
-      {showDot && <PriorityDot priority={task.priority} />}
+      {showDot && (
+        <span className="mt-[7px] flex shrink-0 wide:mt-0">
+          <PriorityDot priority={task.priority} />
+        </span>
+      )}
 
       <button onClick={() => onStart(task)} className="group min-w-0 flex-1 text-left">
-        <div className={`truncate text-[14px] ${done ? 'text-text-dim line-through' : 'text-text'}`}>
+        <div
+          className={`text-[16px] leading-tight font-bold wide:truncate wide:text-[15px] ${
+            done ? 'text-text-faint line-through' : 'text-text'
+          }`}
+        >
           {task.title}
         </div>
-        <div className="mt-1 flex items-center gap-2 truncate text-[12px] text-text-dim">
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[13px] text-text-dim">
           {task.projectName && (
-            <span className="flex items-center gap-1.5 truncate">
-              <FolderIcon size={12} />
+            <span className="flex min-w-0 items-center gap-1 truncate font-semibold wide:font-normal">
+              <FolderIcon size={13} />
               {task.projectName}
             </span>
           )}
           {/* The badge answers the question the task list otherwise hides: does this
               time count toward the internship? */}
-          {area && (
-            <span
-              className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                area.countsAsStageHours
-                  ? 'border-accent/30 bg-accent/10 text-accent'
-                  : 'border-border bg-bg text-text-dim'
-              }`}
-            >
-              {area.name}
-            </span>
-          )}
+          <AreaChip area={area ?? null} />
           {task.status === 'blocked' && (
-            <span className="rounded-full border border-prio-med/30 bg-prio-med/10 px-2 py-0.5 text-[11px] text-prio-med">
+            <span className="rounded-pill bg-warn-soft px-[9px] py-0.5 text-[12px] font-bold text-warn">
               {task.blockedReason ?? 'blocked'}
             </span>
           )}
@@ -90,7 +102,7 @@ export function TaskRow({
           {waitingOn > 0 && task.status !== 'done' && (
             <span
               title="The planner leaves this out until its prerequisites are finished."
-              className="rounded-full border border-border bg-bg px-2 py-0.5 text-[11px] text-text-dim"
+              className="rounded-pill bg-input px-[9px] py-0.5 text-[12px] font-bold text-text-dim"
             >
               waits for {waitingOn}
             </span>
@@ -99,7 +111,11 @@ export function TaskRow({
       </button>
 
       {right ?? (
-        <span className="shrink-0 font-mono text-[13px] text-text-dim">
+        <span
+          className={`mt-0.5 shrink-0 font-mono text-[14px] font-bold whitespace-nowrap wide:mt-0 ${
+            active ? 'text-accent-soft' : 'text-text-dim'
+          }`}
+        >
           {task.estimateMin ? formatDuration(task.estimateMin) : formatDuration(task.loggedMin)}
         </span>
       )}
@@ -108,9 +124,10 @@ export function TaskRow({
         <button
           onClick={() => onEdit(task)}
           aria-label="Edit task"
-          className="shrink-0 rounded-md p-1.5 text-text-faint transition-colors hover:bg-card hover:text-text"
+          title="Edit task"
+          className="-mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-text-faint transition-colors hover:bg-input hover:text-text wide:mt-0"
         >
-          <GearIcon size={14} />
+          <GearIcon size={16} />
         </button>
       )}
     </div>

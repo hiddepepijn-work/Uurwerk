@@ -26,24 +26,36 @@ export function NextWeekPlan({ blocks }: { blocks: PlannedBlock[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-[12px] border border-border">
-      {[...byDay.entries()].map(([date, dayBlocks]) => {
+    // Its own card on the phone; on the desktop the section around it is already the card.
+    <div className="flex flex-col rounded-[22px] bg-card px-4 pt-1.5 pb-2.5 wide:gap-3.5 wide:rounded-none wide:bg-transparent wide:p-0">
+      {[...byDay.entries()].map(([date, dayBlocks], index) => {
         const minutes = dayBlocks.reduce((sum, block) => sum + (block.endMin - block.startMin), 0)
         return (
-          <div key={date} className="border-b border-border last:border-b-0">
-            <div className="flex items-baseline justify-between bg-bg px-4 py-2">
-              <span className="text-[13px] text-text">
+          <div key={date} className="flex flex-col wide:gap-1.5">
+            <div
+              className={`flex items-baseline justify-between pt-2 pb-1.5 wide:border-b wide:border-border wide:pt-0 wide:pb-1 ${
+                index > 0 ? 'mt-1 border-t border-border wide:mt-0 wide:border-t-0' : ''
+              }`}
+            >
+              <span className="text-[14px] font-bold text-text">
                 {formatLongDate(new Date(`${date}T12:00:00`))}
               </span>
-              <span className="font-mono text-[12px] text-text-dim">{formatDuration(minutes)}</span>
+              <span className="font-mono text-[13px] font-bold text-text-dim">{formatDuration(minutes)}</span>
             </div>
             {dayBlocks.map((block) => (
-              <div key={block.id} className="flex items-center gap-4 px-4 py-2 text-[13px]">
-                <span className="w-[104px] shrink-0 font-mono text-text-faint tabular-nums">
+              <div
+                key={block.id}
+                className="flex items-baseline gap-3 py-[5px] text-[14px] wide:grid wide:grid-cols-[116px_minmax(0,1fr)_auto] wide:items-center wide:gap-x-2.5 wide:py-0"
+              >
+                <span className="w-[104px] shrink-0 font-mono text-[13px] font-semibold text-text-dim tabular-nums wide:w-auto wide:text-[14px]">
                   {formatMinuteOfDay(block.startMin)} – {formatMinuteOfDay(block.endMin)}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-text">{block.taskTitle}</span>
-                <span className="shrink-0 text-text-dim">{block.projectName ?? '—'}</span>
+                <div className="flex min-w-0 flex-1 flex-col wide:contents">
+                  <span className="min-w-0 truncate font-semibold text-text">{block.taskTitle}</span>
+                  <span className="shrink-0 text-[12px] font-medium text-text-faint wide:text-[13px] wide:font-normal">
+                    {block.projectName ?? '—'}
+                  </span>
+                </div>
               </div>
             ))}
           </div>

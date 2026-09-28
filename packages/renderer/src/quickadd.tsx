@@ -39,7 +39,7 @@ function QuickAdd() {
   }
 
   return (
-    <div className="drag-region flex h-full items-center gap-3 border border-border bg-card px-4">
+    <div className="drag-region flex h-full items-center gap-3 border border-border bg-card px-5">
       <input
         ref={inputRef}
         value={title}
@@ -49,7 +49,7 @@ function QuickAdd() {
           if (event.key === 'Escape') void api.window.closeQuickAdd()
         }}
         placeholder="Add a task..."
-        className="no-drag min-w-0 flex-1 bg-transparent text-[15px] text-text outline-none placeholder:text-text-faint"
+        className="no-drag min-w-0 flex-1 bg-transparent text-[16px] font-semibold text-text outline-none placeholder:font-medium placeholder:text-text-faint"
       />
 
       <div className="no-drag flex items-center gap-2">
@@ -58,15 +58,15 @@ function QuickAdd() {
             key={option}
             onClick={() => setPriority(option)}
             aria-label={option}
-            className={`flex h-6 w-6 items-center justify-center rounded-full transition-all
-              ${priority === option ? 'bg-bg ring-1 ring-border-strong' : 'opacity-45 hover:opacity-80'}`}
+            className={`flex h-7 w-7 items-center justify-center rounded-full transition-all
+              ${priority === option ? 'bg-input ring-1 ring-border-strong' : 'opacity-45 hover:opacity-80'}`}
           >
             <PriorityDot priority={option} size={9} />
           </button>
         ))}
       </div>
 
-      <kbd className="no-drag shrink-0 font-mono text-[11px] text-text-faint">Ctrl+Alt+T</kbd>
+      <kbd className="no-drag shrink-0 rounded-md bg-input px-2 py-0.5 font-mono text-[11px] font-bold text-text-faint">Ctrl+Alt+T</kbd>
     </div>
   )
 }

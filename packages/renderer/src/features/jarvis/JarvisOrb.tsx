@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MutableRefObject } from 'react'
 
 /**
- * Jarvis's orb: three translucent layers in the app's green and teal, their edges moving on
+ * Jarvis's orb: three translucent layers in the app's muted Inkt green and teal, their edges moving on
  * slow sine waves so the shape is alive without ever jumping.
  *
  *   idle       breathes slowly
@@ -40,9 +40,9 @@ const TUNING: Record<OrbState, Tuning> = {
 }
 
 const LAYERS = [
-  { color: [62, 207, 115], alpha: 0.55, phase: 0, scale: 1 },
-  { color: [95, 208, 197], alpha: 0.45, phase: 2.1, scale: 0.9 },
-  { color: [155, 140, 255], alpha: 0.0, phase: 4.2, scale: 0.95 }
+  { color: [93, 174, 134], alpha: 0.55, phase: 0, scale: 1 },
+  { color: [111, 184, 176], alpha: 0.45, phase: 2.1, scale: 0.9 },
+  { color: [169, 151, 207], alpha: 0.0, phase: 4.2, scale: 0.95 }
 ] as const
 
 const lerp = (from: number, to: number, amount: number): number => from + (to - from) * amount
@@ -122,7 +122,7 @@ export function JarvisOrb({
         ring.alpha *= ring.teal ? 0.94 : 0.955
         context.beginPath()
         context.arc(center, center, ring.radius, 0, Math.PI * 2)
-        context.strokeStyle = ring.teal ? `rgba(95, 208, 197, ${ring.alpha})` : `rgba(62, 207, 115, ${ring.alpha})`
+        context.strokeStyle = ring.teal ? `rgba(111, 184, 176, ${ring.alpha})` : `rgba(93, 174, 134, ${ring.alpha})`
         context.lineWidth = ring.teal ? 1.5 : 2
         context.stroke()
       }
@@ -132,8 +132,8 @@ export function JarvisOrb({
       // Round, and never past the canvas edge: a clipped gradient shows as a faint square.
       const glowRadius = Math.min(base * 1.9, center)
       const glow = context.createRadialGradient(center, center, base * 0.2, center, center, glowRadius)
-      glow.addColorStop(0, `rgba(62, 207, 115, ${0.18 + smoothLevel * 0.2})`)
-      glow.addColorStop(1, 'rgba(62, 207, 115, 0)')
+      glow.addColorStop(0, `rgba(93, 174, 134, ${0.18 + smoothLevel * 0.2})`)
+      glow.addColorStop(1, 'rgba(93, 174, 134, 0)')
       context.fillStyle = glow
       context.beginPath()
       context.arc(center, center, glowRadius, 0, Math.PI * 2)
@@ -153,7 +153,7 @@ export function JarvisOrb({
           const orbit = base * particle.distance
           const x = center + Math.cos(particle.angle) * orbit
           const y = center + Math.sin(particle.angle) * orbit * 0.92
-          const [r, g, b] = particle.violet ? [175, 160, 255] : [120, 225, 210]
+          const [r, g, b] = particle.violet ? [190, 176, 224] : [140, 200, 192]
           const dot = context.createRadialGradient(x, y, 0, x, y, particle.size * 4)
           dot.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.9 * fade})`)
           dot.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`)
@@ -166,7 +166,7 @@ export function JarvisOrb({
         const sweep = angle * 1.6
         context.beginPath()
         context.arc(center, center, base * 1.18, sweep, sweep + Math.PI * 0.55)
-        context.strokeStyle = `rgba(175, 160, 255, ${0.55 * current.particles})`
+        context.strokeStyle = `rgba(190, 176, 224, ${0.55 * current.particles})`
         context.lineWidth = 2.5
         context.lineCap = 'round'
         context.stroke()
@@ -219,8 +219,8 @@ export function JarvisOrb({
 
       // A small bright core, the part that reads as "alive" at a glance.
       const core = context.createRadialGradient(center, center, 0, center, center, base * 0.55)
-      core.addColorStop(0, `rgba(235, 255, 244, ${Math.min(0.95, 0.35 + smoothLevel * (0.3 + current.gain * 0.6))})`)
-      core.addColorStop(1, 'rgba(235, 255, 244, 0)')
+      core.addColorStop(0, `rgba(243, 242, 238, ${Math.min(0.95, 0.35 + smoothLevel * (0.3 + current.gain * 0.6))})`)
+      core.addColorStop(1, 'rgba(243, 242, 238, 0)')
       context.fillStyle = core
       context.beginPath()
       context.arc(center, center, base * 0.55, 0, Math.PI * 2)

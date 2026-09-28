@@ -13,6 +13,7 @@ import { Button } from '../../ui/Button.js'
 import { DateField } from '../../ui/DateField.js'
 import { Modal } from '../../ui/Modal.js'
 import { PriorityDot, PRIORITY_LABEL } from '../../ui/PriorityDot.js'
+import { areaFill, colorFor } from '../agenda/agenda-model.js'
 
 const PRIORITIES: Priority[] = ['high', 'medium', 'low']
 
@@ -169,7 +170,12 @@ export function TaskEditor({
   }
 
   const field =
-    'w-full rounded-[10px] border border-border bg-bg px-3.5 py-2.5 text-[14px] text-text outline-none focus:border-accent'
+    'h-11 w-full rounded-input bg-input px-3.5 text-[15px] font-semibold text-text outline-none'
+  const select =
+    'h-[46px] w-full rounded-input bg-input px-3 text-[15px] font-semibold text-text outline-none wide:h-11 wide:text-[14px]'
+  const label = 'label-caps tracking-[0.8px]'
+  const help = 'text-[13px] leading-snug text-text-faint wide:text-[12px]'
+  const group = 'flex flex-col gap-2 wide:gap-1.5'
 
   const selectedArea = areas.find((area) => area.id === areaId) ?? null
 
@@ -200,7 +206,7 @@ export function TaskEditor({
           ) : (
             <span />
           )}
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose} disabled={busy}>
               Cancel
             </Button>
@@ -215,56 +221,67 @@ export function TaskEditor({
         </>
       }
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5 wide:gap-4">
         {problem && (
-          <div className="rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
+          <div className="rounded-input bg-warn-soft px-4 py-3 text-[13px] font-semibold text-warn">
             {problem}
           </div>
         )}
 
-        <label className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Title</span>
+        <label className={group}>
+          <span className={label}>Title</span>
           <input
             autoFocus
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             onKeyDown={(event) => event.key === 'Enter' && void submit()}
             placeholder="What needs doing?"
-            className={field}
+            className="h-12 w-full rounded-input bg-input px-3.5 text-[16px] font-semibold text-text outline-none wide:h-11 wide:text-[15px] wide:font-bold"
           />
         </label>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Area</span>
-          <div className="flex gap-2">
-            {areas.map((area) => (
-              <button
-                key={area.id}
-                onClick={() => setAreaId(area.id)}
-                className={`flex-1 rounded-[10px] border py-2.5 text-[13px] transition-colors ${
-                  areaId === area.id
-                    ? 'border-accent/50 bg-rail-active text-text'
-                    : 'border-border bg-bg text-text-dim hover:bg-card-hover'
-                }`}
-              >
-                {area.name}
-              </button>
-            ))}
+        <div className={group}>
+          <span className={label}>Area</span>
+          <div className="flex gap-1.5 wide:gap-2">
+            {areas.map((area) => {
+              const selected = areaId === area.id
+              const color = colorFor(area.id)
+              return (
+                <button
+                  key={area.id}
+                  onClick={() => setAreaId(area.id)}
+                  className={`flex h-[42px] min-w-0 flex-1 items-center justify-center gap-2 rounded-button border-[1.5px] text-[14px] font-bold transition-colors wide:h-10 ${
+                    selected ? '' : 'border-transparent bg-input text-text-dim hover:bg-secondary-hover'
+                  }`}
+                  style={
+                    selected
+                      ? { background: color.tint, color: color.soft, borderColor: areaFill(area) }
+                      : undefined
+                  }
+                >
+                  <span
+                    className="hidden h-2 w-2 shrink-0 rounded-full wide:inline-block"
+                    style={{ background: areaFill(area) }}
+                  />
+                  <span className="truncate">{area.name}</span>
+                </button>
+              )
+            })}
           </div>
-          <p className="text-[12px] text-text-faint">
+          <p className={help}>
             {selectedArea?.countsAsStageHours
               ? 'Time on this task counts toward your internship hours.'
               : 'Time on this task is tracked, but does not count toward internship hours.'}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 wide:grid-cols-2">
-          <label className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">Project</span>
+        <div className="grid grid-cols-1 gap-5 wide:grid-cols-2 wide:gap-3">
+          <label className={group}>
+            <span className={label}>Project</span>
             <select
               value={projectId}
               onChange={(event) => setProjectId(event.target.value)}
-              className={field}
+              className={select}
             >
               <option value="">No project</option>
               {projects.map((project) => (
@@ -273,19 +290,19 @@ export function TaskEditor({
                 </option>
               ))}
             </select>
-            <span className="text-[12px] text-text-faint">
+            <span className={help}>
               The project decides who the work is for. It does not decide the area.
             </span>
           </label>
 
           {/* Independent of both: research is research, whether it is internship work,
               other work for the same organization, or a course. */}
-          <label className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">Work type</span>
+          <label className={group}>
+            <span className={label}>Work type</span>
             <select
               value={workTypeId}
               onChange={(event) => setWorkTypeId(event.target.value)}
-              className={field}
+              className={select}
             >
               <option value="">Unlabelled</option>
               {workTypes.map((workType) => (
@@ -294,23 +311,23 @@ export function TaskEditor({
                 </option>
               ))}
             </select>
-            <span className="text-[12px] text-text-faint">
+            <span className={help}>
               What kind of activity this is, across every area.
             </span>
           </label>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Priority</span>
-          <div className="flex gap-2">
+        <div className={group}>
+          <span className={label}>Priority</span>
+          <div className="grid grid-cols-3 gap-1.5 wide:gap-2">
             {PRIORITIES.map((option) => (
               <button
                 key={option}
                 onClick={() => setPriority(option)}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-[10px] border py-2.5 text-[13px] transition-colors ${
+                className={`flex h-11 items-center justify-center gap-2 rounded-button border-[1.5px] text-[15px] font-bold transition-colors wide:h-10 wide:text-[14px] ${
                   priority === option
-                    ? 'border-accent/50 bg-rail-active text-text'
-                    : 'border-border bg-bg text-text-dim hover:bg-card-hover'
+                    ? PRIORITY_SELECTED[option]
+                    : 'border-transparent bg-input text-text-dim hover:bg-secondary-hover'
                 }`}
               >
                 <PriorityDot priority={option} />
@@ -320,9 +337,9 @@ export function TaskEditor({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 wide:grid-cols-2">
-          <label className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">Estimate (hours)</span>
+        <div className="grid grid-cols-1 gap-5 wide:grid-cols-2 wide:gap-3">
+          <label className={group}>
+            <span className={label}>Estimate (hours)</span>
             <input
               type="number"
               min="0"
@@ -330,11 +347,11 @@ export function TaskEditor({
               value={estimate}
               onChange={(event) => setEstimate(event.target.value)}
               placeholder="No estimate"
-              className={field}
+              className={`${field} tabular-nums`}
             />
           </label>
-          <div className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">Due date</span>
+          <div className={group}>
+            <span className={label}>Due date</span>
             <DateField value={due} onChange={setDue} placeholder="No deadline" />
           </div>
         </div>
@@ -342,54 +359,54 @@ export function TaskEditor({
         {/* Both of these are constraints the planner obeys before it looks at any score:
             it will not place work before it can start, and a must-do day outranks the
             ordinary ranking on that day. */}
-        <div className="grid grid-cols-1 gap-4 wide:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">Cannot start before</span>
+        <div className="grid grid-cols-1 gap-5 wide:grid-cols-2 wide:gap-3">
+          <div className={group}>
+            <span className={label}>Cannot start before</span>
             <DateField value={earliestStart} onChange={setEarliestStart} placeholder="Any time" />
-            <span className="text-[12px] text-text-faint">
+            <span className={help}>
               Waiting on data or someone else? The planner leaves it alone until then.
             </span>
           </div>
-          <div className="flex flex-col gap-2">
-            <span className="text-[13px] text-text-dim">Must be done on</span>
+          <div className={group}>
+            <span className={label}>Must be done on</span>
             <DateField value={mustDo} onChange={setMustDo} placeholder="Not pinned" />
-            <span className="text-[12px] text-text-faint">
+            <span className={help}>
               Pins it to that day, above everything the ranking would otherwise pick.
             </span>
           </div>
         </div>
 
-        <label className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Focus</span>
+        <label className={group}>
+          <span className={label}>Focus</span>
           <select
             value={focusMode}
             onChange={(event) => setFocusMode(event.target.value as FocusMode)}
-            className={field}
+            className={select}
           >
             <option value="auto">Automatic — stage always, private from 30 min</option>
             <option value="always">Always — lock down until done</option>
             <option value="never">Never</option>
           </select>
-          <span className="text-[12px] text-text-faint">
+          <span className={help}>
             While a focus task is on, the phone allows only the essentials and the laptop closes blocked apps — until it is done.
           </span>
         </label>
 
-        <label className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Notes</span>
+        <label className={group}>
+          <span className={label}>Notes</span>
           <textarea
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             rows={3}
             placeholder="What counts as done, what you need, particulars"
-            className="w-full resize-y rounded-[10px] border border-border bg-bg px-3.5 py-2.5 text-[14px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+            className="w-full resize-y rounded-input bg-input px-3.5 py-3 text-[14px] leading-normal font-medium text-text outline-none"
           />
-          <span className="text-[12px] text-text-faint">Jarvis reads these when it reminds you or asks how it went.</span>
+          <span className={help}>Jarvis reads these when it reminds you or asks how it went.</span>
         </label>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-[13px] text-text-dim">Waits for</span>
-          <p className="text-[12px] text-text-faint">
+        <div className={group}>
+          <span className={label}>Waits for</span>
+          <p className={help}>
             A hard prerequisite keeps this task out of the plan entirely until it is finished.
             Preferred is only an ordering hint.
           </p>
@@ -397,7 +414,7 @@ export function TaskEditor({
           {candidates.length === 0 ? (
             <p className="text-[13px] text-text-faint">No other tasks to wait for yet.</p>
           ) : (
-            <div className="max-h-48 overflow-y-auto rounded-[10px] border border-border">
+            <div className="max-h-48 overflow-y-auto rounded-button border border-border px-1.5 py-1">
               {candidates.map((candidate) => {
                 const edge = edges.find((entry) => entry.dependsOnTaskId === candidate.id)
                 const settled =
@@ -405,30 +422,52 @@ export function TaskEditor({
                   statusById.get(candidate.id) === 'archived'
 
                 return (
-                  <div
-                    key={candidate.id}
-                    className="flex items-center gap-3 border-b border-border px-3 py-2 last:border-b-0"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(edge)}
-                      onChange={() => toggleDependency(candidate.id)}
-                      className="accent-accent"
-                    />
-                    <span
-                      className={`min-w-0 flex-1 truncate text-[13px] ${
-                        settled ? 'text-text-faint line-through' : 'text-text'
-                      }`}
-                    >
-                      {candidate.title}
-                    </span>
+                  <div key={candidate.id} className="flex min-h-10 items-center gap-2.5 px-1.5">
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(edge)}
+                        onChange={() => toggleDependency(candidate.id)}
+                        className="peer sr-only"
+                      />
+                      {/* The real checkbox is visually hidden; this box draws it and carries its focus ring. */}
+                      <span
+                        aria-hidden="true"
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] text-accent-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent ${
+                          edge ? 'bg-accent' : 'border-[1.5px] border-border-strong'
+                        }`}
+                      >
+                        {edge && (
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M20 6 9 17l-5-5" />
+                          </svg>
+                        )}
+                      </span>
+                      <span
+                        className={`min-w-0 flex-1 truncate text-[14px] font-semibold ${
+                          settled ? 'text-text-faint line-through' : edge ? 'text-text' : 'text-text-dim'
+                        }`}
+                      >
+                        {candidate.title}
+                      </span>
+                    </label>
                     {edge && (
                       <select
                         value={edge.type}
                         onChange={(event) =>
                           setDependencyType(candidate.id, event.target.value as DependencyType)
                         }
-                        className="rounded-[6px] border border-border bg-bg px-2 py-1 text-[12px] text-text-dim outline-none focus:border-accent"
+                        aria-label="Dependency strength"
+                        className="h-[30px] rounded-[10px] bg-input px-2 text-[13px] font-bold text-text outline-none"
                       >
                         <option value="hard">Hard</option>
                         <option value="preferred">Preferred</option>
@@ -443,4 +482,11 @@ export function TaskEditor({
       </div>
     </Modal>
   )
+}
+
+/** A chosen priority wears its own colour: tint behind, the signal colour as text and edge. */
+const PRIORITY_SELECTED: Record<Priority, string> = {
+  high: 'border-prio-high bg-danger-soft text-danger-text',
+  medium: 'border-prio-med bg-warn-soft text-warn',
+  low: 'border-prio-low bg-input text-text'
 }

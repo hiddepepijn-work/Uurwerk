@@ -125,44 +125,59 @@ export function TodayScreen({
   }
 
   return (
-    <div className="p-4 wide:p-8">
+    <div className="p-4 wide:px-8 wide:pt-7 wide:pb-8">
+      {/* On a phone the title comes first and the status and buttons wrap on a row below it;
+          from `wide:` up everything lines up on one row, as the header of a page. */}
+      <header className="mb-4 flex flex-col gap-3 wide:mb-7 wide:flex-row wide:items-end wide:justify-between">
+        <div className="flex min-w-0 flex-col gap-1 wide:gap-1.5">
+          <h1 className="display-title text-[34px] tracking-[-1px] wide:text-[40px]">Today</h1>
+          <p className="text-[14px] font-medium text-text-dim wide:text-[15px] wide:font-normal">
+            {formatLongDate(new Date())}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 wide:gap-2.5">
+          <span
+            className={`flex h-[30px] items-center gap-[7px]
+              rounded-pill px-3 text-[13px] font-bold
+              wide:h-auto wide:gap-2 wide:bg-transparent wide:px-2.5 wide:text-[14px] wide:font-semibold
+              ${tracking.running ? 'bg-rail-active text-accent-soft' : 'bg-secondary text-text-dim'}`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                tracking.running
+                  ? 'animate-pulse-dot bg-accent shadow-[0_0_0_4px_rgb(93_174_134/0.22)]'
+                  : 'bg-text-faint'
+              }`}
+            />
+            {tracking.running ? 'Tracking active' : 'Not tracking'}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<CalendarIcon size={16} />}
+            onClick={() => setPlannerOpen(true)}
+            className="h-10! gap-2! px-3.5! text-[14px]!"
+          >
+            {agenda.length > 0 ? 'Edit day plan' : 'Plan day'}
+          </Button>
+          {/* Quick actions is gone; end of day still needs a way in besides the hotkey. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<DocumentIcon size={16} />}
+            onClick={() => setWizardOpen(true)}
+            className="h-10! gap-2! px-3.5! text-[14px]!"
+          >
+            End of day
+          </Button>
+        </div>
+      </header>
+
       {/* The timeline sits below both columns and spans the full width, so a long day
           has room to be read rather than being squeezed beside the sidebar. */}
-      <div className="grid grid-cols-1 gap-6 wide:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-4 wide:grid-cols-[minmax(0,1fr)_360px] wide:gap-6">
         {/* ---------------------------------------------------------- left */}
-        <div className="min-w-0">
-          <header className="mb-6 flex flex-col gap-3 wide:mb-8 wide:flex-row wide:items-start wide:justify-between">
-            <div>
-              <h1 className="text-[32px] leading-tight font-semibold">Today</h1>
-              <p className="mt-1 text-[14px] text-text-dim">{formatLongDate(new Date())}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 wide:pt-2">
-              <span className="flex items-center gap-2 text-[13px] text-text-dim">
-                <span
-                  className={`h-2 w-2 rounded-full ${tracking.running ? 'animate-pulse-dot bg-accent' : 'bg-text-faint'}`}
-                />
-                {tracking.running ? 'Tracking active' : 'Not tracking'}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<CalendarIcon size={14} />}
-                onClick={() => setPlannerOpen(true)}
-              >
-                {agenda.length > 0 ? 'Edit day plan' : 'Plan day'}
-              </Button>
-              {/* Quick actions is gone; end of day still needs a way in besides the hotkey. */}
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<DocumentIcon size={14} />}
-                onClick={() => setWizardOpen(true)}
-              >
-                End of day
-              </Button>
-            </div>
-          </header>
-
+        <div className="flex min-w-0 flex-col gap-4">
           <TimerHero
             segment={tracking.segment}
             elapsedSec={tracking.elapsedSec}
@@ -175,7 +190,7 @@ export function TodayScreen({
             onStop={() => void tracking.stop()}
           />
 
-          <div className="mt-6 grid grid-cols-2 gap-3 wide:mt-9 wide:grid-cols-4 wide:gap-4">
+          <div className="grid grid-cols-2 gap-2 wide:grid-cols-4 wide:gap-3">
           <StatCard
             icon={<ClockIcon size={16} />}
             label="Today"
@@ -217,7 +232,7 @@ export function TodayScreen({
         </div>
 
         {/* --------------------------------------------------------- right */}
-        <aside className="flex flex-col gap-5">
+        <aside className="flex flex-col gap-4">
           <TopPriority
             tasks={topTasks}
             activeTaskId={tracking.taskId}
@@ -234,7 +249,7 @@ export function TodayScreen({
       </div>
 
       {/* Full width, below both columns: a long day needs the room. */}
-      <section className="mt-8 overflow-x-auto border-t border-border pt-6 wide:mt-10 wide:overflow-visible wide:pt-8">
+      <section className="mt-4 overflow-x-auto border-t border-border pt-[18px] wide:mt-7 wide:overflow-visible wide:pt-[22px]">
         <TodayTimeline segments={timeline ?? []} />
       </section>
 

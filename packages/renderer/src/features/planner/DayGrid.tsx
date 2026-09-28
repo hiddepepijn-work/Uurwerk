@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { FixedEvent, PlanBlock } from '@core/contract/types.js'
 import { formatMinuteOfDay } from '../../lib/format.js'
+import { colorFor } from '../agenda/agenda-model.js'
 
 const SNAP_MIN = 15
 const MIN_BLOCK_MIN = 15
@@ -32,12 +33,53 @@ type DragState =
 
 const snap = (minute: number): number => Math.round(minute / SNAP_MIN) * SNAP_MIN
 
-const KIND_STYLES: Record<string, string> = {
-  task: 'bg-block-blue/70 border-block-blue',
-  meeting: 'bg-block-amber/60 border-block-amber',
-  break: 'bg-card border-border',
-  buffer: 'bg-transparent border-dashed border-border'
+/**
+ * How a block is drawn: a task is its area's fill with ink text; a meeting is a commitment,
+ * dashed amber; a break a quiet grey slab; a buffer only an outline.
+ */
+const blockLook = (block: PlanBlock): { style: CSSProperties; ink: string } => {
+  if (block.kind === 'meeting') {
+    return {
+      style: {
+        background: 'var(--color-warn-soft)',
+        color: 'var(--color-warn)',
+        border: '1.5px dashed var(--color-warn)'
+      },
+      ink: 'var(--color-warn)'
+    }
+  }
+  if (block.kind === 'break') {
+    return {
+      style: { background: 'var(--color-input)', color: 'var(--color-text-dim)' },
+      ink: 'var(--color-text-dim)'
+    }
+  }
+  if (block.kind === 'buffer') {
+    return {
+      style: {
+        background: 'transparent',
+        color: 'var(--color-text-faint)',
+        border: '1.5px dashed var(--color-border-strong)'
+      },
+      ink: 'var(--color-text-faint)'
+    }
+  }
+  const colors = colorFor(block.areaId)
+  return { style: { background: colors.fill, color: colors.ink }, ink: colors.ink }
 }
+
+const LockGlyph = ({ open }: { open: boolean }) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+    <rect x="5" y="11" width="14" height="9" rx="2" />
+    <path d={open ? 'M8 11V8a4 4 0 017.5-2' : 'M8 11V8a4 4 0 018 0v3'} />
+  </svg>
+)
+
+const CrossGlyph = ({ size = 12 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+)
 
 /**
  * The day, drawn to scale, with blocks you can drag and stretch.
@@ -121,7 +163,7 @@ export function DayGrid({
         {hours.map((hour) => (
           <span
             key={hour}
-            className="absolute right-0 -translate-y-1/2 font-mono text-[11px] text-text-dim tabular-nums"
+            className="absolute right-0 -translate-y-1/2 font-mono text-[12px] font-bold text-text-faint tabular-nums"
             style={{ top: toY(hour * 60) }}
           >
             {String(hour).padStart(2, '0')}:00
@@ -131,13 +173,13 @@ export function DayGrid({
 
       <div
         ref={surfaceRef}
-        className="relative flex-1 rounded-[10px] border border-border bg-bg"
+        className="relative flex-1 rounded-input bg-accent/[0.04]"
         style={{ height }}
       >
         {hours.map((hour) => (
           <div
             key={hour}
-            className="absolute right-0 left-0 border-t border-border/60"
+            className="absolute right-0 left-0 border-t border-input"
             style={{ top: toY(hour * 60) }}
           />
         ))}
@@ -147,15 +189,15 @@ export function DayGrid({
           <div
             key={event.id}
             title={`${event.title} · ${formatMinuteOfDay(event.startMin)}–${formatMinuteOfDay(event.endMin)}`}
-            className="group absolute right-2 left-2 overflow-hidden rounded-[8px] border border-dashed border-block-amber bg-block-amber/25 px-3 py-1.5 select-none"
+            className="group absolute right-1 left-1 overflow-hidden rounded-input border-[1.5px] border-dashed border-warn bg-warn-soft px-3 py-1 text-warn select-none"
             style={{
-              top: toY(event.startMin),
-              height: Math.max(22, (event.endMin - event.startMin) * PX_PER_MIN - 2)
+              top: toY(event.startMin) + 1,
+              height: Math.max(22, (event.endMin - event.startMin) * PX_PER_MIN - 3)
             }}
           >
-            <div className="flex items-start justify-between gap-2">
-              <span className="min-w-0 flex-1 truncate text-[13px] text-text">{event.title}</span>
-              <span className="shrink-0 font-mono text-[11px] text-text-dim tabular-nums">
+            <div className="flex items-baseline gap-2.5">
+              <span className="min-w-0 truncate text-[14px] font-bold">{event.title}</span>
+              <span className="shrink-0 font-mono text-[12px] font-bold tabular-nums opacity-80">
                 {formatMinuteOfDay(event.startMin)}–{formatMinuteOfDay(event.endMin)}
               </span>
             </div>
@@ -163,9 +205,10 @@ export function DayGrid({
             <button
               onClick={() => onRemoveEvent(event.id)}
               title="Remove this commitment"
-              className="absolute top-1 right-1 hidden rounded p-1 text-[10px] text-text-faint group-hover:block hover:text-prio-high"
+              aria-label="Remove this commitment"
+              className="absolute top-0.5 right-1 hidden h-[22px] w-[22px] items-center justify-center rounded-[6px] text-warn group-hover:flex hover:bg-warn/15"
             >
-              ✕
+              <CrossGlyph size={11} />
             </button>
           </div>
         ))}
@@ -176,6 +219,7 @@ export function DayGrid({
           const to = live?.endMin ?? block.endMin
           const immovable = block.locked || block.fixed
           const minutes = to - from
+          const look = blockLook(block)
 
           return (
             <div
@@ -183,11 +227,10 @@ export function DayGrid({
               // The planner's reasoning, one hover away — a block you cannot interrogate
               // is a block you end up deleting instead of understanding.
               title={block.explanation ?? undefined}
-              className={`group absolute right-2 left-2 overflow-hidden rounded-[8px] border px-3 py-1.5 select-none
-                ${KIND_STYLES[block.kind] ?? KIND_STYLES['task']}
+              className={`group absolute right-1 left-1 overflow-hidden rounded-input px-3 py-1.5 select-none
                 ${immovable ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}
-                ${live ? 'z-10 ring-1 ring-accent' : ''}`}
-              style={{ top: toY(from), height: Math.max(22, minutes * PX_PER_MIN - 2) }}
+                ${live ? 'z-10 shadow-[0_0_0_3px_var(--color-card),0_0_0_5px_var(--color-text)]' : ''}`}
+              style={{ ...look.style, top: toY(from) + 1, height: Math.max(22, minutes * PX_PER_MIN - 3) }}
               onPointerDown={(event) => {
                 if (immovable) return
                 if ((event.target as HTMLElement).dataset['handle']) return
@@ -201,20 +244,20 @@ export function DayGrid({
                 })
               }}
             >
-              <div className="flex items-start justify-between gap-2">
-                <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+              <div className="flex items-baseline gap-2.5">
+                <span className="min-w-0 truncate text-[14px] leading-[1.2] font-bold">
                   {block.taskTitle ?? block.title ?? 'Untitled'}
                 </span>
-                <span className="shrink-0 font-mono text-[11px] text-text-dim tabular-nums">
+                <span className="shrink-0 font-mono text-[12px] font-bold tabular-nums opacity-75">
                   {formatMinuteOfDay(from)}–{formatMinuteOfDay(to)}
                 </span>
               </div>
 
               {minutes >= 45 && (
-                <div className="flex items-center gap-2 truncate text-[11px] text-text-dim">
+                <div className="mt-0.5 flex items-center gap-2 truncate text-[12px] font-semibold opacity-75">
                   {block.projectName && <span className="truncate">{block.projectName}</span>}
                   {block.score !== null && (
-                    <span className="shrink-0 text-accent" title={block.explanation ?? undefined}>
+                    <span className="shrink-0" title={block.explanation ?? undefined}>
                       score {block.score}
                     </span>
                   )}
@@ -222,20 +265,26 @@ export function DayGrid({
               )}
 
               {/* Controls appear on hover so the grid stays quiet at rest. */}
-              <div className="absolute top-1 right-1 hidden gap-1 group-hover:flex">
+              <div className="absolute top-1.5 right-1.5 hidden gap-1 group-hover:flex">
                 <button
                   onClick={() => onToggleLock(block)}
                   title={block.locked ? 'Unlock' : 'Lock in place'}
-                  className={`rounded p-1 text-[10px] ${block.locked ? 'text-accent' : 'text-text-faint hover:text-text'}`}
+                  aria-label={block.locked ? 'Unlock' : 'Lock in place'}
+                  className={`flex h-7 w-7 items-center justify-center rounded-[8px] transition-colors ${
+                    block.locked ? 'bg-current/30' : 'bg-current/15 hover:bg-current/25'
+                  }`}
+                  style={{ color: look.ink }}
                 >
-                  {block.locked ? '🔒' : '🔓'}
+                  <LockGlyph open={!block.locked} />
                 </button>
                 <button
                   onClick={() => onRemove(block.id)}
                   title="Remove from the plan"
-                  className="rounded p-1 text-[10px] text-text-faint hover:text-prio-high"
+                  aria-label="Remove from the plan"
+                  className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-current/15 transition-colors hover:bg-current/25"
+                  style={{ color: look.ink }}
                 >
-                  ✕
+                  <CrossGlyph />
                 </button>
               </div>
 
@@ -252,8 +301,13 @@ export function DayGrid({
                       endMin: block.endMin
                     })
                   }}
-                  className="absolute right-0 bottom-0 left-0 h-2 cursor-ns-resize"
-                />
+                  className="absolute right-0 bottom-0 left-0 flex h-3 cursor-ns-resize items-center justify-center"
+                >
+                  <span
+                    className="pointer-events-none h-1 w-9 rounded-[2px] opacity-0 transition-opacity group-hover:opacity-45"
+                    style={{ background: look.ink }}
+                  />
+                </div>
               )}
             </div>
           )

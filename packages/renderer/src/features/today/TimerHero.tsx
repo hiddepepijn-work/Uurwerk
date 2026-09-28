@@ -2,6 +2,7 @@ import type { Area, TimeSegment } from '@core/contract/types.js'
 import { Button } from '../../ui/Button.js'
 import { PlayIcon, StopIcon } from '../../ui/icons.js'
 import { formatClock, formatDuration, formatStopwatch } from '../../lib/format.js'
+import { AREA_COLORS } from '../agenda/agenda-model.js'
 
 interface Props {
   segment: TimeSegment | null
@@ -52,28 +53,37 @@ export function TimerHero({
    */
   const switched = running && runElapsedSec - elapsedSec > 30
 
+  // The four system areas wear their own tint; an area the user added stays grey.
+  const areaColor = area ? AREA_COLORS[area.id] : undefined
+
   return (
-    <div>
-      <div
-        className={`font-display text-[56px] wide:text-[76px] leading-none font-bold tracking-[-0.025em] tabular-nums
-          ${running ? 'text-text' : 'text-text-faint'}`}
-      >
-        {formatStopwatch(elapsedSec)}
+    <section
+      className="flex flex-col gap-3.5 rounded-modal bg-card px-[18px] pt-5 pb-[18px]
+        wide:flex-1 wide:justify-between wide:gap-6 wide:px-8 wide:py-[30px]"
+    >
+      <div className="flex flex-col gap-1 wide:gap-[18px]">
+        <div
+          className={`font-display text-[58px] leading-none font-bold tracking-[-1.6px] tabular-nums
+            wide:text-[112px] wide:leading-[0.9] wide:tracking-[-3px]
+            ${running ? 'text-text' : 'text-text-faint'}`}
+        >
+          {formatStopwatch(elapsedSec)}
+        </div>
+
+        {switched && (
+          <div className="text-[13px] font-semibold text-text-dim wide:text-[15px] wide:font-normal">
+            <span className="font-bold text-accent-soft">on this task</span>
+            <span> · </span>
+            <span>
+              working session {formatDuration(Math.floor(runElapsedSec / 60))}
+              {runStartedAt !== null && `, since ${formatClock(runStartedAt)}`}
+            </span>
+          </div>
+        )}
       </div>
 
-      {switched && (
-        <div className="mt-2 flex items-center gap-2 text-[13px] text-text-dim">
-          <span className="text-accent">on this task</span>
-          <span className="text-text-faint">·</span>
-          <span>
-            working session {formatDuration(Math.floor(runElapsedSec / 60))}
-            {runStartedAt !== null && `, since ${formatClock(runStartedAt)}`}
-          </span>
-        </div>
-      )}
-
-      <div className="mt-6 mb-7 border-l-[3px] border-accent pl-4">
-        <div className="text-[19px] font-medium text-text">
+      <div className="flex flex-col gap-2 border-l-[3px] border-accent py-0.5 pl-3 wide:gap-3 wide:pl-3.5">
+        <div className="text-[20px] leading-tight font-bold text-text wide:text-[24px] wide:tracking-[-0.2px]">
           {/* An untasked run is not an unnamed one: the clock is running and the reason it
               has no task is that naming it is deferred, which the line has to say. */}
           {segment?.taskTitle ??
@@ -83,23 +93,32 @@ export function TimerHero({
               <span className="text-text-dim">Not tracking</span>
             ))}
         </div>
-        <div className="mt-1 flex items-center gap-2 text-[13px] text-text-dim">
+        <div className="flex flex-wrap items-center gap-2.5 text-[13px] font-semibold text-text-dim empty:hidden wide:gap-3 wide:text-[14px]">
           {untasked && <span>Divide this stretch over tasks at end of day</span>}
           {segment?.projectName && (
             <span className="flex items-center gap-1.5">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 21V4h12l-2 4 2 4H4" />
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 21V4h12l-2.5 4L17 12H5" />
               </svg>
               {segment.projectName}
             </span>
           )}
           {area && (
             <span
-              className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                area.countsAsStageHours
-                  ? 'border-accent/30 bg-accent/10 text-accent'
-                  : 'border-border bg-bg text-text-dim'
+              className={`rounded-pill px-[11px] py-[5px] text-[13px] font-bold ${
+                areaColor ? '' : 'bg-secondary text-text-dim'
               }`}
+              style={areaColor ? { background: areaColor.tint, color: areaColor.soft } : undefined}
             >
               {area.name}
               {!area.countsAsStageHours && ' · not stage hours'}
@@ -108,19 +127,25 @@ export function TimerHero({
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 wide:gap-2.5">
         {running ? (
           <>
             <Button
               size="lg"
               variant="primary"
-              icon={<StopIcon size={15} />}
+              icon={<StopIcon size={16} />}
               onClick={onStop}
-              className="w-auto flex-1 wide:w-[260px] wide:flex-none"
+              className="w-auto flex-1 basis-0 tracking-[0.6px] wide:w-[260px] wide:flex-none wide:basis-auto"
             >
               STOP
             </Button>
-            <Button size="lg" variant="secondary" hint={hotkey} onClick={onPick} className="flex-1">
+            <Button
+              size="lg"
+              variant="secondary"
+              hint={hotkey}
+              onClick={onPick}
+              className="flex-1 basis-0 wide:flex-none wide:basis-auto"
+            >
               Switch task
             </Button>
           </>
@@ -129,19 +154,24 @@ export function TimerHero({
             <Button
               size="lg"
               variant="primary"
-              icon={<PlayIcon size={15} />}
+              icon={<PlayIcon size={16} />}
               hint={hotkey}
               onClick={onStart}
-              className="w-auto flex-1 wide:w-[260px] wide:flex-none"
+              className="w-auto flex-1 basis-0 tracking-[0.6px] wide:w-[260px] wide:flex-none wide:basis-auto"
             >
               START
             </Button>
-            <Button size="lg" variant="secondary" onClick={onPick} className="flex-1">
+            <Button
+              size="lg"
+              variant="secondary"
+              onClick={onPick}
+              className="flex-1 basis-0 wide:flex-none wide:basis-auto"
+            >
               Start on a task
             </Button>
           </>
         )}
       </div>
-    </div>
+    </section>
   )
 }

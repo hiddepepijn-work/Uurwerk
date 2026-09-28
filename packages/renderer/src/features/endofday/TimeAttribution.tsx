@@ -85,7 +85,7 @@ export function TimeAttribution({ date, attribution, onDraft, onSaved }: Props) 
 
   if (poolMin === 0) {
     return (
-      <Card>
+      <Card className="border border-border">
         <EmptyState
           icon={<CheckIcon size={22} />}
           title="Every minute of today already knows which task it belongs to"
@@ -100,9 +100,9 @@ export function TimeAttribution({ date, attribution, onDraft, onSaved }: Props) 
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       {/* What the division is about, before any of the controls. */}
-      <div className="grid grid-cols-1 gap-4 wide:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 wide:grid-cols-3">
         <Figure
           icon={<ClockIcon size={16} />}
           label="To divide"
@@ -134,12 +134,12 @@ export function TimeAttribution({ date, attribution, onDraft, onSaved }: Props) 
       </div>
 
       {problem && (
-        <div className="rounded-[10px] border border-prio-high/40 bg-prio-high/10 px-4 py-3 text-[13px] text-prio-high">
+        <div className="rounded-input bg-danger-soft px-4 py-3 text-[13px] font-semibold text-danger-text">
           {problem}
         </div>
       )}
 
-      <Card title="What did that time go to?">
+      <Card title="What did that time go to?" className="border border-border">
         <TaskShareList
           shares={shares}
           onChange={setShares}
@@ -151,17 +151,17 @@ export function TimeAttribution({ date, attribution, onDraft, onSaved }: Props) 
       </Card>
 
       <div className="flex items-center justify-between">
-        <span className="text-[13px] text-text-dim">
+        <span className="font-mono text-[13px] font-semibold text-text-dim">
           {claimedPct > 100
             ? `${claimedPct}% between them, so the shares are read as a ratio`
             : `${claimedPct}% of ${formatDuration(poolMin)} assigned`}
         </span>
         <div className="flex items-center gap-3">
           {dirty ? (
-            <span className="text-[13px] text-prio-med">Not saved yet</span>
+            <span className="text-[13px] font-bold text-warn">Not saved yet</span>
           ) : (
             attribution.estimatedMin > 0 && (
-              <span className="flex items-center gap-1.5 text-[13px] text-accent">
+              <span className="flex items-center gap-1.5 text-[13px] font-bold text-accent-soft">
                 <CheckIcon size={13} /> Saved
               </span>
             )
@@ -191,14 +191,14 @@ function Figure({
   tone?: 'muted' | 'accent' | 'warn'
 }) {
   const valueTone =
-    tone === 'accent' ? 'text-accent' : tone === 'warn' ? 'text-prio-med' : 'text-text'
+    tone === 'accent' ? 'text-accent-soft' : tone === 'warn' ? 'text-warn' : 'text-text'
   return (
-    <div className="rounded-[12px] border border-border bg-card p-5">
-      <div className="mb-3 flex items-center gap-2 text-text-dim">
-        <span className="text-accent">{icon}</span>
-        <span className="text-[13px]">{label}</span>
+    <div className="rounded-card border border-border p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-accent-soft">{icon}</span>
+        <span className="label-caps">{label}</span>
       </div>
-      <div className={`font-mono text-[26px] leading-none font-semibold ${valueTone}`}>{value}</div>
+      <div className={`font-display text-[28px] leading-none font-bold tabular-nums ${valueTone}`}>{value}</div>
       <div className="mt-2 text-[13px] text-text-dim">{sub}</div>
     </div>
   )

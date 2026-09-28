@@ -4,9 +4,7 @@ import { api } from '../../api/client.js'
 import { useLiveQuery } from '../../hooks/useLiveQuery.js'
 import type { Tracking } from '../../hooks/useTracking.js'
 import { Button } from '../../ui/Button.js'
-import { CheckIcon, ClockIcon, FilterIcon, PlusIcon, SearchIcon } from '../../ui/icons.js'
-import { StatCard } from '../../ui/StatCard.js'
-import { CalendarIcon } from '../../ui/icons.js'
+import { FilterIcon, PlusIcon, SearchIcon } from '../../ui/icons.js'
 import { CurrentQueue } from './CurrentQueue.js'
 import { IdeasPanel } from './IdeasPanel.js'
 import { PriorityView } from './PriorityView.js'
@@ -93,44 +91,46 @@ export function TasksScreen({ tracking }: { tracking: Tracking }) {
   }
 
   return (
-    <div className="flex flex-col p-4 wide:h-full wide:p-8">
-      <header className="mb-7">
-        <h1 className="text-[32px] leading-tight font-semibold">Tasks</h1>
-      </header>
+    <div className="flex flex-col p-4 wide:h-full wide:px-8 wide:py-7">
+      {/* Phone: title, search and buttons stacked. Wide: one toolbar row. */}
+      <div className="mb-3.5 flex flex-col gap-3.5 wide:mb-[22px] wide:flex-row wide:items-center">
+        <header className="wide:mr-[18px]">
+          <h1 className="display-title text-[40px] tracking-[-1px]">Tasks</h1>
+        </header>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="relative w-full wide:w-[420px]">
-          <span className="absolute top-1/2 left-3.5 -translate-y-1/2 text-text-dim">
-            <SearchIcon size={16} />
-          </span>
+        <label className="flex h-11 w-full items-center gap-2.5 rounded-input bg-input px-3.5 text-text-faint wide:w-[420px]">
+          <SearchIcon size={18} />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search tasks..."
-            className="w-full rounded-[10px] border border-border bg-card py-2.5 pr-4 pl-10 text-[14px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+            aria-label="Search tasks"
+            className="min-w-0 flex-1 bg-transparent text-[15px] font-medium text-text outline-none"
           />
+        </label>
+
+        <div className="flex gap-2.5 wide:contents">
+          <Button
+            variant="secondary"
+            icon={<FilterIcon size={17} />}
+            onClick={() => setShowDone((value) => !value)}
+          >
+            {showDone ? 'Hiding nothing' : 'Open only'}
+          </Button>
+
+          <Button
+            variant="primary"
+            icon={<PlusIcon size={17} />}
+            className="ml-auto"
+            onClick={() => openEditor(null)}
+          >
+            New task
+          </Button>
         </div>
-
-        <Button
-          variant="secondary"
-          icon={<FilterIcon size={15} />}
-          onClick={() => setShowDone((value) => !value)}
-        >
-          {showDone ? 'Hiding nothing' : 'Open only'}
-        </Button>
-
-        <Button
-          variant="primary"
-          icon={<PlusIcon size={16} />}
-          className="ml-auto"
-          onClick={() => openEditor(null)}
-        >
-          New task
-        </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 wide:min-h-0 wide:flex-1 wide:grid-cols-2">
-        <div className="flex min-h-0 flex-col gap-5">
+      <div className="grid grid-cols-1 gap-3.5 wide:min-h-0 wide:flex-1 wide:grid-cols-2 wide:gap-5">
+        <div className="flex min-h-0 flex-col gap-3.5">
           <CurrentQueue
             tasks={tasks.filter((task) => task.status !== 'done')}
             activeTaskId={tracking.taskId}
@@ -141,15 +141,10 @@ export function TasksScreen({ tracking }: { tracking: Tracking }) {
             onEdit={openEditor}
           />
 
-          <div className="grid shrink-0 grid-cols-3 gap-2 wide:gap-4">
-            <StatCard icon={<ClockIcon size={16} />} label="Open" value={String(open.length)} sub="tasks" />
-            <StatCard
-              icon={<CalendarIcon size={16} />}
-              label="Due today"
-              value={String(dueToday.length)}
-              sub="tasks"
-            />
-            <StatCard icon={<CheckIcon size={16} />} label="Completed" value={String(done.length)} sub="tasks" />
+          <div className="grid shrink-0 grid-cols-3 gap-2.5 wide:gap-3">
+            <CountTile label="Open" value={open.length} />
+            <CountTile label="Due today" value={dueToday.length} tone={dueToday.length > 0 ? 'warn' : 'plain'} />
+            <CountTile label="Completed" value={done.length} tone="accent" />
           </div>
 
           <IdeasPanel projects={projects ?? []} />
@@ -195,4 +190,26 @@ function todayIso(): string {
   const d = new Date()
   const pad = (n: number): string => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** A count with a quiet label: the three numbers under the queue. */
+function CountTile({
+  label,
+  value,
+  tone = 'plain'
+}: {
+  label: string
+  value: number
+  tone?: 'plain' | 'warn' | 'accent'
+}) {
+  const color = tone === 'warn' ? 'text-warn' : tone === 'accent' ? 'text-accent-soft' : 'text-text'
+  return (
+    <div className="flex flex-col gap-1 rounded-card bg-card p-3.5 wide:gap-1.5 wide:p-4">
+      <span className="text-[12px] font-bold tracking-[0.6px] text-text-faint wide:text-[13px] wide:tracking-normal wide:text-text-dim">
+        {label}
+      </span>
+      <span className={`display-title text-[30px] tabular-nums leading-[1.05] ${color}`}>{String(value)}</span>
+      <span className="text-[13px] font-semibold text-text-dim wide:font-normal wide:text-text-faint">tasks</span>
+    </div>
+  )
 }

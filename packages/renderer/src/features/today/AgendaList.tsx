@@ -33,7 +33,7 @@ export function AgendaList({
       padded={false}
     >
       {allDay.length > 0 && (
-        <div className="px-4 pt-3">
+        <div className="px-5 pt-3">
           <AllDayRow items={allDay} />
         </div>
       )}
@@ -43,9 +43,9 @@ export function AgendaList({
         items={items}
         nowMinute={now.getHours() * 60 + now.getMinutes()}
         hourPx={52}
-        className="mt-3 h-[420px] px-4 pb-4"
+        className="mx-4 mt-3 h-[420px] rounded-button bg-bg/60 pr-1.5 wide:mx-5 wide:rounded-none wide:bg-transparent wide:pr-0"
       />
-      <footer className="border-t border-border px-5 py-3 text-[13px] text-text-dim">
+      <footer className="px-5 pt-3 pb-4 text-[13px] font-semibold text-text-dim wide:pb-5 wide:font-normal wide:text-text-faint">
         {items.length === 0 ? 'Niets gepland. Klik op een tijd om iets in te plannen.' : `${formatDuration(total)} planned`}
       </footer>
     </Card>

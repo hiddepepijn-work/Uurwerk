@@ -19,7 +19,7 @@ import { areaFill } from '../agenda/agenda-model.js'
  */
 
 /** Not an area, and deliberately outside the categorical palette: context, not a category. */
-export const SCREEN_TIME_COLOR = '#94A3B8'
+export const SCREEN_TIME_COLOR = '#8A909C'
 
 export interface Series {
   id: string
@@ -58,7 +58,7 @@ export function GroupedBars({
           {gridLines.map((step) => (
             <span
               key={step}
-              className="absolute right-0 -translate-y-1/2 font-mono text-[11px] text-text-faint tabular-nums"
+              className="absolute right-0 -translate-y-1/2 font-mono text-[11px] font-bold text-text-faint tabular-nums"
               style={{ top: `${(1 - step) * 100}%` }}
             >
               {Math.round((ceiling * step) / 60)}h
@@ -70,7 +70,7 @@ export function GroupedBars({
           {gridLines.map((step) => (
             <div
               key={step}
-              className="absolute right-0 left-0 border-t border-border/60"
+              className="absolute right-0 left-0 border-t border-border"
               style={{ top: `${(1 - step) * 100}%` }}
             />
           ))}
@@ -97,7 +97,7 @@ export function GroupedBars({
                       className="group relative flex h-full w-full max-w-[26px] cursor-default items-end"
                     >
                       <span
-                        className="w-full rounded-t-[4px] transition-[filter]"
+                        className="w-full rounded-t-[4px] rounded-b-[1px] transition-[filter]"
                         style={{
                           height: `${Math.max(minutes > 0 ? 2 : 0, height)}%`,
                           background: entry.color,
@@ -108,8 +108,8 @@ export function GroupedBars({
                       />
 
                       {active && minutes > 0 && (
-                        <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 -translate-x-1/2 rounded-[8px] border border-border-strong bg-card px-2.5 py-1.5 whitespace-nowrap shadow-lg">
-                          <span className="flex items-center gap-1.5 text-[12px] text-text">
+                        <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 -translate-x-1/2 rounded-input bg-input px-2.5 py-1.5 whitespace-nowrap shadow-lg">
+                          <span className="flex items-center gap-1.5 text-[12px] font-bold text-text">
                             <span
                               className="h-2 w-2 shrink-0 rounded-full"
                               style={{ background: entry.color }}
@@ -133,7 +133,7 @@ export function GroupedBars({
       <div className="mt-2 flex gap-3 pl-[52px]">
         {buckets.map((bucket) => (
           <div key={bucket.key} className="min-w-0 flex-1 text-center">
-            <div className="truncate text-[12px] text-text-dim">{bucket.label}</div>
+            <div className="truncate text-[12px] font-bold text-text-dim">{bucket.label}</div>
             <div className="truncate text-[11px] text-text-faint">{bucket.sublabel}</div>
           </div>
         ))}
@@ -155,22 +155,22 @@ export function ShareBars({ areas }: { areas: AreaShare[] }) {
       {areas.map((area) => (
         <li key={area.areaId} className="flex items-center gap-3">
           <span
-            className="h-2.5 w-2.5 shrink-0 rounded-full"
+            className="h-2 w-2 shrink-0 rounded-full"
             style={{ background: areaFill({ id: area.areaId, color: area.color }) }}
           />
-          <span className="w-24 shrink-0 truncate text-[13px] text-text">{area.name}</span>
+          <span className="w-24 shrink-0 truncate text-[14px] font-bold text-text">{area.name}</span>
 
-          <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-bg">
+          <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-input">
             <span
               className="block h-full rounded-full"
               style={{ width: `${Math.max(2, area.fraction * 100)}%`, background: areaFill({ id: area.areaId, color: area.color }) }}
             />
           </span>
 
-          <span className="w-20 shrink-0 text-right font-mono text-[13px] text-text-dim tabular-nums">
+          <span className="w-[62px] shrink-0 text-right font-mono text-[14px] font-bold text-text tabular-nums">
             {formatDuration(area.minutes)}
           </span>
-          <span className="w-10 shrink-0 text-right font-mono text-[13px] text-text-faint tabular-nums">
+          <span className="w-10 shrink-0 text-right font-mono text-[13px] font-semibold text-text-faint tabular-nums">
             {Math.round(area.fraction * 100)}%
           </span>
         </li>
@@ -191,11 +191,11 @@ export function BucketTable({ buckets, series }: { buckets: Bucket[]; series: Se
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[13px]">
-        <thead className="text-text-dim">
+        <thead className="label-caps tracking-[0.8px]">
           <tr>
-            <th className="px-3 py-2 text-left font-medium">Period</th>
+            <th className="px-3 py-2 text-left font-bold">Period</th>
             {series.map((entry) => (
-              <th key={entry.id} className="px-3 py-2 text-right font-medium">
+              <th key={entry.id} className="px-3 py-2 text-right font-bold">
                 {entry.name}
               </th>
             ))}
@@ -204,7 +204,7 @@ export function BucketTable({ buckets, series }: { buckets: Bucket[]; series: Se
         <tbody>
           {buckets.map((bucket) => (
             <tr key={bucket.key} className="border-t border-border">
-              <td className="px-3 py-2 text-text">
+              <td className="px-3 py-2 font-semibold text-text">
                 {bucket.label}
                 <span className="ml-2 text-text-faint">{bucket.sublabel}</span>
               </td>

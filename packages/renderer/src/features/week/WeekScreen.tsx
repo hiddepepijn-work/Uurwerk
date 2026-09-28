@@ -25,6 +25,10 @@ const MODES: Array<{ id: WeekMode; label: string; hint: string }> = [
   { id: 'compare', label: 'Compare', hint: 'Both, side by side' }
 ]
 
+/** The header's buttons are a step taller than Button's `sm`: 40px, 14px text. */
+const HEADER_BUTTON = 'h-10! px-3.5! text-[14px]!'
+const BANNER_BUTTON = 'h-10! px-[18px]! text-[14px]! shrink-0'
+
 /**
  * The week, in three readings.
  *
@@ -187,10 +191,12 @@ export function WeekScreen() {
 
   return (
     <div className="p-4 wide:p-8">
-      <header className="mb-7 flex flex-col gap-4 wide:flex-row wide:items-start wide:justify-between">
-        <div>
-          <h1 className="text-[32px] leading-tight font-semibold">Week</h1>
-          <p className="mt-1 text-[14px] text-text-dim">
+      <header className="mb-4 flex flex-col gap-4 pb-1 wide:flex-row wide:items-start wide:justify-between">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="display-title text-[30px] tracking-[-0.8px] wide:text-[40px] wide:tracking-[-1px]">
+            Week
+          </h1>
+          <p className="text-[15px] text-text-dim">
             {new Date(`${range.from}T12:00:00`).toLocaleDateString('en-GB', {
               day: 'numeric',
               month: 'long'
@@ -204,15 +210,17 @@ export function WeekScreen() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex rounded-[10px] border border-border bg-card p-1">
+        {/* On desktop the mode switch and the week arrows share the top row and the actions
+            sit below them; only the visual placement moves, the DOM (and tab) order does not. */}
+        <div className="flex flex-wrap items-center gap-3 wide:max-w-[780px] wide:justify-end wide:gap-y-2.5">
+          <div className="flex rounded-button bg-card p-1 wide:order-1">
             {MODES.map((option) => (
               <button
                 key={option.id}
                 onClick={() => setMode(option.id)}
                 title={option.hint}
-                className={`rounded-[7px] px-3.5 py-1.5 text-[13px] transition-colors ${
-                  mode === option.id ? 'bg-rail-active text-accent' : 'text-text-dim hover:text-text'
+                className={`h-[34px] rounded-[10px] px-4 text-[14px] font-bold transition-colors ${
+                  mode === option.id ? 'bg-text text-bg' : 'text-text-dim hover:text-text'
                 }`}
               >
                 {option.label}
@@ -221,14 +229,14 @@ export function WeekScreen() {
           </div>
 
           {/* The two planners that had no way in until now. */}
-          <div className="flex gap-1">
-            <Button variant="primary" size="sm" onClick={() => setRangeWeeks(1)}>
+          <div className="flex flex-wrap gap-2 wide:order-3 wide:basis-full wide:justify-end">
+            <Button variant="primary" size="sm" className={HEADER_BUTTON} onClick={() => setRangeWeeks(1)}>
               Plan this week
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setRangeWeeks(2)}>
+            <Button variant="secondary" size="sm" className={HEADER_BUTTON} onClick={() => setRangeWeeks(2)}>
               Two weeks
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setComposingOn(today)}>
+            <Button variant="secondary" size="sm" className={HEADER_BUTTON} onClick={() => setComposingOn(today)}>
               New appointment
             </Button>
             {/* The button behind the same thing clicking empty space in Actual does, because
@@ -236,6 +244,7 @@ export function WeekScreen() {
             <Button
               variant="secondary"
               size="sm"
+              className={HEADER_BUTTON}
               onClick={() => setStretch({ mode: 'add', date: today, startMin: 9 * 60 })}
             >
               Add hours
@@ -246,6 +255,7 @@ export function WeekScreen() {
               <Button
                 variant="secondary"
                 size="sm"
+                className={HEADER_BUTTON}
                 disabled={pushing}
                 onClick={() => void sendToPhone()}
               >
@@ -254,14 +264,26 @@ export function WeekScreen() {
             )}
           </div>
 
-          <div className="flex gap-1">
-            <Button variant="secondary" size="sm" onClick={() => setWeek(previousWeek(week))}>
+          <div className="flex gap-1 wide:order-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label="Previous week"
+              className="h-10! w-10 px-0! text-[16px]!"
+              onClick={() => setWeek(previousWeek(week))}
+            >
               ←
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setWeek(toIsoWeek(Date.now()))}>
+            <Button variant="secondary" size="sm" className={HEADER_BUTTON} onClick={() => setWeek(toIsoWeek(Date.now()))}>
               This week
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setWeek(nextWeek(week))}>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label="Next week"
+              className="h-10! w-10 px-0! text-[16px]!"
+              onClick={() => setWeek(nextWeek(week))}
+            >
               →
             </Button>
           </div>
@@ -269,11 +291,11 @@ export function WeekScreen() {
       </header>
 
       {pushResult && (
-        <div className="mb-6 flex items-center justify-between gap-4 rounded-[12px] border border-border bg-card px-5 py-3 text-[13px] text-text">
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-card bg-card py-3.5 pr-4 pl-5 text-[14px] text-text">
           <span>{pushResult}</span>
           <button
             onClick={() => setPushResult(null)}
-            className="shrink-0 text-text-dim transition-colors hover:text-text"
+            className="shrink-0 font-bold text-text-dim transition-colors hover:text-text"
           >
             Dismiss
           </button>
@@ -281,9 +303,9 @@ export function WeekScreen() {
       )}
 
       {(pendingDrafts ?? []).length > 0 && (
-        <div className="mb-6 flex items-center justify-between gap-4 rounded-[12px] border border-prio-med/40 bg-prio-med/10 px-5 py-4">
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-card bg-warn-soft py-3.5 pr-3.5 pl-5 shadow-[inset_0_0_0_1px_rgb(209_165_90/0.35)]">
           <div className="min-w-0">
-            <div className="text-[14px] text-text">
+            <div className="text-[15px] font-bold text-text">
               {pendingDrafts!.length} day{pendingDrafts!.length === 1 ? '' : 's'} planned but never
               accepted
             </div>
@@ -291,16 +313,19 @@ export function WeekScreen() {
               A draft counts toward nothing — not this grid, not your totals, not the report.
             </div>
           </div>
-          <Button variant="primary" size="sm" onClick={() => setReviewingDrafts(true)}>
+          <Button variant="primary" size="sm" className={BANNER_BUTTON} onClick={() => setReviewingDrafts(true)}>
             Review
           </Button>
         </div>
       )}
 
       {waiting.length > 0 && (
-        <div className="mb-6 flex items-center justify-between gap-4 rounded-[12px] border border-accent/30 bg-rail-active px-5 py-4">
-          <div className="min-w-0">
-            <div className="text-[14px] text-text">
+        <div className="mb-4 flex items-center gap-4 rounded-card bg-area-stage-tint py-3.5 pr-3.5 pl-5 shadow-[inset_0_0_0_1px_rgb(93_174_134/0.35)]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-input bg-accent/[0.18] text-accent-soft">
+            <CalendarIcon size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-bold text-text">
               {waiting.length} calendar event{waiting.length === 1 ? '' : 's'} waiting to be
               classified
             </div>
@@ -315,6 +340,7 @@ export function WeekScreen() {
           <Button
             variant="primary"
             size="sm"
+            className={BANNER_BUTTON}
             onClick={() => setClassifyingId(waiting[0]!.event.id)}
           >
             Classify
@@ -322,7 +348,7 @@ export function WeekScreen() {
         </div>
       )}
 
-      <div className="mb-7 grid grid-cols-4 gap-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 wide:grid-cols-4">
         <StatCard
           icon={<CalendarIcon size={16} />}
           label="Planned"
@@ -364,7 +390,7 @@ export function WeekScreen() {
           onOpenDay={setPlanningDate}
           interactive
           hourPx={44}
-          className="h-[680px] rounded-[16px] border border-border bg-card px-3 pt-3"
+          className="h-[680px] rounded-[22px] bg-card px-3.5 pt-3"
         />
       ) : (
       <WeekGrid
@@ -387,15 +413,15 @@ export function WeekScreen() {
       />
       )}
 
-      <div className="mt-5 flex items-center gap-6 text-[13px] text-text-dim">
-        <span className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-[3px] border border-block-blue bg-block-blue/70" /> Planned
+      <div className="mt-4 flex flex-wrap items-center gap-x-[18px] gap-y-2 text-[13px] text-text-dim">
+        <span className="flex items-center gap-[7px]">
+          <span className="h-3 w-3 rounded-[4px] bg-area-school" /> Planned
         </span>
-        <span className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-[3px] bg-accent/80" /> Actually tracked
+        <span className="flex items-center gap-[7px]">
+          <span className="h-3 w-3 rounded-[4px] bg-accent" /> Actually tracked
         </span>
-        <span className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-prio-high" /> Now
+        <span className="flex items-center gap-[7px]">
+          <span className="h-[9px] w-[9px] rounded-full bg-danger" /> Now
         </span>
         <span className="text-text-faint">
           Click a day to plan it.
@@ -406,27 +432,27 @@ export function WeekScreen() {
 
       {mode === 'compare' && (comparison ?? []).length > 0 && (
         <section className="mt-8">
-          <h2 className="mb-4 text-[15px] font-semibold">Where the week drifted</h2>
-          <div className="overflow-hidden rounded-[12px] border border-border">
-            <table className="w-full text-[13px]">
-              <thead className="bg-bg text-text-dim">
+          <h2 className="mb-3 font-display text-[20px] font-bold tracking-[-0.3px]">Where the week drifted</h2>
+          <div className="overflow-hidden rounded-card bg-card">
+            <table className="w-full text-[14px]">
+              <thead className="text-text-faint">
                 <tr>
-                  <th className="px-4 py-2.5 text-left font-medium">Task</th>
-                  <th className="px-4 py-2.5 text-left font-medium">Project</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Planned</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Actual</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Difference</th>
+                  <th className="px-4 pt-3.5 pb-2.5 text-left text-[12px] font-bold tracking-[0.6px] uppercase">Task</th>
+                  <th className="px-4 pt-3.5 pb-2.5 text-left text-[12px] font-bold tracking-[0.6px] uppercase">Project</th>
+                  <th className="px-4 pt-3.5 pb-2.5 text-right text-[12px] font-bold tracking-[0.6px] uppercase">Planned</th>
+                  <th className="px-4 pt-3.5 pb-2.5 text-right text-[12px] font-bold tracking-[0.6px] uppercase">Actual</th>
+                  <th className="px-4 pt-3.5 pb-2.5 text-right text-[12px] font-bold tracking-[0.6px] uppercase">Difference</th>
                 </tr>
               </thead>
               <tbody>
                 {(comparison ?? []).map((row) => (
                   <tr key={row.taskId} className="border-t border-border">
-                    <td className="px-4 py-2.5 text-text">{row.taskTitle}</td>
+                    <td className="px-4 py-2.5 font-semibold text-text">{row.taskTitle}</td>
                     <td className="px-4 py-2.5 text-text-dim">{row.projectName ?? '—'}</td>
                     <td className="px-4 py-2.5 text-right font-mono text-text-dim tabular-nums">
                       {formatDuration(row.plannedMin)}
                     </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-accent tabular-nums">
+                    <td className="px-4 py-2.5 text-right font-mono font-bold text-accent-soft tabular-nums">
                       {formatDuration(row.actualMin)}
                     </td>
                     <td
@@ -434,7 +460,7 @@ export function WeekScreen() {
                         Math.abs(row.deltaMin) < 15
                           ? 'text-text-faint'
                           : row.deltaMin > 0
-                            ? 'text-prio-med'
+                            ? 'text-warn'
                             : 'text-text-dim'
                       }`}
                     >
@@ -447,7 +473,7 @@ export function WeekScreen() {
               </tbody>
             </table>
           </div>
-          <p className="mt-3 text-[12px] text-text-faint">
+          <p className="mt-3 text-[13px] text-text-faint">
             Work with no planned time was unplanned; planned time with nothing tracked did not
             happen. Both are worth knowing.
           </p>

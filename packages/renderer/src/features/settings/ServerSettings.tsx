@@ -3,7 +3,15 @@ import type { SyncStatus } from '@core/contract/api.js'
 import { api } from '../../api/client.js'
 import { useCompact } from '../../hooks/useCompact.js'
 import { Button } from '../../ui/Button.js'
-import { SettingRow, SettingsSection, textField } from './SettingsSection.js'
+import {
+  SettingRow,
+  SettingsCard,
+  SettingsSection,
+  problemNote,
+  selectField,
+  statusChip,
+  textField
+} from './SettingsSection.js'
 
 /**
  * This copy and the VPS.
@@ -51,16 +59,12 @@ export function ServerSettings() {
       title="Server"
       description="Keeps this laptop in step with your VPS. Everything keeps working offline; changes wait here and go up as soon as the server can be reached."
     >
-      {problem && (
-        <div className="mb-3 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
-          {problem}
-        </div>
-      )}
+      {problem && <div className={problemNote}>{problem}</div>}
 
       {status?.paired ? (
-        <>
+        <SettingsCard>
           <SettingRow label="Server" hint={`This device is "${status.deviceId ?? '?'}".`}>
-            <span className="text-[14px] text-text">{status.serverUrl}</span>
+            <span className="text-[14px] font-semibold break-all text-text-dim">{status.serverUrl}</span>
           </SettingRow>
           <SettingRow
             label="State"
@@ -68,15 +72,13 @@ export function ServerSettings() {
           >
             <div className="flex items-center gap-2">
               <span
-                className={`rounded-full border px-2.5 py-1 text-[11px] ${
-                  status.online
-                    ? 'border-accent/30 bg-accent/10 text-accent'
-                    : 'border-prio-med/30 bg-prio-med/10 text-prio-med'
+                className={`${statusChip} ${
+                  status.online ? 'bg-rail-active text-accent-soft' : 'bg-warn-soft text-warn'
                 }`}
               >
                 {status.online ? 'online' : 'offline'}
               </span>
-              <span className="text-[13px] text-text-dim">
+              <span className="text-[13px] font-medium text-text-dim">
                 {status.pending > 0 ? `${status.pending} waiting` : 'all sent'}
                 {since ? ` · last round ${since}` : ''}
               </span>
@@ -87,14 +89,14 @@ export function ServerSettings() {
               <Button variant="secondary" size="sm" disabled={busy} onClick={() => void run(() => api.sync.now())}>
                 Sync now
               </Button>
-              <Button variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => api.sync.unpair())}>
+              <Button variant="danger" size="sm" disabled={busy} onClick={() => void run(() => api.sync.unpair())}>
                 Unlink
               </Button>
             </div>
           </SettingRow>
-        </>
+        </SettingsCard>
       ) : (
-        <>
+        <SettingsCard>
           <SettingRow label="Server address" hint="https only; plain http is accepted for localhost.">
             <input value={url} onChange={(event) => setUrl(event.target.value)} className={textField} />
           </SettingRow>
@@ -107,7 +109,7 @@ export function ServerSettings() {
               value={token}
               onChange={(event) => setToken(event.target.value)}
               placeholder="uw_…"
-              className={textField}
+              className={`${textField} font-code`}
             />
           </SettingRow>
           <SettingRow
@@ -118,11 +120,11 @@ export function ServerSettings() {
                 : 'Replace this copy with the server’s. The current file is kept beside it; the app restarts.'
             }
           >
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={mode}
                 onChange={(event) => setMode(event.target.value as 'upload' | 'download')}
-                className={textField}
+                className={selectField}
               >
                 <option value="upload">Upload this copy</option>
                 <option value="download">Download the server’s copy</option>
@@ -137,7 +139,7 @@ export function ServerSettings() {
               </Button>
             </div>
           </SettingRow>
-        </>
+        </SettingsCard>
       )}
     </SettingsSection>
   )

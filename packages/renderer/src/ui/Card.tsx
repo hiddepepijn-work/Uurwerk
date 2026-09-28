@@ -17,7 +17,7 @@ export function Card({ title, action, children, className = '', padded = true }:
     >
       {(title || action) && (
         <header className={`flex items-center justify-between ${padded ? 'mb-4' : 'p-5 pb-0'}`}>
-          {title && <h2 className="text-[16px] font-bold text-text">{title}</h2>}
+          {title && <h2 className="font-display text-[18px] font-bold tracking-[-0.2px] text-text">{title}</h2>}
           {action}
         </header>
       )}

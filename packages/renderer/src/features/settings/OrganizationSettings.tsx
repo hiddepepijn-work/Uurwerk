@@ -2,7 +2,14 @@ import { useState } from 'react'
 import type { Organization, WorkType } from '@core/contract/types.js'
 import { SYSTEM_ORGANIZATIONS } from '@core/contract/types.js'
 import { api } from '../../api/client.js'
-import { SettingsSection } from './SettingsSection.js'
+import {
+  SettingsCard,
+  SettingsSection,
+  addButton,
+  archiveButton,
+  problemNote,
+  textField
+} from './SettingsSection.js'
 
 const BUILT_IN: string[] = Object.values(SYSTEM_ORGANIZATIONS)
 
@@ -52,44 +59,33 @@ export function OrganizationSettings({
     })
   }
 
-  const input =
-    'min-w-0 flex-1 rounded-[8px] border border-border bg-card px-3 py-2 text-[13px] text-text outline-none placeholder:text-text-faint focus:border-accent'
-  const addButton =
-    'shrink-0 rounded-[8px] border border-border px-3 py-2 text-[13px] text-text-dim transition-colors hover:text-text disabled:opacity-40'
+  const input = `${textField} min-w-0 flex-1`
+  const row = 'flex items-center gap-2.5 border-t border-border px-4 py-2.5 wide:px-5'
 
   return (
     <SettingsSection
       title="Organizations and work types"
       description="Who the work is for, and what kind of work it is. Both are independent of the area: the same organization can host internship work and work that is not, and one work type is reused across all of them."
     >
-      {problem && (
-        <div className="mb-3 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
-          {problem}
-        </div>
-      )}
+      {problem && <div className={problemNote}>{problem}</div>}
 
-      <div className="grid grid-cols-1 gap-5 wide:grid-cols-2">
-        <div className="overflow-hidden rounded-[12px] border border-border">
-          <header className="border-b border-border bg-bg px-4 py-2.5 text-[13px] font-medium text-text">
-            Organizations
-          </header>
+      <div className="grid grid-cols-1 gap-2.5 wide:grid-cols-2">
+        <SettingsCard className="flex flex-col">
+          <header className="label-caps px-4 pt-3.5 pb-1.5 wide:px-5">Organizations</header>
 
           {organizations.map((organization) => (
-            <div
-              key={organization.id}
-              className="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0"
-            >
-              <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+            <div key={organization.id} className={row}>
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-text">
                 {organization.name}
               </span>
-              <span className="shrink-0 font-mono text-[11px] text-text-faint">
+              <span className="shrink-0 font-code text-[12px] font-semibold text-text-faint">
                 {organization.slug}
               </span>
               {!BUILT_IN.includes(organization.id) && (
                 <button
                   onClick={() => void run(() => api.organizations.archive(organization.id))}
                   title="Archive"
-                  className="shrink-0 rounded p-1 text-text-faint transition-colors hover:text-prio-high"
+                  className={archiveButton}
                 >
                   ✕
                 </button>
@@ -97,7 +93,7 @@ export function OrganizationSettings({
             </div>
           ))}
 
-          <div className="flex items-center gap-2 bg-bg px-4 py-3">
+          <div className="mt-auto flex items-center gap-2 border-t border-border px-4 pt-3 pb-3.5 wide:px-5">
             <input
               value={organizationName}
               onChange={(event) => setOrganizationName(event.target.value)}
@@ -113,26 +109,21 @@ export function OrganizationSettings({
               Add
             </button>
           </div>
-        </div>
+        </SettingsCard>
 
-        <div className="overflow-hidden rounded-[12px] border border-border">
-          <header className="border-b border-border bg-bg px-4 py-2.5 text-[13px] font-medium text-text">
-            Work types
-          </header>
+        <SettingsCard className="flex flex-col">
+          <header className="label-caps px-4 pt-3.5 pb-1.5 wide:px-5">Work types</header>
 
           <div className="max-h-56 overflow-y-auto">
             {workTypes.map((workType) => (
-              <div
-                key={workType.id}
-                className="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0"
-              >
-                <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+              <div key={workType.id} className={row}>
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-text">
                   {workType.name}
                 </span>
                 <button
                   onClick={() => void run(() => api.workTypes.archive(workType.id))}
                   title="Archive — tasks already labelled with it keep their label"
-                  className="shrink-0 rounded p-1 text-text-faint transition-colors hover:text-prio-high"
+                  className={archiveButton}
                 >
                   ✕
                 </button>
@@ -140,7 +131,7 @@ export function OrganizationSettings({
             ))}
           </div>
 
-          <div className="flex items-center gap-2 bg-bg px-4 py-3">
+          <div className="mt-auto flex items-center gap-2 border-t border-border px-4 pt-3 pb-3.5 wide:px-5">
             <input
               value={workTypeName}
               onChange={(event) => setWorkTypeName(event.target.value)}
@@ -156,7 +147,7 @@ export function OrganizationSettings({
               Add
             </button>
           </div>
-        </div>
+        </SettingsCard>
       </div>
     </SettingsSection>
   )

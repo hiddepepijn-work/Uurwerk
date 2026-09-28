@@ -146,16 +146,16 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 wide:items-center wide:p-6">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-scrim wide:items-center wide:p-6">
       <section
         aria-label="Jarvis"
-        className="flex h-full w-full flex-col bg-card pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] wide:h-[640px] wide:max-w-[520px] wide:rounded-[20px] wide:border wide:border-border wide:pt-0 wide:pb-0"
+        className="flex h-full w-full flex-col bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] wide:h-[640px] wide:max-w-[520px] wide:rounded-modal wide:bg-card wide:pt-0 wide:pb-0"
       >
-        <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <span className={`h-2.5 w-2.5 rounded-full ${status?.ready ? 'bg-accent' : 'bg-text-faint'}`} />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <h2 className="text-[17px] font-semibold">Jarvis</h2>
-            <span className="truncate text-[12px] text-text-dim">
+        <header className="flex items-center gap-3 border-b border-border px-5 py-3.5">
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${status?.ready ? 'bg-accent' : 'bg-text-faint'}`} />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <h2 className="font-display text-[28px] leading-none font-bold tracking-[-0.4px] text-text">Jarvis</h2>
+            <span className="truncate text-[13px] font-semibold text-text-dim tabular-nums">
               {status
                 ? status.ready
                   ? `${status.model}${status.spend ? ` · ${status.spend.usd.toFixed(2)} / ${status.spend.capUsd} deze maand` : ''}`
@@ -166,30 +166,30 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
           <button
             onClick={onClose}
             aria-label="Sluiten"
-            className="flex h-11 w-11 items-center justify-center rounded-full text-text-dim hover:bg-card-hover"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-input text-text-dim transition-colors hover:text-text"
           >
-            <CloseIcon size={20} />
+            <CloseIcon size={18} />
           </button>
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
           {lines.length === 0 && !busy && (
-            <div className="mt-8 flex flex-col items-center gap-3 text-center">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => void ask({ text: 'Hoe ziet mijn dag eruit?' })}
-                className="rounded-full border border-border px-4 py-2.5 text-[14px] text-text"
+                className="h-9 rounded-pill bg-rail-active px-3.5 text-[13px] font-bold text-accent-soft transition-[filter] hover:brightness-125"
               >
                 Hoe ziet mijn dag eruit?
               </button>
               <button
                 onClick={() => void ask({ text: 'Ik wil een afspraak toevoegen.' })}
-                className="rounded-full border border-border px-4 py-2.5 text-[14px] text-text"
+                className="h-9 rounded-pill bg-rail-active px-3.5 text-[13px] font-bold text-accent-soft transition-[filter] hover:brightness-125"
               >
                 Afspraak toevoegen
               </button>
               <button
                 onClick={() => void ask({ text: 'Ik wil een taak toevoegen.' })}
-                className="rounded-full border border-border px-4 py-2.5 text-[14px] text-text"
+                className="h-9 rounded-pill bg-rail-active px-3.5 text-[13px] font-bold text-accent-soft transition-[filter] hover:brightness-125"
               >
                 Taak toevoegen
               </button>
@@ -198,29 +198,40 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
           {lines.map((line, index) => (
             <div
               key={index}
-              className={`max-w-[85%] rounded-[16px] px-3.5 py-2.5 text-[15px] leading-snug whitespace-pre-wrap ${
-                line.from === 'jarvis' ? 'self-start bg-bg text-text' : 'self-end bg-accent text-bg'
+              className={`max-w-[85%] rounded-[20px] px-3.5 py-[11px] text-[15px] leading-[1.42] whitespace-pre-wrap ${
+                line.from === 'jarvis'
+                  ? 'self-start rounded-bl-[6px] bg-card font-medium text-text wide:bg-input'
+                  : 'self-end rounded-br-[6px] bg-accent font-semibold text-accent-ink'
               }`}
             >
               {line.text}
             </div>
           ))}
-          {busy && <div className="self-start text-[13px] text-text-dim">Jarvis denkt na…</div>}
+          {busy && (
+            <div className="flex items-center gap-2 self-start pl-1 text-[14px] font-semibold text-text-dim">
+              <span className="flex gap-1" aria-hidden="true">
+                <span className="h-1.5 w-1.5 rounded-full bg-text-faint" />
+                <span className="h-1.5 w-1.5 rounded-full bg-text-dim" />
+                <span className="h-1.5 w-1.5 rounded-full bg-text-faint" />
+              </span>
+              Jarvis denkt na…
+            </div>
+          )}
           {problem && (
-            <div className="rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-3.5 py-2.5 text-[13px] text-prio-med">
+            <div className="rounded-input bg-warn-soft px-3.5 py-2.5 text-[13px] font-semibold text-warn">
               {problem}
             </div>
           )}
           <div ref={bottom} />
         </div>
 
-        <footer className="flex items-end gap-2 border-t border-border px-3 py-3">
+        <footer className="flex items-end gap-2 border-t border-border px-3.5 py-3">
           {Recognition && (
             <button
               onClick={listen}
               aria-label={listening ? 'Stop met luisteren' : 'Praat tegen Jarvis'}
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
-                listening ? 'animate-pulse bg-prio-high text-bg' : 'bg-bg text-text'
+              className={`flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full transition-colors ${
+                listening ? 'animate-pulse bg-danger text-text' : 'bg-input text-text hover:bg-secondary-hover'
               }`}
             >
               <MicIcon size={20} />
@@ -238,13 +249,13 @@ export function JarvisSheet({ open, onClose }: { open: boolean; onClose: () => v
             rows={1}
             placeholder="Zeg of typ iets…"
             aria-label="Bericht aan Jarvis"
-            className="max-h-32 min-h-11 flex-1 resize-none rounded-[22px] border border-border bg-bg px-4 py-2.5 text-[15px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+            className="max-h-32 min-h-[46px] flex-1 resize-none rounded-[23px] bg-input px-4 py-3 text-[15px] leading-[1.4] font-medium text-text outline-none placeholder:text-text-faint focus:ring-2 focus:ring-accent/40"
           />
           <button
             onClick={send}
             disabled={busy || !draft.trim()}
             aria-label="Versturen"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-bg disabled:opacity-40"
+            className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink transition-colors hover:bg-accent-soft disabled:opacity-40"
           >
             <SendIcon size={18} />
           </button>

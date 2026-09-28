@@ -311,65 +311,73 @@ export function JarvisVoice({
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      <header className="flex items-center justify-between px-4 py-3">
-        <button
-          onClick={onKeyboard}
-          className="h-11 rounded-full bg-card px-4 text-[14px] text-text-dim"
-          aria-label="Typen in plaats van praten"
-        >
-          Typen
-        </button>
-        <span className="flex flex-col items-center leading-tight">
-          <span className="text-[15px] font-semibold text-text">Jarvis</span>
-          {spent && <span className="text-[11px] text-text-dim tabular-nums">{spent}</span>}
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center px-4 py-3">
+        <div className="flex">
+          <button
+            onClick={onKeyboard}
+            className="h-[38px] rounded-pill bg-input px-3.5 text-[14px] font-bold text-text transition-colors hover:bg-secondary-hover"
+            aria-label="Typen in plaats van praten"
+          >
+            Typen
+          </button>
+        </div>
+        <span className="flex flex-col items-center gap-0.5 leading-tight">
+          <span className="font-display text-[20px] font-bold text-text">Jarvis</span>
+          {spent && <span className="text-[12px] font-bold text-text-faint tabular-nums">{spent}</span>}
         </span>
-        <button
-          onClick={onClose}
-          aria-label="Sluiten"
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-text"
-        >
-          <CloseIcon size={20} />
-        </button>
+        <div className="flex justify-end">
+          <button
+            onClick={onClose}
+            aria-label="Sluiten"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-input text-text-dim transition-colors hover:text-text"
+          >
+            <CloseIcon size={18} />
+          </button>
+        </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-6">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-[30px] px-7 pb-10">
         <button
           onClick={tapOrb}
           aria-label={phase === 'speaking' ? 'Onderbreek Jarvis' : phase === 'listening' ? 'Klaar met praten' : 'Praat tegen Jarvis'}
           className="rounded-full"
         >
-          <JarvisOrb state={phase} level={level} size={280} />
+          <JarvisOrb state={phase} level={level} size={300} />
         </button>
 
         <p
-          className={`max-w-md text-center leading-snug transition-opacity duration-300 ${
-            phase === 'speaking' || (phase === 'listening' && heard) ? 'text-[19px] text-text' : 'text-[15px] text-text-dim'
+          className={`max-w-md text-center transition-opacity duration-300 ${
+            phase === 'speaking' || (phase === 'listening' && heard)
+              ? 'text-[19px] leading-[1.4] font-medium text-text'
+              : phase === 'idle'
+                ? 'text-[15px] leading-snug font-semibold text-text-dim'
+                : 'text-[13px] font-bold tracking-[1px] text-accent-soft'
           }`}
         >
           {caption}
         </p>
 
         {problem && (
-          <p className="max-w-md rounded-[12px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-center text-[13px] text-prio-med">
+          <p className="max-w-md rounded-input bg-warn-soft px-4 py-3 text-center text-[13px] font-semibold text-warn">
             {problem}
           </p>
         )}
       </div>
 
       {!bridge && (
-        <footer className="flex items-end gap-2 px-4 pb-4">
+        <footer className="flex items-end gap-2 px-3.5 pb-4">
           <input
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => event.key === 'Enter' && sendTyped()}
             placeholder="Vraag het Jarvis…"
             aria-label="Bericht aan Jarvis"
-            className="h-12 flex-1 rounded-full border border-border bg-card px-5 text-[15px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+            className="h-[46px] flex-1 rounded-pill bg-input px-4 text-[15px] font-medium text-text outline-none placeholder:text-text-faint focus:ring-2 focus:ring-accent/40"
           />
           <button
             onClick={sendTyped}
             aria-label="Versturen"
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-bg"
+            className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink transition-colors hover:bg-accent-soft"
           >
             <SendIcon size={18} />
           </button>

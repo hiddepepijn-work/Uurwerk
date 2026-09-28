@@ -15,7 +15,17 @@ import { ServerSettings } from './ServerSettings.js'
 import { FocusSettings } from './FocusSettings.js'
 import { JarvisSettings } from './JarvisSettings.js'
 import { areaFill } from '../agenda/agenda-model.js'
-import { SettingRow, SettingsSection, Toggle, numberField, textField } from './SettingsSection.js'
+import {
+  SettingRow,
+  SettingsCard,
+  SettingsSection,
+  Toggle,
+  addButton,
+  archiveButton,
+  numberField,
+  selectField,
+  textField
+} from './SettingsSection.js'
 
 /** The three built-in areas; they cannot be archived, so they get no archive button. */
 const SYSTEM_AREA_IDS: string[] = Object.values(SYSTEM_AREAS)
@@ -125,9 +135,11 @@ export function SettingsScreen() {
   const pretty = (accelerator: string): string => accelerator.replace('CommandOrControl', 'Ctrl')
 
   return (
-    <div className="mx-auto max-w-3xl p-4 wide:p-8">
+    <div className="mx-auto max-w-3xl px-4 pt-6 pb-10 wide:px-8 wide:pt-8">
       <header className="mb-8">
-        <h1 className="text-[32px] leading-tight font-semibold">Settings</h1>
+        <h1 className="font-display text-[34px] leading-none font-bold tracking-[-1px] wide:text-[40px] wide:tracking-[-1.2px]">
+          Settings
+        </h1>
       </header>
 
       <ProjectSettings
@@ -154,16 +166,18 @@ export function SettingsScreen() {
         title="Areas"
         description="The category above projects. An area decides whether its hours count toward your internship and whether they may ever leave this machine — a project can narrow that, never widen it."
       >
-        <div className="overflow-hidden rounded-[12px] border border-border">
+        <SettingsCard>
           {(areas ?? []).map((area) => (
             <div
               key={area.id}
-              className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-b-0"
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-4 py-3 first:border-t-0 wide:px-5"
             >
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: areaFill(area) }} />
-              <span className="min-w-0 flex-1 truncate text-[14px] text-text">{area.name}</span>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: areaFill(area) }} />
+              <span className="min-w-0 flex-1 basis-[120px] truncate text-[16px] font-bold text-text">
+                {area.name}
+              </span>
 
-              <label className="flex items-center gap-2 text-[13px] text-text-dim">
+              <label className="flex items-center gap-2 text-[13px] font-semibold text-text-dim">
                 <input
                   type="checkbox"
                   checked={area.countsAsStageHours}
@@ -172,12 +186,12 @@ export function SettingsScreen() {
                       .update(area.id, { countsAsStageHours: event.target.checked })
                       .then(refetchAreas)
                   }
-                  className="accent-accent"
+                  className="h-[18px] w-[18px] accent-accent"
                 />
                 Counts as stage hours
               </label>
 
-              <label className="flex items-center gap-2 text-[13px] text-text-dim">
+              <label className="flex items-center gap-2 text-[13px] font-semibold text-text-dim">
                 <input
                   type="checkbox"
                   checked={area.defaultShareSupervisor}
@@ -186,7 +200,7 @@ export function SettingsScreen() {
                       .update(area.id, { defaultShareSupervisor: event.target.checked })
                       .then(refetchAreas)
                   }
-                  className="accent-accent"
+                  className="h-[18px] w-[18px] accent-accent"
                 />
                 Share with supervisor
               </label>
@@ -197,7 +211,7 @@ export function SettingsScreen() {
                 <button
                   onClick={() => void api.areas.archive(area.id).then(refetchAreas)}
                   title="Archive this area"
-                  className="shrink-0 rounded-md p-1.5 text-text-faint transition-colors hover:bg-card hover:text-prio-high"
+                  className={archiveButton}
                 >
                   ✕
                 </button>
@@ -205,112 +219,114 @@ export function SettingsScreen() {
             </div>
           ))}
 
-          <div className="flex items-center gap-3 border-t border-border bg-bg px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border px-4 pt-3 pb-3.5 wide:px-5">
             <input
               value={newArea}
               onChange={(event) => setNewArea(event.target.value)}
               onKeyDown={(event) => event.key === 'Enter' && void addArea()}
               placeholder="Add an area, e.g. Study"
-              className="min-w-0 flex-1 rounded-[8px] border border-border bg-card px-3 py-2 text-[13px] text-text outline-none placeholder:text-text-faint focus:border-accent"
+              className={`${textField} min-w-0 flex-1 basis-[180px]`}
             />
             {/* Created private and not counting toward internship hours: a new area earns
                 those, it does not start with them. */}
-            <span className="text-[12px] text-text-faint">private until you say otherwise</span>
-            <button
-              onClick={() => void addArea()}
-              disabled={!newArea.trim()}
-              className="shrink-0 rounded-[8px] border border-border px-3 py-2 text-[13px] text-text-dim transition-colors hover:text-text disabled:opacity-40"
-            >
+            <span className="text-[12px] font-medium text-text-faint">private until you say otherwise</span>
+            <button onClick={() => void addArea()} disabled={!newArea.trim()} className={addButton}>
               Add
             </button>
           </div>
-        </div>
+        </SettingsCard>
 
-        <SettingRow
-          label="Default area for new tasks"
-          hint="Used by quick add and the task switcher, which have no area field"
-        >
-          <select
-            value={settings.defaultAreaId}
-            onChange={(event) => void patch({ defaultAreaId: event.target.value })}
-            className="rounded-[8px] border border-border bg-bg px-3 py-2 text-[14px] text-text outline-none focus:border-accent"
+        <SettingsCard>
+          <SettingRow
+            label="Default area for new tasks"
+            hint="Used by quick add and the task switcher, which have no area field"
           >
-            {(areas ?? []).map((area) => (
-              <option key={area.id} value={area.id}>
-                {area.name}
-              </option>
-            ))}
-          </select>
-        </SettingRow>
+            <select
+              value={settings.defaultAreaId}
+              onChange={(event) => void patch({ defaultAreaId: event.target.value })}
+              className={selectField}
+            >
+              {(areas ?? []).map((area) => (
+                <option key={area.id} value={area.id}>
+                  {area.name}
+                </option>
+              ))}
+            </select>
+          </SettingRow>
+        </SettingsCard>
       </SettingsSection>
 
       <SettingsSection
         title="Hotkeys"
         description="These work anywhere in Windows, not only when Uurwerk is in front. Click a shortcut and press the combination you want; Escape cancels."
       >
-        {HOTKEY_LABELS.map(({ key, label, hint }) => (
-          <SettingRow key={key} label={label} hint={hint}>
-            <button
-              onClick={() => setRecording(key)}
-              className={`min-w-[150px] rounded-[8px] border px-3 py-2 font-mono text-[13px] transition-colors ${
-                recording === key
-                  ? 'border-accent bg-rail-active text-accent'
-                  : 'border-border bg-bg text-text-dim hover:text-text'
-              }`}
-            >
-              {recording === key ? 'Press keys…' : pretty(settings.hotkeys[key])}
-            </button>
+        <SettingsCard>
+          {HOTKEY_LABELS.map(({ key, label, hint }) => (
+            <SettingRow key={key} label={label} hint={hint}>
+              <button
+                onClick={() => setRecording(key)}
+                className={`h-9 min-w-[150px] rounded-input px-3 font-code text-[13px] font-bold transition-colors ${
+                  recording === key
+                    ? 'bg-rail-active text-accent-soft ring-[1.5px] ring-accent ring-inset'
+                    : 'bg-secondary text-text hover:bg-secondary-hover'
+                }`}
+              >
+                {recording === key ? 'Press keys…' : pretty(settings.hotkeys[key])}
+              </button>
+            </SettingRow>
+          ))}
+          <SettingRow label="Switch task" hint="Fixed for now">
+            <span className="inline-flex h-9 min-w-[150px] items-center justify-center rounded-input px-3 font-code text-[13px] font-bold text-text-faint ring-1 ring-border ring-inset">
+              Ctrl+Alt+Space
+            </span>
           </SettingRow>
-        ))}
-        <SettingRow label="Switch task" hint="Fixed for now">
-          <span className="inline-block min-w-[150px] rounded-[8px] border border-border bg-bg px-3 py-2 text-center font-mono text-[13px] text-text-faint">
-            Ctrl+Alt+Space
-          </span>
-        </SettingRow>
+        </SettingsCard>
       </SettingsSection>
 
       <SettingsSection title="Goals" description="What the progress bars on Today measure against.">
-        <SettingRow label="Daily goal (hours)">
-          <input
-            type="number"
-            min="0"
-            step="0.5"
-            value={settings.dailyGoalMin / 60}
-            onChange={(event) => void patch({ dailyGoalMin: Number(event.target.value) * 60 })}
-            className={numberField}
-          />
-        </SettingRow>
-        <SettingRow label="Weekly goal (hours)">
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={settings.weeklyGoalMin / 60}
-            onChange={(event) => void patch({ weeklyGoalMin: Number(event.target.value) * 60 })}
-            className={numberField}
-          />
-        </SettingRow>
-        <SettingRow
-          label="Stop tracking after idle (minutes)"
-          hint="Backdated to the moment you stopped touching the keyboard, so idle time is never counted. Reading or watching something also counts as idle — raise this if that catches you out."
-        >
-          <input
-            type="number"
-            min="1"
-            value={settings.idleTimeoutMin}
-            onChange={(event) => void patch({ idleTimeoutMin: Number(event.target.value) })}
-            className={numberField}
-          />
-        </SettingRow>
-        <SettingRow
-          label="Pick the task back up when I return"
-          hint="After an idle pause, tracking starts again on the same task as soon as you touch the keyboard — counting from that moment, never from when you left. Stopping the timer yourself is always final."
-        >
-          <Toggle
-            checked={settings.resumeAfterIdle}
-            onChange={(next) => void patch({ resumeAfterIdle: next })}
-          />
-        </SettingRow>
+        <SettingsCard>
+          <SettingRow label="Daily goal (hours)">
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={settings.dailyGoalMin / 60}
+              onChange={(event) => void patch({ dailyGoalMin: Number(event.target.value) * 60 })}
+              className={numberField}
+            />
+          </SettingRow>
+          <SettingRow label="Weekly goal (hours)">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={settings.weeklyGoalMin / 60}
+              onChange={(event) => void patch({ weeklyGoalMin: Number(event.target.value) * 60 })}
+              className={numberField}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Stop tracking after idle (minutes)"
+            hint="Backdated to the moment you stopped touching the keyboard, so idle time is never counted. Reading or watching something also counts as idle — raise this if that catches you out."
+          >
+            <input
+              type="number"
+              min="1"
+              value={settings.idleTimeoutMin}
+              onChange={(event) => void patch({ idleTimeoutMin: Number(event.target.value) })}
+              className={numberField}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Pick the task back up when I return"
+            hint="After an idle pause, tracking starts again on the same task as soon as you touch the keyboard — counting from that moment, never from when you left. Stopping the timer yourself is always final."
+          >
+            <Toggle
+              checked={settings.resumeAfterIdle}
+              onChange={(next) => void patch({ resumeAfterIdle: next })}
+            />
+          </SettingRow>
+        </SettingsCard>
       </SettingsSection>
 
       <CaptureSettings settings={settings} onPatch={(changes) => void patch(changes)} />
@@ -319,82 +335,86 @@ export function SettingsScreen() {
         title="Startup and window"
         description="Uurwerk lives in the tray. Starting with Windows never begins tracking and never publishes anything."
       >
-        <SettingRow
-          label="Start Uurwerk when I sign in to Windows"
-          hint={loginItem?.supported === false ? (loginItem.reason ?? undefined) : undefined}
-        >
-          <Toggle
-            checked={settings.autoLaunch}
-            disabled={loginItem?.supported === false}
-            onChange={(next) => void api.startup.setAutoLaunch(next).then(setLoginItem).then(refetch)}
-          />
-        </SettingRow>
-        <SettingRow
-          label="Keep running in the tray when I close the window"
-          hint="Turn this off and closing the window quits the app, hotkeys included"
-        >
-          <Toggle
-            checked={settings.closeToTray}
-            onChange={(next) => void patch({ closeToTray: next })}
-          />
-        </SettingRow>
+        <SettingsCard>
+          <SettingRow
+            label="Start Uurwerk when I sign in to Windows"
+            hint={loginItem?.supported === false ? (loginItem.reason ?? undefined) : undefined}
+          >
+            <Toggle
+              checked={settings.autoLaunch}
+              disabled={loginItem?.supported === false}
+              onChange={(next) => void api.startup.setAutoLaunch(next).then(setLoginItem).then(refetch)}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Keep running in the tray when I close the window"
+            hint="Turn this off and closing the window quits the app, hotkeys included"
+          >
+            <Toggle
+              checked={settings.closeToTray}
+              onChange={(next) => void patch({ closeToTray: next })}
+            />
+          </SettingRow>
 
-        {/* The way out. With close-to-tray on, the window's close button only hides it, so
-            without this the only real exit was the tray's own menu. */}
-        <SettingRow
-          label="Quit Uurwerk"
-          hint={
-            running
-              ? 'A timer is running. It will be stopped and the time saved before the app closes.'
-              : 'Closes the app completely — tray icon and global hotkeys included.'
-          }
-        >
-          {confirmingQuit ? (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setConfirmingQuit(false)}>
-                Cancel
+          {/* The way out. With close-to-tray on, the window's close button only hides it, so
+              without this the only real exit was the tray's own menu. */}
+          <SettingRow
+            label="Quit Uurwerk"
+            hint={
+              running
+                ? 'A timer is running. It will be stopped and the time saved before the app closes.'
+                : 'Closes the app completely — tray icon and global hotkeys included.'
+            }
+          >
+            {confirmingQuit ? (
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setConfirmingQuit(false)}>
+                  Cancel
+                </Button>
+                <Button variant="danger" size="sm" onClick={() => void api.window.quit()}>
+                  {running ? 'Stop timer and quit' : 'Quit now'}
+                </Button>
+              </div>
+            ) : (
+              <Button variant="secondary" size="sm" onClick={() => setConfirmingQuit(true)}>
+                Quit
               </Button>
-              <Button variant="danger" size="sm" onClick={() => void api.window.quit()}>
-                {running ? 'Stop timer and quit' : 'Quit now'}
-              </Button>
-            </div>
-          ) : (
-            <Button variant="secondary" size="sm" onClick={() => setConfirmingQuit(true)}>
-              Quit
-            </Button>
-          )}
-        </SettingRow>
+            )}
+          </SettingRow>
+        </SettingsCard>
       </SettingsSection>
 
       <SettingsSection
         title="Reports"
         description="Where the Dutch weekly report is written, and who it is addressed to."
       >
-        <SettingRow label="Supervisor e-mail">
-          <input
-            type="email"
-            value={settings.supervisorEmail}
-            onChange={(event) => void patch({ supervisorEmail: event.target.value })}
-            placeholder="begeleider@example.com"
-            className={textField}
-          />
-        </SettingRow>
-        <SettingRow label="Supervisor name" hint="Used for the greeting; blank keeps it neutral">
-          <input
-            value={settings.supervisorName}
-            onChange={(event) => void patch({ supervisorName: event.target.value })}
-            placeholder="Margriet"
-            className={textField}
-          />
-        </SettingRow>
-        <SettingRow label="Report folder" hint="Blank uses Documents\Uurwerk-rapporten">
-          <input
-            value={settings.reportOutputDir}
-            onChange={(event) => void patch({ reportOutputDir: event.target.value })}
-            placeholder="Documents\Uurwerk-rapporten"
-            className={textField}
-          />
-        </SettingRow>
+        <SettingsCard>
+          <SettingRow label="Supervisor e-mail">
+            <input
+              type="email"
+              value={settings.supervisorEmail}
+              onChange={(event) => void patch({ supervisorEmail: event.target.value })}
+              placeholder="begeleider@example.com"
+              className={textField}
+            />
+          </SettingRow>
+          <SettingRow label="Supervisor name" hint="Used for the greeting; blank keeps it neutral">
+            <input
+              value={settings.supervisorName}
+              onChange={(event) => void patch({ supervisorName: event.target.value })}
+              placeholder="Margriet"
+              className={textField}
+            />
+          </SettingRow>
+          <SettingRow label="Report folder" hint="Blank uses Documents\Uurwerk-rapporten">
+            <input
+              value={settings.reportOutputDir}
+              onChange={(event) => void patch({ reportOutputDir: event.target.value })}
+              placeholder="Documents\Uurwerk-rapporten"
+              className={textField}
+            />
+          </SettingRow>
+        </SettingsCard>
       </SettingsSection>
 
       <CalendarSettings />

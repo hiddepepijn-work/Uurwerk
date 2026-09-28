@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Area, CalendarEvent, PlanBlock, TimeSegment } from '@core/contract/types.js'
 import { formatDuration, formatMinuteOfDay } from '../../lib/format.js'
-import { areaFill } from '../agenda/agenda-model.js'
+import { AREA_COLORS, areaFill, colorFor, type AreaColor } from '../agenda/agenda-model.js'
 
 export type WeekMode = 'plan' | 'actual' | 'compare'
 
@@ -65,6 +65,44 @@ const SOURCE_TITLE: Record<string, string> = {
   uurwerk: 'Created in Uurwerk'
 }
 
+/**
+ * The colour set for an area: the palette's for the system areas, and for an area the user
+ * added its own colour as the fill with the page colour as ink.
+ */
+const colorsOf = (areaId: string | null, areaById: Map<string, Area>): AreaColor => {
+  if (areaId && AREA_COLORS[areaId]) return AREA_COLORS[areaId]
+  const area = areaId ? areaById.get(areaId) : undefined
+  if (!area) return colorFor(null)
+  const fill = areaFill(area)
+  return { fill, ink: 'var(--color-bg)', tint: `${fill}26`, soft: fill, label: area.name }
+}
+
+/**
+ * How a plan block is drawn: a task is its area's fill with ink text; a meeting is a
+ * commitment, dashed amber; a break is a quiet grey slab; a buffer only an outline.
+ */
+const blockStyle = (block: PlanBlock, areaById: Map<string, Area>): CSSProperties => {
+  if (block.kind === 'meeting') {
+    return {
+      background: 'var(--color-warn-soft)',
+      color: 'var(--color-warn)',
+      border: '1.5px dashed var(--color-warn)'
+    }
+  }
+  if (block.kind === 'break') {
+    return { background: 'var(--color-input)', color: 'var(--color-text-dim)' }
+  }
+  if (block.kind === 'buffer') {
+    return {
+      background: 'transparent',
+      color: 'var(--color-text-faint)',
+      border: '1.5px dashed var(--color-border-strong)'
+    }
+  }
+  const colors = colorsOf(block.areaId, areaById)
+  return { background: colors.fill, color: colors.ink }
+}
+
 const minuteOfDay = (ms: number): number => {
   const d = new Date(ms)
   return d.getHours() * 60 + d.getMinutes()
@@ -83,7 +121,7 @@ const dayOf = (ms: number): string => {
  * tidy on a normal day and produced hour labels past 24:00 on a late one — and it quietly
  * decided which hours were worth showing. A full day that scrolls has neither problem.
  *
- * Green is always what actually happened, blue-grey is always what was planned. In compare
+ * Green is always what actually happened; a planned block wears its area's colour. In compare
  * mode the two sit side by side in the same column rather than overlapping, because the
  * gap between them is the only thing worth looking at.
  */
@@ -146,11 +184,11 @@ export function WeekGrid({
   const hours = Array.from({ length: 24 }, (_, hour) => hour)
 
   return (
-    <div className="overflow-hidden rounded-[12px] border border-border">
+    <div className="overflow-hidden rounded-[22px] bg-card">
       {/* Day headers stay put while the hours scroll underneath. */}
-      <div className="flex gap-2 border-b border-border bg-card px-3 py-2">
+      <div className="flex gap-1.5 px-3.5 pt-3 pb-2">
         <div className="w-12 shrink-0" />
-        <div className="grid min-w-0 flex-1 grid-cols-7 gap-2">
+        <div className="grid min-w-0 flex-1 grid-cols-7 gap-1.5">
           {days.map((date) => {
             const isToday = date === today
             const dayBlocks = blocks.filter((block) => block.date === date)
@@ -167,24 +205,29 @@ export function WeekGrid({
               // them is invalid, and the browser resolves it by dropping the inner click.
               <div
                 key={date}
-                className={`group relative rounded-[8px] transition-colors hover:bg-card-hover
-                  ${isToday ? 'bg-rail-active' : ''}`}
+                className="group relative rounded-[14px] transition-colors hover:bg-card-hover"
               >
                 <button
                   onClick={() => onPlanDay(date)}
                   title="Plan this day"
-                  className="w-full rounded-[8px] px-2 py-1.5 text-center"
+                  className="flex w-full flex-col items-center gap-1 rounded-[14px] px-1 pt-0.5 pb-1.5 text-center"
                 >
-                  <div className={`text-[13px] font-medium ${isToday ? 'text-accent' : 'text-text'}`}>
+                  <div
+                    className={`text-[11px] font-bold tracking-[0.8px] uppercase ${isToday ? 'text-accent-soft' : 'text-text-faint'}`}
+                  >
                     {weekday.toLocaleDateString('en-GB', { weekday: 'short' })}
                   </div>
-                  <div className="text-[11px] text-text-dim">
+                  <div
+                    className={`rounded-pill px-2 font-display text-[15px] leading-[26px] font-bold ${
+                      isToday ? 'bg-accent text-accent-ink' : 'text-text'
+                    }`}
+                  >
                     {weekday.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                   </div>
-                  <div className="mt-1 font-mono text-[11px] tabular-nums">
+                  <div className="font-mono text-[12px] font-semibold tabular-nums">
                     {showPlan && <span className="text-text-dim">{formatDuration(plannedMin)}</span>}
                     {showPlan && showActual && <span className="text-text-faint"> / </span>}
-                    {showActual && <span className="text-accent">{formatDuration(actualMin)}</span>}
+                    {showActual && <span className="text-accent-soft">{formatDuration(actualMin)}</span>}
                   </div>
                 </button>
 
@@ -193,7 +236,7 @@ export function WeekGrid({
                     onClick={() => onAddEvent(date)}
                     aria-label={`New appointment on ${date}`}
                     title="New appointment"
-                    className="absolute top-1 right-1 rounded-[6px] px-1.5 text-[13px] leading-none text-text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:bg-card hover:text-text focus:opacity-100"
+                    className="absolute top-0.5 right-0.5 flex h-6 w-6 items-center justify-center rounded-[8px] text-[15px] leading-none font-bold text-text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:bg-input hover:text-text focus:opacity-100"
                   >
                     +
                   </button>
@@ -204,13 +247,13 @@ export function WeekGrid({
         </div>
       </div>
 
-      <div ref={scrollRef} className="max-h-[58vh] overflow-y-auto px-3 py-3">
-        <div className="flex gap-2">
+      <div ref={scrollRef} className="max-h-[58vh] overflow-y-auto px-3.5 pt-1 pb-3.5">
+        <div className="flex gap-1.5">
           <div className="relative w-12 shrink-0" style={{ height: GRID_HEIGHT }}>
             {hours.map((hour) => (
               <span
                 key={hour}
-                className="absolute right-0 -translate-y-1/2 font-mono text-[11px] text-text-dim tabular-nums"
+                className="absolute right-2 -translate-y-1/2 font-mono text-[12px] font-semibold text-text-faint tabular-nums"
                 style={{ top: hour * 60 * PX_PER_MIN }}
               >
                 {String(hour).padStart(2, '0')}:00
@@ -218,7 +261,7 @@ export function WeekGrid({
             ))}
           </div>
 
-          <div className="relative grid min-w-0 flex-1 grid-cols-7 gap-2">
+          <div className="relative grid min-w-0 flex-1 grid-cols-7 gap-1.5">
             {days.map((date) => {
               const isToday = date === today
               const dayBlocks = blocks.filter((block) => block.date === date)
@@ -227,13 +270,13 @@ export function WeekGrid({
               return (
                 <div
                   key={date}
-                  className={`relative rounded-[8px] border bg-bg ${isToday ? 'border-accent/30' : 'border-border'}`}
+                  className={`relative rounded-[14px] ${isToday ? 'bg-accent/[0.05]' : ''}`}
                   style={{ height: GRID_HEIGHT }}
                 >
                   {hours.map((hour) => (
                     <div
                       key={hour}
-                      className={`absolute right-0 left-0 border-t ${hour % 6 === 0 ? 'border-border' : 'border-border/40'}`}
+                      className={`absolute right-0 left-0 border-t ${hour % 6 === 0 ? 'border-border' : 'border-input'}`}
                       style={{ top: hour * 60 * PX_PER_MIN }}
                     />
                   ))}
@@ -260,13 +303,13 @@ export function WeekGrid({
                         key={block.id}
                         onClick={() => onBlockClick?.(block)}
                         title={`${block.taskTitle ?? block.title} · ${formatMinuteOfDay(block.startMin)}–${formatMinuteOfDay(block.endMin)}${block.explanation ? `\n\n${block.explanation}` : ''}\n\nClick to edit this day's plan.`}
-                        className={`absolute overflow-hidden rounded-[4px] border px-1.5 text-left text-[10px] leading-tight transition-opacity hover:opacity-80
-                          ${block.kind === 'break' ? 'border-border bg-card text-text-dim' : 'border-block-blue bg-block-blue/70 text-text'}`}
+                        className="absolute overflow-hidden rounded-[8px] px-1.5 text-left text-[11px] leading-tight font-bold transition-opacity hover:opacity-85"
                         style={{
-                          top: block.startMin * PX_PER_MIN,
-                          height: Math.max(12, (block.endMin - block.startMin) * PX_PER_MIN - 1),
-                          left: 2,
-                          right: half ? '50%' : 2
+                          ...blockStyle(block, areaById),
+                          top: block.startMin * PX_PER_MIN + 1,
+                          height: Math.max(12, (block.endMin - block.startMin) * PX_PER_MIN - 2),
+                          left: 3,
+                          right: half ? '50%' : 3
                         }}
                       >
                         <span className="line-clamp-2">{block.taskTitle ?? block.title}</span>
@@ -288,18 +331,18 @@ export function WeekGrid({
                                 ? '\n\nA share of a longer stretch, divided afterwards.'
                                 : ''
                           }\n\nClick to correct these hours.`}
-                          className={`absolute overflow-hidden rounded-[4px] px-1.5 text-left text-[10px] leading-tight transition-opacity hover:opacity-80
+                          className={`absolute overflow-hidden rounded-[8px] px-1.5 text-left text-[11px] leading-tight font-bold transition-opacity hover:opacity-85
                             ${
                               segment.taskId === null
-                                ? 'border border-dashed border-accent/60 bg-accent/20 text-text'
-                                : 'bg-accent/80 text-accent-ink'
+                                ? 'border-[1.5px] border-dashed border-accent bg-area-stage-tint text-accent-soft'
+                                : 'bg-accent text-accent-ink'
                             }
-                            ${segment.attribution === 'tracked' ? '' : 'border-l-2 border-l-accent'}`}
+                            ${segment.attribution === 'tracked' ? '' : 'border-l-[3px] border-l-accent-dim'}`}
                           style={{
-                            top: from * PX_PER_MIN,
-                            height: Math.max(6, (Math.max(to, from + 1) - from) * PX_PER_MIN - 1),
-                            left: half ? '50%' : 2,
-                            right: 2
+                            top: from * PX_PER_MIN + 1,
+                            height: Math.max(6, (Math.max(to, from + 1) - from) * PX_PER_MIN - 2),
+                            left: half ? 'calc(50% + 2px)' : 3,
+                            right: 3
                           }}
                         >
                           <span className="line-clamp-2">
@@ -315,9 +358,11 @@ export function WeekGrid({
                     .filter((event) => dayOf(event.startsAt) === date)
                     .map((event) => {
                       const area = event.areaId ? areaById.get(event.areaId) : null
+                      const colors = area ? colorsOf(area.id, areaById) : null
                       const from = minuteOfDay(event.startsAt)
                       const to = minuteOfDay(event.endsAt)
                       const unclassified = event.classificationStatus !== 'confirmed'
+                      const travel = event.kind === 'travel'
 
                       return (
                         <button
@@ -330,29 +375,34 @@ export function WeekGrid({
                               ? 'Click to edit the appointment it belongs to.'
                               : 'Click to edit how this is filed.'
                           }`}
-                          className={`absolute overflow-hidden rounded-[4px] border px-1.5 text-left text-[10px] leading-tight
-                            ${unclassified ? 'border-dashed' : ''}`}
+                          className={`absolute overflow-hidden rounded-[8px] border-[1.5px] px-1.5 text-left text-[11px] leading-tight font-bold
+                            ${unclassified || travel ? 'border-dashed' : 'border-solid'}`}
                           style={{
-                            top: from * PX_PER_MIN,
-                            height: Math.max(12, (Math.max(to, from + 1) - from) * PX_PER_MIN - 1),
+                            top: from * PX_PER_MIN + 1,
+                            height: Math.max(12, (Math.max(to, from + 1) - from) * PX_PER_MIN - 2),
                             left: '50%',
-                            right: 2,
-                            // No area yet means no claim about what this is: neutral until
-                            // you say otherwise, never a colour that implies a decision.
-                            borderColor: area ? areaFill(area) : 'var(--color-border-strong)',
-                            background: area ? `${areaFill(area)}33` : 'transparent',
-                            // Travel is the same work, lighter — it frames the appointment.
-                            opacity: event.kind === 'travel' ? 0.7 : 1
+                            right: 3,
+                            // An appointment is its area's tint with a rim in the fill. No area
+                            // yet means no claim about what this is: neutral until you say
+                            // otherwise, never a colour that implies a decision. Travel frames
+                            // the appointment: dashed, quiet, on the card.
+                            borderColor: travel
+                              ? 'var(--color-text-faint)'
+                              : colors
+                                ? colors.fill
+                                : 'var(--color-border-strong)',
+                            background: travel ? 'var(--color-card)' : colors ? colors.tint : 'transparent',
+                            color: travel ? 'var(--color-text-dim)' : 'var(--color-text)'
                           }}
                         >
                           <span className="flex items-center gap-1">
                             <span
                               title={SOURCE_TITLE[event.origin]}
-                              className="shrink-0 rounded-[2px] bg-bg/70 px-1 text-[9px] text-text-dim"
+                              className="shrink-0 rounded-[4px] bg-bg/70 px-1 text-[9px] font-bold text-text-dim"
                             >
                               {SOURCE_BADGE[event.origin] ?? '·'}
                             </span>
-                            <span className="line-clamp-2 text-text">{event.title}</span>
+                            <span className="line-clamp-2">{event.title}</span>
                           </span>
                         </button>
                       )
@@ -364,8 +414,8 @@ export function WeekGrid({
                       className="pointer-events-none absolute right-0 left-0 z-10 flex items-center"
                       style={{ top: nowMin * PX_PER_MIN }}
                     >
-                      <span className="-ml-1 h-2 w-2 shrink-0 rounded-full bg-prio-high" />
-                      <span className="h-px flex-1 bg-prio-high" />
+                      <span className="-ml-1 h-2.5 w-2.5 shrink-0 rounded-full bg-danger" />
+                      <span className="h-0.5 flex-1 bg-danger" />
                     </div>
                   )}
                 </div>

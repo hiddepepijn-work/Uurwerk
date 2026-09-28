@@ -82,7 +82,7 @@ function StageHours({
         }
         className="accent-accent"
       />
-      <span className={`w-[52px] shrink-0 text-[11px] ${has ? 'text-text-dim' : 'text-text-faint'}`}>
+      <span className={`w-[52px] shrink-0 text-[12px] font-semibold ${has ? 'text-text-dim' : 'text-text-faint'}`}>
         Stage
       </span>
       {has && (
@@ -300,12 +300,12 @@ export function RangePlanner({
       subtitle={`${longRange(from, to)} · ${days.length} days. Today is planned from now on, and nothing is added until you accept it.`}
       footer={
         <>
-          <span className="text-[13px] text-text-dim">
+          <span className="text-[14px] text-text-dim">
             {proposal
               ? `${formatDuration(proposal.plannedMin)} planned across ${plannedDays.size} day${plannedDays.size === 1 ? '' : 's'}, of ${formatDuration(proposal.availableMin)} available`
               : 'Set your hours, then ask for a plan.'}
           </span>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             <Button variant="ghost" onClick={onClose} disabled={busy}>
               {accepted ? 'Close' : 'Cancel'}
             </Button>
@@ -328,24 +328,24 @@ export function RangePlanner({
       }
     >
       {problem && (
-        <div className="mb-5 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
+        <div className="mb-5 rounded-input bg-warn-soft px-4 py-3 text-[14px] font-semibold text-warn">
           {problem}
         </div>
       )}
 
       {accepted && (
-        <div className="mb-5 rounded-[10px] border border-accent/30 bg-accent/5 px-4 py-3 text-[13px] text-text">
+        <div className="mb-5 rounded-input bg-area-stage-tint px-4 py-3 text-[14px] font-semibold text-accent-soft">
           Planned. Every day is now in your week grid — click any of them to adjust it.
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 wide:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
         {/* ------------------------------------------------ when you can work */}
-        <div className="flex flex-col gap-5">
-          <section className="rounded-[12px] border border-border bg-bg p-4">
+        <div className="flex flex-col gap-3">
+          <section className="rounded-card border border-border p-4">
             <div className="mb-1 flex items-center justify-between gap-3">
-              <h3 className="text-[14px] font-semibold">Working hours</h3>
-              <div className="flex rounded-[8px] border border-border p-0.5">
+              <h3 className="text-[15px] font-bold">Working hours</h3>
+              <div className="flex rounded-[10px] bg-input p-[3px]">
                 {(
                   [
                     ['range', 'These days'],
@@ -355,8 +355,8 @@ export function RangePlanner({
                   <button
                     key={mode}
                     onClick={() => setEditing(mode)}
-                    className={`rounded-[6px] px-2 py-1 text-[11px] transition-colors ${
-                      editing === mode ? 'bg-rail-active text-accent' : 'text-text-dim hover:text-text'
+                    className={`h-7 rounded-[8px] px-2.5 text-[12px] font-bold transition-colors ${
+                      editing === mode ? 'bg-text text-bg' : 'text-text-dim hover:text-text'
                     }`}
                   >
                     {label}
@@ -365,7 +365,7 @@ export function RangePlanner({
               </div>
             </div>
 
-            <p className="mb-3 text-[12px] leading-relaxed text-text-dim">
+            <p className="mb-3 text-[13px] leading-[1.45] text-text-dim">
               {editing === 'range'
                 ? 'The hours Uurwerk may plan into, day by day. A day switched off is never planned.'
                 : 'Your default week. It applies to any day you have not set by hand below.'}
@@ -389,11 +389,11 @@ export function RangePlanner({
                         className="accent-accent"
                       />
                       <span
-                        className={`w-[86px] shrink-0 text-[12px] ${on ? 'text-text' : 'text-text-faint'}`}
+                        className={`w-[86px] shrink-0 text-[13px] font-semibold ${on ? 'text-text' : 'text-text-faint'}`}
                         title={own ? 'Set for this day' : 'From your normal week'}
                       >
                         {shortDate(date)}
-                        {own && <span className="ml-1 text-accent">•</span>}
+                        {own && <span className="ml-1 text-accent-soft">•</span>}
                       </span>
 
                         {on && day && (
@@ -441,7 +441,7 @@ export function RangePlanner({
                         className="accent-accent"
                       />
                       <span
-                        className={`w-20 shrink-0 text-[13px] ${on ? 'text-text' : 'text-text-faint'}`}
+                        className={`w-20 shrink-0 text-[13px] font-semibold ${on ? 'text-text' : 'text-text-faint'}`}
                       >
                         {label}
                       </span>
@@ -476,33 +476,33 @@ export function RangePlanner({
             )}
 
             {editing === 'range' && (
-              <p className="mt-3 border-t border-border pt-2 text-[11px] leading-relaxed text-text-faint">
-                A <span className="text-accent">•</span> marks a day you set yourself. The rest
+              <p className="mt-3 border-t border-border pt-2.5 text-[12px] leading-[1.45] text-text-faint">
+                A <span className="text-accent-soft">•</span> marks a day you set yourself. The rest
                 follow your normal week. Internship work is planned only inside the Stage hours;
                 school and personal work only outside them.
               </p>
             )}
           </section>
 
-          <section className="rounded-[12px] border border-border bg-bg p-4">
-            <h3 className="mb-1 text-[14px] font-semibold">Already spoken for</h3>
-            <p className="mb-3 text-[12px] leading-relaxed text-text-dim">
+          <section className="rounded-card border border-border p-4">
+            <h3 className="mb-1 text-[15px] font-bold">Already spoken for</h3>
+            <p className="mb-3 text-[13px] leading-[1.45] text-text-dim">
               Standing commitments like a shift. Uurwerk plans around them every week.
             </p>
 
             {commitments.length === 0 ? (
-              <p className="text-[12px] text-text-faint">
+              <p className="text-[13px] text-text-faint">
                 Nothing yet. Add a shift under Settings → Organizations, or from the day planner.
               </p>
             ) : (
               <ul className="flex flex-col gap-1.5">
                 {commitments.map((commitment) => (
-                  <li key={commitment.id} className="flex items-center gap-2 text-[12px]">
-                    <span className="w-16 shrink-0 text-text-dim">
+                  <li key={commitment.id} className="flex items-center gap-2 text-[13px]">
+                    <span className="w-16 shrink-0 font-semibold text-text-dim">
                       {WEEKDAYS.find((day) => day.weekday === commitment.weekday)?.label.slice(0, 3)}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-text">{commitment.title}</span>
-                    <span className="shrink-0 font-mono text-text-dim">
+                    <span className="min-w-0 flex-1 truncate font-semibold text-text">{commitment.title}</span>
+                    <span className="shrink-0 font-mono font-bold text-text-dim">
                       {formatDuration(commitment.endMin - commitment.startMin)}
                     </span>
                   </li>
@@ -515,45 +515,45 @@ export function RangePlanner({
         {/* ------------------------------------------------------ the proposal */}
         <div className="min-w-0">
           {!proposal ? (
-            <div className="flex h-full items-center justify-center rounded-[12px] border border-dashed border-border p-8 text-center">
-              <p className="max-w-sm text-[13px] leading-relaxed text-text-dim">
+            <div className="flex h-full items-center justify-center rounded-card border-[1.5px] border-dashed border-border-strong p-8 text-center">
+              <p className="max-w-sm text-[14px] leading-[1.5] text-text-dim">
                 Uurwerk fills your working hours deadline first: whatever is due soonest gets the
                 time before its due date, and nothing is ever placed after its own deadline.
               </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-3">
               {/* The warning you asked for, with both ways out. */}
               {proposal.shortfalls.length > 0 && (
-                <section className="rounded-[12px] border border-prio-med/40 bg-prio-med/10 p-4">
-                  <h3 className="mb-1 text-[14px] font-semibold text-prio-med">
+                <section className="rounded-card bg-warn-soft p-4">
+                  <h3 className="mb-1 text-[15px] font-bold text-warn">
                     This does not fit before the deadline
                   </h3>
-                  <p className="mb-3 text-[12px] leading-relaxed text-text-dim">
+                  <p className="mb-3 text-[13px] leading-[1.45] text-text-dim">
                     There are not enough hours between now and the due date. Free up time, or move
                     the date — Uurwerk will not quietly plan past it.
                   </p>
 
                   <ul className="flex flex-col gap-3">
                     {proposal.shortfalls.map((shortfall) => (
-                      <li key={shortfall.taskId} className="rounded-[10px] border border-border bg-bg p-3">
+                      <li key={shortfall.taskId} className="rounded-[14px] bg-card p-3">
                         <div className="flex items-baseline justify-between gap-3">
-                          <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+                          <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-text">
                             {shortfall.taskTitle}
                           </span>
-                          <span className="shrink-0 font-mono text-[12px] text-prio-med">
+                          <span className="shrink-0 font-mono text-[13px] font-bold text-warn">
                             {formatDuration(shortfall.shortfallMin)} short
                           </span>
                         </div>
 
-                        <div className="mt-1 text-[12px] text-text-dim">
+                        <div className="mt-1 text-[13px] text-text-dim">
                           Due {shortfall.dueDate} · needs {formatDuration(shortfall.requiredMin)}, room
                           for {formatDuration(shortfall.availableMin)}
                         </div>
 
                         <div className="mt-2.5 flex flex-wrap items-center gap-2">
                           {shortfall.daysBeforeDue > 0 && (
-                            <span className="rounded-[8px] border border-border px-2.5 py-1 text-[12px] text-text-dim">
+                            <span className="rounded-pill bg-input px-3 py-1 text-[12px] font-semibold text-text-dim">
                               Or add {formatDuration(shortfall.extraMinPerDay)} to each of the{' '}
                               {shortfall.daysBeforeDue} remaining days
                             </span>
@@ -568,7 +568,7 @@ export function RangePlanner({
                               Move deadline to {shortfall.earliestFinishDate}
                             </Button>
                           ) : (
-                            <span className="text-[12px] text-text-faint">
+                            <span className="text-[13px] text-text-faint">
                               It does not fit in this period at all.
                             </span>
                           )}
@@ -580,7 +580,7 @@ export function RangePlanner({
               )}
 
               <section>
-                <h3 className="mb-3 text-[14px] font-semibold">What it wants to do</h3>
+                <h3 className="label-caps mb-2.5">What it wants to do</h3>
 
                 {proposal.blocks.length === 0 ? (
                   <p className="text-[13px] text-text-faint">
@@ -591,14 +591,14 @@ export function RangePlanner({
                     {proposal.blocks.map((block, index) => (
                       <li
                         key={`${block.date}-${block.startMin}-${index}`}
-                        className="flex items-center gap-3 rounded-[8px] px-2.5 py-2 text-[13px] hover:bg-card-hover"
+                        className="flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[14px] hover:bg-card-hover"
                         title={block.explanation}
                       >
-                        <span className="w-24 shrink-0 text-text-dim">{block.date}</span>
-                        <span className="w-24 shrink-0 font-mono text-text-dim tabular-nums">
+                        <span className="w-24 shrink-0 font-semibold text-text-dim">{block.date}</span>
+                        <span className="w-24 shrink-0 font-mono font-bold text-text-dim tabular-nums">
                           {clock(block.startMin)}–{clock(block.endMin)}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-text">
+                        <span className="min-w-0 flex-1 truncate font-semibold text-text">
                           {block.title ?? taskTitle(proposal, block.taskId ?? null)}
                         </span>
                       </li>
@@ -609,8 +609,8 @@ export function RangePlanner({
 
               {proposal.unplaced.length > 0 && (
                 <section>
-                  <h3 className="mb-2 text-[14px] font-semibold">Did not fit, and has no deadline</h3>
-                  <ul className="flex flex-col gap-1 text-[12px] text-text-dim">
+                  <h3 className="label-caps mb-2">Did not fit, and has no deadline</h3>
+                  <ul className="flex flex-col gap-1 text-[13px] text-text-dim">
                     {proposal.unplaced.map((entry) => (
                       <li key={entry.taskId}>
                         {entry.taskTitle} — {formatDuration(entry.minutes)} ({entry.reason})

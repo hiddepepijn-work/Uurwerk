@@ -84,11 +84,11 @@ export function TaskShareList({
             return (
               <li
                 key={share.taskId}
-                className="flex items-center gap-3 rounded-[10px] px-2 py-2.5 hover:bg-card-hover"
+                className="flex items-center gap-3 rounded-input px-2 py-2.5 hover:bg-card-hover"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2.5">
                   {task && <PriorityDot priority={task.priority} />}
-                  <span className="truncate text-[14px] text-text">
+                  <span className="truncate text-[14px] font-semibold text-text">
                     {task?.title ?? 'Deleted task'}
                   </span>
                   {area && !compact && (
@@ -114,19 +114,19 @@ export function TaskShareList({
                     max={100}
                     value={share.sharePct}
                     onChange={(event) => setShare(share.taskId, clamp(Number(event.target.value)))}
-                    className="w-14 rounded-[8px] border border-border bg-bg px-2 py-1 text-right font-mono text-[13px] text-text outline-none tabular-nums focus:border-accent"
+                    className="h-8 w-14 rounded-[10px] bg-input px-2 text-right font-mono text-[13px] font-semibold text-text outline-none tabular-nums focus:ring-2 focus:ring-accent/40"
                   />
                   <span className="text-[13px] text-text-faint">%</span>
                 </div>
 
                 {/* The number that actually gets written. */}
-                <span className="w-[70px] text-right font-mono text-[13px] text-accent tabular-nums">
+                <span className="w-[70px] text-right font-mono text-[14px] font-bold text-accent-soft tabular-nums">
                   {formatDuration(minutesFor(share.sharePct, claimedPct, poolMin))}
                 </span>
 
                 <button
                   onClick={() => onChange(shares.filter((s) => s.taskId !== share.taskId))}
-                  className="text-text-faint hover:text-prio-high"
+                  className="flex h-7 w-7 items-center justify-center rounded-[8px] text-text-faint transition-colors hover:bg-danger-soft hover:text-danger-text"
                   aria-label="Remove"
                 >
                   <CloseIcon size={14} />
@@ -140,14 +140,14 @@ export function TaskShareList({
       <div className={`${shares.length > 0 ? 'mt-4 border-t border-border pt-4' : 'mt-2'}`}>
         {open ? (
           <div>
-            <div className="flex items-center gap-2 rounded-[10px] border border-border bg-bg px-3 py-2">
+            <div className="flex h-11 items-center gap-2 rounded-input bg-input px-3.5 text-text-faint focus-within:ring-2 focus-within:ring-accent/40">
               <SearchIcon size={14} />
               <input
                 autoFocus
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search a task you worked on"
-                className="w-full bg-transparent text-[14px] text-text outline-none placeholder:text-text-faint"
+                className="w-full bg-transparent text-[14px] font-medium text-text outline-none placeholder:text-text-faint"
               />
             </div>
             {candidates.length > 0 && (
@@ -156,10 +156,10 @@ export function TaskShareList({
                   <li key={task.id}>
                     <button
                       onClick={() => addTask(task.id)}
-                      className="flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left hover:bg-card-hover"
+                      className="flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2 text-left transition-colors hover:bg-card-hover"
                     >
                       <PriorityDot priority={task.priority} />
-                      <span className="truncate text-[14px] text-text">{task.title}</span>
+                      <span className="truncate text-[14px] font-semibold text-text">{task.title}</span>
                     </button>
                   </li>
                 ))}
@@ -178,7 +178,7 @@ export function TaskShareList({
             </Button>
             {shares.length > 1 && (
               <button
-                className="text-[13px] text-text-dim hover:text-accent"
+                className="text-[14px] font-bold text-accent-soft transition-opacity hover:opacity-80"
                 onClick={() => onChange(evenly(shares.map((share) => share.taskId)))}
               >
                 Split evenly

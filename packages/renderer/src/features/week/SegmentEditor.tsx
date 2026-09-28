@@ -116,7 +116,7 @@ export function SegmentEditor({
   }
 
   const field =
-    'w-full rounded-[10px] border border-border bg-bg px-3.5 py-2.5 text-[14px] text-text outline-none focus:border-accent'
+    'h-11 w-full rounded-input bg-input px-3.5 text-[14px] font-medium text-text outline-none placeholder:text-text-faint focus:ring-2 focus:ring-accent/40'
 
   return (
     <Modal
@@ -132,7 +132,7 @@ export function SegmentEditor({
       footer={
         <>
           {confirmingDelete ? (
-            <span className="text-[13px] text-prio-high">Delete these minutes for good?</span>
+            <span className="text-[14px] font-semibold text-danger-text">Delete these minutes for good?</span>
           ) : (
             <Button
               variant="danger"
@@ -143,7 +143,7 @@ export function SegmentEditor({
             </Button>
           )}
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             {confirmingDelete ? (
               <>
                 <Button variant="ghost" onClick={() => setConfirmingDelete(false)} disabled={busy}>
@@ -168,7 +168,7 @@ export function SegmentEditor({
       }
     >
       {problem && (
-        <div className="mb-5 rounded-[10px] border border-prio-med/40 bg-prio-med/10 px-4 py-3 text-[13px] text-prio-med">
+        <div className="mb-5 rounded-input bg-warn-soft px-4 py-3 text-[14px] font-semibold text-warn">
           {problem}
         </div>
       )}
@@ -188,7 +188,7 @@ export function SegmentEditor({
               </option>
             ))}
           </select>
-          <span className="text-[12px] text-text-faint">
+          <span className="text-[13px] text-text-faint">
             Time with no task counts toward your totals but appears against nothing in the
             per-task tables or the report.
           </span>
@@ -207,7 +207,7 @@ export function SegmentEditor({
           <div className="flex flex-col gap-2">
             <span className="text-[13px] text-text-dim">To</span>
             {running ? (
-              <div className="rounded-[8px] border border-border bg-card px-2.5 py-1.5 font-mono text-[13px] text-text-dim">
+              <div className="rounded-[10px] bg-input px-2.5 py-1.5 font-mono text-[13px] font-semibold text-text-dim">
                 running
               </div>
             ) : (
@@ -216,14 +216,14 @@ export function SegmentEditor({
           </div>
           <div className="flex flex-col gap-2">
             <span className="text-[13px] text-text-dim">Length</span>
-            <div className="rounded-[8px] border border-border bg-card px-2.5 py-1.5 font-mono text-[13px] text-text">
+            <div className="rounded-[10px] bg-input px-2.5 py-1.5 font-mono text-[13px] font-bold text-accent-soft">
               {running ? formatDuration(segment.durationMin) : formatDuration(durationMin)}
             </div>
           </div>
         </div>
 
         {!running && spansMidnight && (
-          <p className="text-[12px] text-text-dim">
+          <p className="text-[13px] text-text-dim">
             This ends the following morning. That is allowed — it is counted against both days
             where the totals need it.
           </p>
@@ -240,7 +240,7 @@ export function SegmentEditor({
         </label>
 
         {segment.countsAsStageHours && (
-          <p className="text-[12px] leading-relaxed text-text-faint">
+          <p className="text-[13px] leading-[1.5] text-text-faint">
             These minutes count toward your internship hours. That was decided when the segment
             started and does not change when you edit it here — reclassifying an area must never
             rewrite hours that have already been reported.

@@ -131,16 +131,16 @@ export function TodayTimeline({ segments }: { segments: TimelineSegment[] }) {
 
   return (
     <div>
-      <div className="mb-5 flex items-baseline justify-between">
-        <h2 className="text-[15px] font-semibold">Today&apos;s timeline</h2>
-        <span className="text-[13px] text-text-dim">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="display-title text-[20px] tracking-normal wide:text-[24px] wide:tracking-[-0.4px]">Today&apos;s timeline</h2>
+        <span className="text-[13px] font-semibold text-text-dim tabular-nums wide:text-[14px] wide:font-normal">
           {bars.length === 0
             ? 'Nothing tracked yet'
             : `${formatDuration(tracked)} across ${bars.length} ${bars.length === 1 ? 'session' : 'sessions'}`}
         </span>
       </div>
 
-      <div className="relative mb-2 h-4 text-[11px] text-text-dim">
+      <div className="relative mb-1.5 h-4 text-[11px] font-bold text-text-faint wide:mb-3 wide:text-[12px] wide:font-semibold">
         {ticksFor(window).map((hour) => (
           <span
             key={hour}
@@ -152,7 +152,7 @@ export function TodayTimeline({ segments }: { segments: TimelineSegment[] }) {
         ))}
       </div>
 
-      <div className="relative h-10 w-full overflow-hidden rounded-[10px] border border-border bg-card">
+      <div className="relative h-10 w-full overflow-hidden rounded-input border border-border bg-card wide:h-14 wide:rounded-[16px] wide:border-0">
         {bars.map((bar) => {
           const from = Math.max(minuteOfDay(bar.startedAt), window.start)
           const to = Math.min(minuteOfDay(bar.endedAt), window.end)
@@ -171,7 +171,7 @@ export function TodayTimeline({ segments }: { segments: TimelineSegment[] }) {
                     }`
                 )
                 .join('\n')}`}
-              className="absolute top-1.5 bottom-1.5 flex overflow-hidden rounded-[6px] transition-all"
+              className="absolute top-[5px] bottom-[5px] flex overflow-hidden rounded-[6px] transition-all wide:top-2 wide:bottom-2 wide:rounded-lg"
               style={{
                 left: `${position(from)}%`,
                 // A two-minute session still needs to be hoverable.
@@ -183,7 +183,11 @@ export function TodayTimeline({ segments }: { segments: TimelineSegment[] }) {
                   key={part.key}
                   // A share with no task is drawn faint rather than dropped: the time was
                   // worked, and hiding it would make the bar shorter than the day was.
-                  className={`h-full ${part.taskTitle === null ? 'bg-accent/25' : 'bg-accent'}`}
+                  className={`h-full ${
+                    part.taskTitle === null
+                      ? 'border-[1.5px] border-dashed border-accent/60 bg-accent/20'
+                      : 'bg-accent'
+                  }`}
                   style={{ width: `${(part.durationMin / total) * 100}%` }}
                 />
               ))}
@@ -199,19 +203,26 @@ export function TodayTimeline({ segments }: { segments: TimelineSegment[] }) {
       </div>
 
       {bars.length > 0 && (
-        <div className="mt-5 grid grid-cols-2 gap-x-10 gap-y-4 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-2.5 wide:grid-cols-3 wide:gap-x-3 wide:gap-y-4 xl:grid-cols-4">
           {bars.map((bar) => (
-            <div key={bar.key} className="min-w-0">
-              <div className="font-mono text-[13px] text-accent tabular-nums">
+            <div
+              key={bar.key}
+              className="flex min-w-0 flex-col gap-[3px] border-b border-secondary pb-2.5 wide:gap-1 wide:border-0 wide:pb-0"
+            >
+              <div className="flex items-baseline gap-2 font-mono text-[14px] font-bold text-accent-soft tabular-nums">
                 {formatSpan(bar.startedAt, bar.endedAt)}
-                <span className="ml-2 text-text-dim">{formatDuration(bar.durationMin)}</span>
+                <span className="text-[13px] font-semibold text-text-dim wide:font-normal wide:text-text-faint">
+                  {formatDuration(bar.durationMin)}
+                </span>
               </div>
               {/* A divided stretch lists its shares; a tracked one is simply its task. */}
               {bar.estimated ? (
-                <ul className="mt-1 flex flex-col gap-0.5">
+                <ul className="flex flex-col gap-0.5">
                   {bar.parts.map((part) => (
-                    <li key={part.key} className="flex items-baseline gap-1.5 text-[13px]">
-                      <span className="truncate text-text-dim">{label(part.taskTitle)}</span>
+                    <li key={part.key} className="flex items-baseline gap-1.5 text-[14px] font-semibold wide:font-normal">
+                      <span className={`truncate ${part.taskTitle === null ? 'text-text-faint' : 'text-text'}`}>
+                        {label(part.taskTitle)}
+                      </span>
                       {/* The tilde is the whole point: a share, not a measurement. */}
                       <span className="shrink-0 font-mono text-text-faint tabular-nums">
                         ~{formatDuration(part.durationMin)}
@@ -220,7 +231,7 @@ export function TodayTimeline({ segments }: { segments: TimelineSegment[] }) {
                   ))}
                 </ul>
               ) : (
-                <div className="mt-0.5 truncate text-[13px] text-text-dim">
+                <div className="truncate text-[14px] font-semibold text-text wide:font-normal">
                   {label(bar.parts[0]?.taskTitle ?? null)}
                 </div>
               )}
