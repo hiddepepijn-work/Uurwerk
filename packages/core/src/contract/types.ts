@@ -1458,8 +1458,17 @@ export interface Settings {
   // ----------------------------------------------------------------- focus
   /** Phone: turn the "Uurwerk" Focus on and off through two Shortcuts. Per device. */
   focusShortcuts: boolean
-  /** Laptop: programs closed while a focus task is running, by process name. Per device. */
+  /**
+   * Laptop: 'allow' closes every windowed program not on focusAllowedApps; 'block' closes
+   * only those on focusBlockedApps. Per device.
+   */
+  focusMode: 'allow' | 'block'
+  /** Laptop, allow mode: programs that may stay open during focus, by process name. Per device. */
+  focusAllowedApps: string[]
+  /** Laptop, block mode: programs closed while a focus task is running, by process name. Per device. */
   focusBlockedApps: string[]
+  /** Chrome: sites the Uurwerk Focus extension blocks during focus, subdomains included. Per device. */
+  focusBlockedSites: string[]
 
   // ---------------------------------------------------------------- jarvis
   /** Laptop: listen for "Hey Jarvis". Per device. */

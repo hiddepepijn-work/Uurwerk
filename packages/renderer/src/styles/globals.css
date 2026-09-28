@@ -222,14 +222,31 @@ textarea,
   animation: breathe 3.2s ease-in-out infinite;
 }
 
-/* Now-line dot: a soft ring pulses out every 2 s. */
+/* Now-line dot: a soft ring pulses out every 2 s. The ring is its own layer that only scales
+   and fades — an animated box-shadow repainted the agenda every frame, forever. */
 @keyframes nowpulse {
-  50% {
-    box-shadow: 0 0 0 7px rgb(204 111 98 / 0.18);
+  0% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+  70%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
   }
 }
 .animate-nowpulse {
-  animation: nowpulse 2s ease-in-out infinite;
+  position: relative;
+}
+.animate-nowpulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgb(204 111 98);
+  animation: nowpulse 2s ease-out infinite;
+  will-change: transform, opacity;
+  pointer-events: none;
 }
 
 /* A new row slides in from above and flashes green once. */
@@ -344,15 +361,22 @@ textarea,
 
 /* Modal: on a phone the whole dialog slides up as a sheet; from `wide` up the scrim fades in
    and the panel scales .94 → 1 with an 8px rise. */
+/* Both on their own compositor layer: scaling a big panel with a 90px shadow otherwise
+   re-rasterises that shadow every frame, and the laptop dropped to about 20 fps. On a layer the
+   GPU scales what was painted once. `contain` keeps the panel's own layout from spilling out. */
 .modal-enter {
   animation: sheet-up 0.6s var(--spring-soft) backwards;
+  will-change: transform, opacity;
 }
 @media (min-width: 701px) {
   .modal-enter {
     animation: fade-in 0.3s var(--ease-out) backwards;
+    will-change: opacity;
   }
   .modal-enter > .modal-panel {
     animation: modal-in 0.5s var(--spring-soft) backwards;
+    will-change: transform, opacity;
+    contain: layout paint;
   }
 }
 

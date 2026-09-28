@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Settings } from '@core/contract/types.js'
 import { useCompact } from '../../hooks/useCompact.js'
-import { SettingRow, SettingsCard, SettingsSection, Toggle, textField } from './SettingsSection.js'
+import { SettingRow, SettingsCard, SettingsSection, Toggle, selectField, textField } from './SettingsSection.js'
 
 /**
  * Focus: while a focus task is on, the phone allows only the essentials and the laptop
@@ -17,6 +17,9 @@ export function FocusSettings({
 }) {
   const compact = useCompact()
   const [apps, setApps] = useState(settings.focusBlockedApps.join(', '))
+  const [allowed, setAllowed] = useState(settings.focusAllowedApps.join(', '))
+  const [sites, setSites] = useState(settings.focusBlockedSites.join(', '))
+  const allowMode = settings.focusMode !== 'block'
 
   return (
     <SettingsSection
@@ -53,20 +56,51 @@ export function FocusSettings({
       ) : (
         <SettingsCard>
           <SettingRow
-            label="Close these programs"
-            hint="Process names, comma separated (as in Task Manager, without .exe). Closed every 15 seconds while a focus task runs."
+            label="On the laptop"
+            hint="Allow-only closes every program with a window that is not on the list; Windows itself and Uurwerk always stay."
+          >
+            <select
+              value={settings.focusMode}
+              onChange={(event) => onPatch({ focusMode: event.target.value as Settings['focusMode'] })}
+              className={selectField}
+            >
+              <option value="allow">Allow only these programs</option>
+              <option value="block">Close these programs</option>
+            </select>
+          </SettingRow>
+          {allowMode ? (
+            <SettingRow
+              label="Allow only these programs"
+              hint="Process names, comma separated (as in Task Manager, without .exe). The rest is asked to close every 15 seconds while a focus task runs, and forced if it stays."
+            >
+              <input
+                value={allowed}
+                onChange={(event) => setAllowed(event.target.value)}
+                onBlur={() => onPatch({ focusAllowedApps: splitList(allowed) })}
+                className={textField}
+              />
+            </SettingRow>
+          ) : (
+            <SettingRow
+              label="Close these programs"
+              hint="Process names, comma separated (as in Task Manager, without .exe). Closed every 15 seconds while a focus task runs."
+            >
+              <input
+                value={apps}
+                onChange={(event) => setApps(event.target.value)}
+                onBlur={() => onPatch({ focusBlockedApps: splitList(apps) })}
+                className={textField}
+              />
+            </SettingRow>
+          )}
+          <SettingRow
+            label="Block these sites in Chrome"
+            hint="Needs the Uurwerk Focus extension: chrome://extensions → Developer mode → Load unpacked → packages\main\chrome-focus."
           >
             <input
-              value={apps}
-              onChange={(event) => setApps(event.target.value)}
-              onBlur={() =>
-                onPatch({
-                  focusBlockedApps: apps
-                    .split(',')
-                    .map((name) => name.trim())
-                    .filter(Boolean)
-                })
-              }
+              value={sites}
+              onChange={(event) => setSites(event.target.value)}
+              onBlur={() => onPatch({ focusBlockedSites: splitList(sites) })}
               className={textField}
             />
           </SettingRow>
@@ -75,3 +109,10 @@ export function FocusSettings({
     </SettingsSection>
   )
 }
+
+/** "steam, discord ," → ['steam', 'discord']. */
+const splitList = (text: string): string[] =>
+  text
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)

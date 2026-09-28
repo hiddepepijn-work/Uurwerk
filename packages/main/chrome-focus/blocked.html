@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Focus</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 16px;
+        background: #0e0f13;
+        color: #f3f2ee;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      main {
+        max-width: 520px;
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #5dae86;
+        box-shadow: 0 0 0 6px rgba(93, 174, 134, 0.18);
+        margin-bottom: 28px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+      }
+      #task {
+        color: #5dae86;
+      }
+      p {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.5;
+        color: rgba(243, 242, 238, 0.66);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="dot"></div>
+      <h1>Focus op <span id="task">je taak</span></h1>
+      <p id="line">X en YouTube staan uit tot je taak af is of de timer stopt.</p>
+    </main>
+    <script src="blocked.js"></script>
+  </body>
+</html>

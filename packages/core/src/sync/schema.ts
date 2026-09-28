@@ -37,7 +37,10 @@ export const DEVICE_LOCAL_SETTINGS = [
   'closeToTray',
   'serverUrl',
   'focusShortcuts',
+  'focusMode',
+  'focusAllowedApps',
   'focusBlockedApps',
+  'focusBlockedSites',
   'jarvisWakeWord'
 ] as const
 

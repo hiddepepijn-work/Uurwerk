@@ -71,7 +71,21 @@ export const DEFAULT_SETTINGS: Settings = {
   closeToTray: true,
   serverUrl: '',
   focusShortcuts: false,
-  focusBlockedApps: ['steam', 'discord', 'epicgameslauncher', 'spotify'],
+  // Allow-list by default: a new game or chat app is closed without having to name it first.
+  focusMode: 'allow',
+  focusAllowedApps: [
+    'electron',
+    'uurwerk',
+    'code',
+    'chrome',
+    'arcgispro',
+    'qgis',
+    'qgis-bin',
+    'qgis-ltr-bin',
+    'spotify'
+  ],
+  focusBlockedApps: ['steam', 'discord', 'epicgameslauncher'],
+  focusBlockedSites: ['x.com', 'twitter.com', 'youtube.com', 'www.youtube.com', 'm.youtube.com'],
   jarvisWakeWord: true,
   jarvisVoiceModel: 'cascade'
 }

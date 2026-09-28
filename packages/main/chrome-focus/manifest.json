@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Uurwerk Focus",
+  "version": "1.0.0",
+  "description": "Blokkeert X en YouTube zolang Uurwerk een focustaak laat lopen.",
+  "background": { "service_worker": "background.js" },
+  "permissions": ["declarativeNetRequestWithHostAccess", "alarms", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1:47811/*",
+    "*://x.com/*",
+    "*://*.x.com/*",
+    "*://twitter.com/*",
+    "*://*.twitter.com/*",
+    "*://youtube.com/*",
+    "*://*.youtube.com/*"
+  ],
+  "web_accessible_resources": [{ "resources": ["blocked.html"], "matches": ["<all_urls>"] }]
+}
