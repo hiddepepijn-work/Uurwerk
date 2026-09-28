@@ -1,48 +1,110 @@
 /**
- * Design tokens, read straight off the approved mockups.
+ * Design tokens — the "Inkt" palette: calm, near-black surfaces, one muted green accent and
+ * four muted area colours.
  *
  * One invariant runs through the whole app and must not be broken by a later screen:
  *   green  = actual / tracked / running
  *   grey   = planned / untracked / idle
  * A colour that means two things means nothing.
+ *
+ * Token names outlived the previous palette on purpose: every existing class keeps working,
+ * only the values moved.
  */
 
 @import 'tailwindcss';
 
 @theme {
   /* surfaces */
-  --color-bg: #0b0d0f;
-  --color-card: #14171a;
-  --color-card-hover: #1a1e22;
-  --color-rail-active: #12261a;
-  --color-border: #1f2429;
-  --color-border-strong: #2a3138;
+  --color-bg: #0e0f13;
+  /* The sidebar: the deepest surface, a step below the page. */
+  --color-sidebar: #0a0b0e;
+  --color-card: #16171c;
+  --color-card-hover: #1b1c22;
+  /* Inputs and secondary buttons sit one step above a card. */
+  --color-input: #1f2027;
+  --color-secondary: #1f2027;
+  --color-secondary-hover: #26272f;
+  /* The phone's floating tab bar. */
+  --color-tabbar: #1a1b21;
+  /* Toggle track when off. */
+  --color-track: #2a2b33;
+  /* Selected row / tab: the stage tint, so "selected" still reads as green. */
+  --color-rail-active: #1b2721;
+  --color-border: #25262d;
+  --color-border-strong: #2f3038;
+  /* The dimmed backdrop behind a modal or sheet. */
+  --color-scrim: rgb(5 6 8 / 0.72);
 
   /* text */
-  --color-text: #e8eaed;
-  --color-text-dim: #8a9199;
-  --color-text-faint: #5b6269;
+  --color-text: #f3f2ee;
+  --color-text-dim: #a3a2ab;
+  --color-text-faint: #6f6e78;
 
   /* accent — running / actual / success */
-  --color-accent: #22c55e;
-  --color-accent-soft: #4ade80;
-  --color-accent-dim: #1a7f3d;
+  --color-accent: #5dae86;
+  --color-accent-soft: #86bfa0;
+  --color-accent-dim: #3f7a5d;
+  /* Text on an accent fill. */
+  --color-accent-ink: #0e1a14;
+
+  /* signal */
+  --color-danger: #cc6f62;
+  --color-danger-text: #d98476;
+  --color-danger-soft: #3a1f1c;
+  --color-warn: #d1a55a;
+  --color-warn-soft: #2b2416;
 
   /* priority */
-  --color-prio-high: #ef4444;
-  --color-prio-med: #f59e0b;
-  --color-prio-low: #6b7280;
+  --color-prio-high: #cc6f62;
+  --color-prio-med: #d1a55a;
+  --color-prio-low: #6f6e78;
 
-  /* planning blocks */
-  --color-block-blue: #1b3a5c;
-  --color-block-teal: #14493f;
-  --color-block-amber: #4a3a1c;
+  /* planning blocks — dark fills with light text, drawn from the area tints */
+  --color-block-blue: #2a3550;
+  --color-block-teal: #1f3a30;
+  --color-block-amber: #3f3220;
+
+  /*
+   * Areas. fill = a solid block, ink = text on that block, tint = a quiet background,
+   * soft = coloured text on a dark surface. Mirrored in features/agenda/agenda-model.ts
+   * (AREA_COLORS), which is what inline styles read.
+   */
+  --color-area-stage: #5dae86;
+  --color-area-stage-ink: #0e1a14;
+  --color-area-stage-tint: #1b2721;
+  --color-area-stage-soft: #86bfa0;
+  --color-area-school: #7f9fd6;
+  --color-area-school-ink: #0b1220;
+  --color-area-school-tint: #182030;
+  --color-area-school-soft: #98afd8;
+  --color-area-personal: #cf9a63;
+  --color-area-personal-ink: #1f1406;
+  --color-area-personal-tint: #2a2119;
+  --color-area-personal-soft: #d5aa7b;
+  --color-area-work: #a997cf;
+  --color-area-work-ink: #120f1a;
+  --color-area-work-tint: #221e2c;
+  --color-area-work-soft: #b3a4d6;
+  --color-area-unfiled: #8d8a94;
+  --color-area-unfiled-ink: #141318;
+  --color-area-unfiled-tint: #1f1e24;
+  --color-area-unfiled-soft: #a3a2ab;
 
   /* shape */
-  --radius-card: 12px;
+  --radius-card: 20px;
+  --radius-button: 14px;
+  --radius-input: 12px;
   --radius-pill: 999px;
+  --radius-modal: 24px;
 
-  /* type */
-  --font-sans: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
+  /* type — both faces are bundled (see styles/fonts.ts); nothing loads from the network. */
+  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Segoe UI Variable', system-ui, sans-serif;
+  --font-sans: 'Figtree Variable', 'Figtree', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  /*
+   * Inkt has no monospace: numbers are Figtree with tabular figures (globals.css gives every
+   * `font-mono` element tabular-nums), so columns of times still line up.
+   */
+  --font-mono: 'Figtree Variable', 'Figtree', 'Segoe UI Variable', system-ui, sans-serif;
+  /* For the rare string that really is code — an app password, a raw preview. */
+  --font-code: 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
 }

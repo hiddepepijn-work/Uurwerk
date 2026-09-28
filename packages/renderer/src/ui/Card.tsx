@@ -9,15 +9,15 @@ interface Props {
   padded?: boolean
 }
 
-/** The surface every panel in the mockups sits on: flat, 1px border, no shadow. */
+/** The surface every panel sits on: a flat, borderless card one step above the page. */
 export function Card({ title, action, children, className = '', padded = true }: Props) {
   return (
     <section
-      className={`rounded-[12px] border border-border bg-card ${padded ? 'p-5' : ''} ${className}`}
+      className={`rounded-card bg-card ${padded ? 'p-5' : ''} ${className}`}
     >
       {(title || action) && (
         <header className={`flex items-center justify-between ${padded ? 'mb-4' : 'p-5 pb-0'}`}>
-          {title && <h2 className="text-[15px] font-semibold text-text">{title}</h2>}
+          {title && <h2 className="text-[16px] font-bold text-text">{title}</h2>}
           {action}
         </header>
       )}
@@ -30,7 +30,7 @@ export function CardAction({ children, onClick }: { children: ReactNode; onClick
   return (
     <button
       onClick={onClick}
-      className="text-[13px] text-accent transition-opacity hover:opacity-80"
+      className="text-[14px] font-bold text-accent-soft transition-opacity hover:opacity-80"
     >
       {children}
     </button>

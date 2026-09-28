@@ -11,6 +11,7 @@ import {
   ShieldIcon,
   TrendingUpIcon
 } from '../../ui/icons.js'
+import { areaFill } from '../agenda/agenda-model.js'
 import { BucketTable, GroupedBars, ShareBars, SCREEN_TIME_COLOR, type Series } from './charts.js'
 
 const RANGES: Array<{ id: RangePreset; label: string }> = [
@@ -66,7 +67,7 @@ export function StatisticsScreen() {
   const series: Series[] = useMemo(() => {
     const fromAreas = (areas ?? [])
       .filter((area) => (data?.areas ?? []).some((share) => share.areaId === area.id))
-      .map((area) => ({ id: area.id, name: area.name, color: area.color }))
+      .map((area) => ({ id: area.id, name: area.name, color: areaFill(area) }))
 
     return [
       ...fromAreas,

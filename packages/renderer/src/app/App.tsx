@@ -143,7 +143,7 @@ export function App() {
       />
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[12px] border border-border bg-card px-5 py-3 text-sm shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[16px] border border-border bg-card px-5 py-3 text-sm font-semibold shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
           {toast}
         </div>
       )}

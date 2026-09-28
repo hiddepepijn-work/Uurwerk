@@ -5,16 +5,16 @@ type Size = 'sm' | 'md' | 'lg'
 
 const variants: Record<Variant, string> = {
   // Primary is green because green means "running/act" everywhere in this app.
-  primary: 'bg-accent text-[#06210F] hover:bg-accent-soft font-semibold',
-  secondary: 'bg-card border border-border text-text hover:bg-card-hover hover:border-border-strong',
-  ghost: 'text-text-dim hover:text-text hover:bg-card',
-  danger: 'bg-transparent border border-prio-high/40 text-prio-high hover:bg-prio-high/10'
+  primary: 'bg-accent text-accent-ink hover:bg-accent-soft font-bold',
+  secondary: 'bg-secondary text-text hover:bg-secondary-hover font-bold',
+  ghost: 'text-text-dim hover:text-text hover:bg-card-hover font-semibold',
+  danger: 'bg-danger-soft text-danger-text hover:brightness-125 font-bold'
 }
 
 const sizes: Record<Size, string> = {
-  sm: 'h-8 px-3 text-[13px] gap-1.5',
-  md: 'h-10 px-4 text-sm gap-2',
-  lg: 'h-14 px-6 text-base gap-3'
+  sm: 'h-9 px-3 text-[13px] gap-1.5',
+  md: 'h-11 px-4 text-sm gap-2',
+  lg: 'h-[52px] px-6 text-base gap-3'
 }
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -39,14 +39,14 @@ export function Button({
   return (
     <button
       {...rest}
-      className={`no-drag inline-flex items-center justify-center rounded-[12px] transition-colors
+      className={`no-drag inline-flex items-center justify-center ${size === 'lg' ? 'rounded-[16px]' : 'rounded-button'} transition-colors
         disabled:cursor-not-allowed disabled:opacity-40
         ${variants[variant]} ${sizes[size]} ${full ? 'w-full' : ''} ${className}`}
     >
       {icon}
       {children}
       {/* A keyboard hint means nothing on a phone. */}
-      {hint && <span className="ml-auto hidden pl-4 text-xs opacity-60 wide:inline">{hint}</span>}
+      {hint && <span className="ml-auto hidden pl-4 text-xs font-semibold opacity-60 wide:inline">{hint}</span>}
     </button>
   )
 }

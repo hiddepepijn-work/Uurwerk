@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import type { Priority } from '@core/contract/types.js'
 import { api } from './api/client.js'
 import { PriorityDot } from './ui/PriorityDot.js'
+import './styles/fonts.js'
 import './styles/globals.css'
 
 const PRIORITIES: Priority[] = ['high', 'medium', 'low']

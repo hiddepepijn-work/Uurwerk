@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Area, CalendarEvent, PlanBlock, TimeSegment } from '@core/contract/types.js'
 import { formatDuration, formatMinuteOfDay } from '../../lib/format.js'
+import { areaFill } from '../agenda/agenda-model.js'
 
 export type WeekMode = 'plan' | 'actual' | 'compare'
 
@@ -291,7 +292,7 @@ export function WeekGrid({
                             ${
                               segment.taskId === null
                                 ? 'border border-dashed border-accent/60 bg-accent/20 text-text'
-                                : 'bg-accent/80 text-[#06210F]'
+                                : 'bg-accent/80 text-accent-ink'
                             }
                             ${segment.attribution === 'tracked' ? '' : 'border-l-2 border-l-accent'}`}
                           style={{
@@ -338,8 +339,8 @@ export function WeekGrid({
                             right: 2,
                             // No area yet means no claim about what this is: neutral until
                             // you say otherwise, never a colour that implies a decision.
-                            borderColor: area?.color ?? 'var(--color-border-strong)',
-                            background: area ? `${area.color}33` : 'transparent',
+                            borderColor: area ? areaFill(area) : 'var(--color-border-strong)',
+                            background: area ? `${areaFill(area)}33` : 'transparent',
                             // Travel is the same work, lighter — it frames the appointment.
                             opacity: event.kind === 'travel' ? 0.7 : 1
                           }}

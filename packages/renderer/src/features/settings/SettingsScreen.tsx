@@ -14,6 +14,7 @@ import { PublishSettings } from './PublishSettings.js'
 import { ServerSettings } from './ServerSettings.js'
 import { FocusSettings } from './FocusSettings.js'
 import { JarvisSettings } from './JarvisSettings.js'
+import { areaFill } from '../agenda/agenda-model.js'
 import { SettingRow, SettingsSection, Toggle, numberField, textField } from './SettingsSection.js'
 
 /** The three built-in areas; they cannot be archived, so they get no archive button. */
@@ -159,7 +160,7 @@ export function SettingsScreen() {
               key={area.id}
               className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-b-0"
             >
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: area.color }} />
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: areaFill(area) }} />
               <span className="min-w-0 flex-1 truncate text-[14px] text-text">{area.name}</span>
 
               <label className="flex items-center gap-2 text-[13px] text-text-dim">

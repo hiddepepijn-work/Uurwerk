@@ -16,7 +16,7 @@ const PRELOAD = join(__dirname, '../preload/index.cjs')
 /** The encoder window gets a far narrower bridge than the app does. */
 const TIMELAPSE_PRELOAD = join(__dirname, '../preload/timelapse.cjs')
 
-const BG = '#0B0D0F'
+const BG = '#0E0F13'
 
 /**
  * Window icon. In a packaged build the icon is baked in by the installer, but in a dev or
@@ -87,7 +87,7 @@ export function createMainWindow(): BrowserWindow {
     icon: appIcon(),
     title: 'Uurwerk',
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: BG, symbolColor: '#8A9199', height: 40 },
+    titleBarOverlay: { color: BG, symbolColor: '#A3A2AB', height: 56 },
     webPreferences: baseWebPreferences
   })
 

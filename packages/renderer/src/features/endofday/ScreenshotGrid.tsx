@@ -74,7 +74,7 @@ export function ScreenshotGrid({ screenshots, onToggle, onApproveAll, onDelete }
               />
               <span
                 className={`absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full
-                  ${shot.included ? 'bg-accent text-[#06210F]' : 'bg-card text-text-dim'}`}
+                  ${shot.included ? 'bg-accent text-accent-ink' : 'bg-card text-text-dim'}`}
               >
                 {shot.included ? <CheckIcon size={13} /> : <CloseIcon size={13} />}
               </span>

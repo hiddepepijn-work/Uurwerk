@@ -46,7 +46,7 @@ export function TaskRow({
         onClick={() => onToggleComplete(task)}
         aria-label={done ? 'Reopen task' : 'Complete task'}
         className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border transition-colors
-          ${done ? 'border-accent bg-accent text-[#06210F]' : 'border-border-strong hover:border-accent'}`}
+          ${done ? 'border-accent bg-accent text-accent-ink' : 'border-border-strong hover:border-accent'}`}
       >
         {done && (
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">

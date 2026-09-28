@@ -18,8 +18,8 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center">
       {icon && <div className="mb-1 text-text-faint">{icon}</div>}
-      <p className="text-sm text-text-dim">{title}</p>
-      {hint && <p className="max-w-xs text-[13px] text-text-faint">{hint}</p>}
+      <p className="text-[15px] font-bold text-text-dim">{title}</p>
+      {hint && <p className="max-w-xs text-[13px] leading-relaxed text-text-faint">{hint}</p>}
       {action && <div className="mt-3">{action}</div>}
     </div>
   )

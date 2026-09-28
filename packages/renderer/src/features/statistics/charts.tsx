@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { AreaShare, Bucket } from '@core/contract/types.js'
 import { formatDuration } from '../../lib/format.js'
+import { areaFill } from '../agenda/agenda-model.js'
 
 /**
  * The chart pieces, drawn with plain elements.
@@ -155,14 +156,14 @@ export function ShareBars({ areas }: { areas: AreaShare[] }) {
         <li key={area.areaId} className="flex items-center gap-3">
           <span
             className="h-2.5 w-2.5 shrink-0 rounded-full"
-            style={{ background: area.color }}
+            style={{ background: areaFill({ id: area.areaId, color: area.color }) }}
           />
           <span className="w-24 shrink-0 truncate text-[13px] text-text">{area.name}</span>
 
           <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-bg">
             <span
               className="block h-full rounded-full"
-              style={{ width: `${Math.max(2, area.fraction * 100)}%`, background: area.color }}
+              style={{ width: `${Math.max(2, area.fraction * 100)}%`, background: areaFill({ id: area.areaId, color: area.color }) }}
             />
           </span>
 

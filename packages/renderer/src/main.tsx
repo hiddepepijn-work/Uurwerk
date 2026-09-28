@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './app/App.js'
+import './styles/fonts.js'
 import './styles/globals.css'
 
 createRoot(document.getElementById('root')!).render(

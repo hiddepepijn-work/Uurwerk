@@ -57,7 +57,7 @@ export function PublishSelection({ flags, onChange, counts }: Props) {
                   <span
                     onClick={() => !isDisabled && toggle(row.key)}
                     className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors
-                      ${checked ? 'border-accent bg-accent text-[#06210F]' : 'border-border-strong bg-card'}`}
+                      ${checked ? 'border-accent bg-accent text-accent-ink' : 'border-border-strong bg-card'}`}
                   >
                     {checked && (
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">

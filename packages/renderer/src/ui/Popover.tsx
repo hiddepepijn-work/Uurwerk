@@ -89,7 +89,7 @@ export function Popover({
         left: position?.left ?? -9999,
         width
       }}
-      className="z-50 rounded-[12px] border border-border-strong bg-card p-3 shadow-2xl"
+      className="z-50 rounded-[16px] border border-border bg-card p-3 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
     >
       {children}
     </div>

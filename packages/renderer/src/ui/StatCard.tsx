@@ -12,14 +12,16 @@ interface Props {
 /** The stat tile reused on Today, Week and in the end-of-day wizard. */
 export function StatCard({ icon, label, value, sub, progress }: Props) {
   return (
-    <div className="rounded-[12px] border border-border bg-card p-5">
-      <div className="mb-3 flex items-center gap-2 text-text-dim">
-        <span className="text-accent">{icon}</span>
-        <span className="text-[13px]">{label}</span>
+    <div className="flex flex-col gap-2 rounded-card bg-card p-4">
+      <div className="flex items-center gap-[7px]">
+        <span className="text-accent-soft">{icon}</span>
+        <span className="text-[13px] font-bold text-text-dim">{label}</span>
       </div>
-      <div className="font-mono text-[28px] leading-none font-semibold text-text">{value}</div>
-      {sub && <div className="mt-2 text-[13px] text-text-dim">{sub}</div>}
-      {progress && <ProgressBar className="mt-3" value={progress.value} max={progress.max} />}
+      <div className="font-display text-[30px] leading-none font-bold tracking-[-0.6px] text-text tabular-nums">
+        {value}
+      </div>
+      {sub && <div className="text-[13px] text-text-faint">{sub}</div>}
+      {progress && <ProgressBar value={progress.value} max={progress.max} />}
     </div>
   )
 }

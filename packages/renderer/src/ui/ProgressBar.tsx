@@ -11,9 +11,9 @@ interface Props {
 export function ProgressBar({ value, max, className = '' }: Props) {
   const fraction = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0
   return (
-    <div className={`h-1.5 w-full overflow-hidden rounded-full bg-border ${className}`}>
+    <div className={`h-1.5 w-full overflow-hidden rounded-[3px] bg-border ${className}`}>
       <div
-        className="h-full rounded-full bg-accent transition-[width] duration-500"
+        className="h-full rounded-[3px] bg-accent transition-[width] duration-500"
         style={{ width: `${fraction * 100}%` }}
       />
     </div>

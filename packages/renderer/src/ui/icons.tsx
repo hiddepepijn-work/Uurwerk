@@ -1,6 +1,6 @@
 /**
  * Inline SVG icons — no icon package, no network fetch, no extra dependency to audit.
- * All 24x24 on a 2px stroke so they sit consistently next to 14px text.
+ * All 24x24 on a 2.2px round stroke — the Inkt weight — so they sit consistently next to text.
  */
 
 interface IconProps {
@@ -17,7 +17,7 @@ const svg = (path: React.ReactNode) =>
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
         className={className}

@@ -1,7 +1,7 @@
 import { useLiveQuery } from '../hooks/useLiveQuery.js'
 
 /**
- * Pinned to the bottom of the rail, straight from the mockups.
+ * Pinned to the bottom of the sidebar, straight from the mockups.
  *
  * This is the best detail in the whole design: the app's real interface on a working day is
  * the hotkeys, not the window. Showing them permanently teaches them without a tutorial,
@@ -22,18 +22,16 @@ export function HotkeyLegend() {
     : []
 
   return (
-    <div className="mt-auto border-t border-border px-3 py-4">
-      <p className="mb-2.5 px-1 text-[11px] font-medium text-text-dim">Hotkeys</p>
-      <div className="flex flex-col gap-2.5">
-        {rows.map((row) => (
-          <div key={row.label} className="px-1">
-            <div className="text-[11px] text-text-faint">{row.label}</div>
-            <kbd className="mt-1 inline-block rounded-md border border-border bg-card px-1.5 py-1 font-mono text-[10px] text-text-dim">
-              {row.key}
-            </kbd>
-          </div>
-        ))}
-      </div>
+    <div className="mt-auto flex flex-col gap-2.5 rounded-[18px] bg-card p-3.5">
+      <p className="label-caps">Hotkeys</p>
+      {rows.map((row) => (
+        <div key={row.label} className="flex flex-col items-start gap-1">
+          <div className="text-[13px] font-semibold text-text-dim">{row.label}</div>
+          <kbd className="rounded-[8px] bg-input px-2 py-[3px] font-sans text-[12px] font-bold text-text tabular-nums">
+            {row.key}
+          </kbd>
+        </div>
+      ))}
     </div>
   )
 }

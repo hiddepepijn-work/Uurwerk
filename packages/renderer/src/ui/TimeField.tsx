@@ -57,9 +57,9 @@ export function TimeField({
         ref={anchor}
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className={`flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 font-mono text-[13px] tabular-nums transition-colors ${
-          open ? 'border-accent' : 'border-border hover:border-border-strong'
-        } bg-bg text-text ${className}`}
+        className={`flex items-center gap-2 rounded-[10px] border px-2.5 py-1.5 font-mono text-[13px] font-semibold tabular-nums transition-colors ${
+          open ? 'border-accent' : 'border-transparent hover:border-border-strong'
+        } bg-input text-text ${className}`}
       >
         <span className="text-text-dim">
           <ClockIcon size={13} />
@@ -95,7 +95,7 @@ export function TimeField({
               const rounded = Math.round((now.getHours() * 60 + now.getMinutes()) / step) * step
               onChange(Math.min(rounded, allowEndOfDay ? 24 * 60 : 23 * 60 + 55))
             }}
-            className="rounded-md px-2 py-1 text-[12px] text-accent transition-opacity hover:opacity-80"
+            className="rounded-md px-2 py-1 text-[12px] font-bold text-accent-soft transition-opacity hover:opacity-80"
           >
             Now
           </button>
@@ -155,7 +155,7 @@ function Column({
       <div className="mb-1 text-center text-[11px] text-text-faint">{label}</div>
       <div
         ref={listRef}
-        className={`h-40 snap-y snap-mandatory overflow-y-auto rounded-[8px] border border-border bg-bg ${
+        className={`h-40 snap-y snap-mandatory overflow-y-auto rounded-[10px] bg-input ${
           disabled ? 'pointer-events-none opacity-40' : ''
         }`}
       >
@@ -168,7 +168,7 @@ function Column({
               type="button"
               onClick={() => onSelect(item)}
               className={`block w-full snap-center py-2 text-center font-mono text-[13px] tabular-nums transition-colors ${
-                isSelected ? 'bg-accent/15 font-medium text-accent' : 'text-text-dim hover:bg-card-hover hover:text-text'
+                isSelected ? 'bg-rail-active font-bold text-accent-soft' : 'text-text-dim hover:bg-card-hover hover:text-text'
               }`}
             >
               {pad(item)}

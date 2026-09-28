@@ -23,11 +23,51 @@ body {
   user-select: none;
 }
 
+/* Shared text styles. In the components layer, so a utility on the same element still wins. */
+@layer components {
+  /* Numbers set in `font-mono` are meant to line up in columns; Figtree does that with
+     tabular figures rather than a monospace face. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Page titles, big numbers and the timer. Bricolage never goes past 700, and tightens as it
+     grows (-1px at 40px). */
+  .display-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1;
+  }
+
+  /* Small uppercase section labels: TIMER, HOTKEYS, … */
+  .label-caps {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--color-text-faint);
+  }
+}
+
 /* Text the user actually needs to select: notes, summaries, inputs. */
 input,
 textarea,
 [data-selectable] {
   user-select: text;
+}
+
+@layer base {
+  /* Page titles are Bricolage everywhere; size and weight stay with each screen. */
+  h1 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-text-faint);
+  }
 }
 
 *:focus-visible {

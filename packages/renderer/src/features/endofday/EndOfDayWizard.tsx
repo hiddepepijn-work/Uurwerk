@@ -373,7 +373,7 @@ function Steps({
                 className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-semibold
                   ${
                     state === 'active'
-                      ? 'bg-accent text-[#06210F]'
+                      ? 'bg-accent text-accent-ink'
                       : state === 'done'
                         ? 'bg-accent/20 text-accent'
                         : 'border border-border-strong text-text-faint'

@@ -90,9 +90,9 @@ export function DateField({
           setMonth(startOfMonth(selected ?? new Date()))
           setOpen((value) => !value)
         }}
-        className={`flex items-center gap-2 rounded-[10px] border px-3.5 py-2.5 text-left text-[14px] transition-colors ${
-          open ? 'border-accent' : 'border-border hover:border-border-strong'
-        } bg-bg ${selected ? 'text-text' : 'text-text-faint'} ${className}`}
+        className={`flex h-11 items-center gap-2 rounded-input border px-3.5 text-left text-[14px] font-medium transition-colors ${
+          open ? 'border-accent' : 'border-transparent hover:border-border-strong'
+        } bg-input ${selected ? 'text-text' : 'text-text-faint'} ${className}`}
       >
         <span className="text-text-dim">
           <CalendarIcon size={14} />
@@ -110,7 +110,7 @@ export function DateField({
           >
             ←
           </button>
-          <span className="text-[13px] font-medium text-text">
+          <span className="text-[13px] font-bold text-text">
             {MONTHS[month.getMonth()]} {month.getFullYear()}
           </span>
           <button
@@ -144,9 +144,9 @@ export function DateField({
                 type="button"
                 onClick={() => pick(date)}
                 aria-current={isToday ? 'date' : undefined}
-                className={`h-8 rounded-[8px] text-[13px] tabular-nums transition-colors ${
+                className={`h-8 rounded-[10px] text-[13px] tabular-nums transition-colors ${
                   isSelected
-                    ? 'bg-accent font-medium text-[#06210F]'
+                    ? 'bg-accent font-bold text-accent-ink'
                     : outside
                       ? 'text-text-faint hover:bg-card-hover'
                       : 'text-text hover:bg-card-hover'
@@ -162,7 +162,7 @@ export function DateField({
           <button
             type="button"
             onClick={() => pick(today)}
-            className="rounded-md px-2 py-1 text-[12px] text-accent transition-opacity hover:opacity-80"
+            className="rounded-md px-2 py-1 text-[12px] font-bold text-accent-soft transition-opacity hover:opacity-80"
           >
             Today
           </button>

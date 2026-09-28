@@ -48,17 +48,39 @@ export interface AllDayItem {
   areaId: string | null
 }
 
-/** One colour per area, told apart by lightness as well as hue. */
-export const AREA_COLORS: Record<string, { fill: string; ink: string; label: string }> = {
-  stage: { fill: '#3ecf73', ink: '#0c1f13', label: 'Stage' },
-  school: { fill: '#6aa7ff', ink: '#0b1a33', label: 'School' },
-  personal: { fill: '#f0a14b', ink: '#2b1705', label: 'Privé' },
-  work: { fill: '#c9a2ff', ink: '#1e1033', label: 'Werk' }
+/**
+ * One colour set per area, told apart by lightness as well as hue — the single source for
+ * area colours in the UI (styles/tokens.css mirrors it as --color-area-*).
+ *
+ * fill = a solid block, ink = text on that block, tint = a quiet background behind it,
+ * soft = the area's colour as text on a dark surface.
+ */
+export interface AreaColor {
+  fill: string
+  ink: string
+  tint: string
+  soft: string
+  label: string
 }
-const UNFILED = { fill: '#8d8a94', ink: '#141318', label: 'Overig' }
 
-export const colorFor = (areaId: string | null): { fill: string; ink: string; label: string } =>
+export const AREA_COLORS: Record<string, AreaColor> = {
+  stage: { fill: '#5DAE86', ink: '#0E1A14', tint: '#1B2721', soft: '#86BFA0', label: 'Stage' },
+  school: { fill: '#7F9FD6', ink: '#0B1220', tint: '#182030', soft: '#98AFD8', label: 'School' },
+  personal: { fill: '#CF9A63', ink: '#1F1406', tint: '#2A2119', soft: '#D5AA7B', label: 'Privé' },
+  work: { fill: '#A997CF', ink: '#120F1A', tint: '#221E2C', soft: '#B3A4D6', label: 'Werk' }
+}
+const UNFILED: AreaColor = { fill: '#8D8A94', ink: '#141318', tint: '#1F1E24', soft: '#A3A2AB', label: 'Overig' }
+
+export const colorFor = (areaId: string | null): AreaColor =>
   (areaId && AREA_COLORS[areaId]) || UNFILED
+
+/**
+ * The colour to draw a database area in. The four system areas get their palette colour —
+ * the stored one predates it and is not migrated — and any area the user added keeps the
+ * colour it was given.
+ */
+export const areaFill = (area: { id: string; color: string }): string =>
+  AREA_COLORS[area.id]?.fill ?? area.color
 
 export const hhmm = (minute: number): string =>
   `${String(Math.floor(minute / 60) % 24).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`

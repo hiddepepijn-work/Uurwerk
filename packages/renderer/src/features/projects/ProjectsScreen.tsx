@@ -209,7 +209,7 @@ function Row({
             {row.title}
           </span>
           {isNext && (
-            <span className="rounded-[5px] bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-[#06210F]">
+            <span className="rounded-[5px] bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-ink">
               NEXT
             </span>
           )}

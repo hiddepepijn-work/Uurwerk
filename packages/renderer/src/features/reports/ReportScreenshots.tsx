@@ -75,7 +75,7 @@ export function ReportScreenshots({ screenshots, timelapse, onToggle, onOpen }: 
                     </button>
                     <span
                       className={`pointer-events-none absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full
-                        ${isIncluded(shot) ? 'bg-accent text-[#06210F]' : 'bg-card text-text-dim'}`}
+                        ${isIncluded(shot) ? 'bg-accent text-accent-ink' : 'bg-card text-text-dim'}`}
                     >
                       {isIncluded(shot) ? <CheckIcon size={11} /> : <CloseIcon size={11} />}
                     </span>

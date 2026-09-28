@@ -31,6 +31,7 @@ import { upcomingReminders } from '@core/services/reminders.js'
 import { toIsoDate } from '@core/util/time.js'
 
 import { App } from '@renderer/app/App.js'
+import '@renderer/styles/fonts.js'
 import './styles.css'
 
 import { openPhoneDatabase } from './database.js'

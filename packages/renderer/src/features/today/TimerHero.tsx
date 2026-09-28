@@ -55,7 +55,7 @@ export function TimerHero({
   return (
     <div>
       <div
-        className={`font-mono text-[56px] wide:text-[76px] leading-none font-semibold tracking-tight tabular-nums
+        className={`font-display text-[56px] wide:text-[76px] leading-none font-bold tracking-[-0.025em] tabular-nums
           ${running ? 'text-text' : 'text-text-faint'}`}
       >
         {formatStopwatch(elapsedSec)}
