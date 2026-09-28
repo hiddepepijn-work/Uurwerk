@@ -56,6 +56,11 @@ export class SpeechGate {
     return { send: true, opened: false, closed: false, threshold }
   }
 
+  /** Forget the sentence in progress (Jarvis starts talking: the microphone goes deaf). */
+  reset(): void {
+    this.open = false
+  }
+
   get isOpen(): boolean {
     return this.open
   }

@@ -12,6 +12,7 @@
  */
 
 import type { TimeTrackerAPI } from '@core/contract/api.js'
+import { findMeetingTimes, type MeetingTimesInput } from './meeting-times.js'
 import type { IsoDate, JarvisCard, Priority, TaskPatch } from '@core/contract/types.js'
 
 export interface ToolSpec {
@@ -218,7 +219,9 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'create_appointment',
-    description: 'Nieuwe afspraak (vaste tijd, met iemand of ergens), met reistijd.' + PROPOSAL,
+    description:
+      'Nieuwe afspraak (vaste tijd, met iemand of ergens). Reistijd is verplicht: weet je die niet, vraag Hidde eerst waar het is en hoe lang hij onderweg is (online of thuis = 0).' +
+      PROPOSAL,
     parameters: object(
       {
         title: { type: 'string' },
@@ -227,14 +230,32 @@ export const TOOLS: ToolSpec[] = [
         end: clock,
         areaId: { type: 'string', enum: AREAS },
         location: { type: 'string' },
-        travelMinutes: { type: 'integer', minimum: 0, description: 'Reistijd heen in minuten, 0 = geen reis' },
+        travelMinutes: { type: 'integer', minimum: 0, description: 'Reistijd heen in minuten; 0 alleen als het online of thuis is' },
         travelBack: { type: 'boolean', description: 'Dezelfde reis terug na afloop' },
         notes: { type: 'string', description: 'Doel, Wie, Meenemen/voorbereiden, Bijzonderheden, Belangrijk: ja/nee' }
       },
-      ['title', 'date', 'start', 'end', 'areaId']
+      ['title', 'date', 'start', 'end', 'areaId', 'travelMinutes']
     ),
     writes: true,
     proposes: true
+  },
+  {
+    name: 'find_meeting_times',
+    description:
+      'Afspreken met iemand: zoekt vrije momenten (afspraken en stage-uren zijn bezet; liefst ook zonder taken) en geeft een paar opties plus een berichtje dat Hidde kan sturen. Noem de tijden precies zoals ze terugkomen. Maakt niets aan.',
+    parameters: object(
+      {
+        minutes: { type: 'integer', minimum: 10, description: 'Hoe lang de afspraak zelf duurt' },
+        from: { ...date, description: 'Vanaf; standaard vandaag' },
+        to: { ...date, description: 'Tot en met; standaard een week later' },
+        part: { type: 'string', enum: ['ochtend', 'middag', 'avond'], description: 'Alleen dit dagdeel' },
+        travelMinutes: { type: 'integer', minimum: 0, description: 'Reistijd heen; wordt voor en na vrijgehouden' },
+        duringStage: { type: 'boolean', description: 'Ook tijdens stage-uren' },
+        count: { type: 'integer', minimum: 1, maximum: 5, description: 'Aantal opties, standaard 3' }
+      },
+      ['minutes']
+    ),
+    writes: false
   },
   {
     name: 'move_appointment',
@@ -635,6 +656,10 @@ async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promis
     throw new Error(`Geen regel ${String(input.ruleId)}.`)
   }
   if (name === 'plan_range' || name === 'clear_planning') daysBetween(fromToday(String(input.from)), String(input.to))
+  // He forgot to ask about travel (28 Sep 2026): no appointment without it, the model has to ask.
+  if (name === 'create_appointment' && typeof input.travelMinutes !== 'number') {
+    throw new Error('Reistijd ontbreekt. Vraag Hidde eerst waar het is en hoe lang hij onderweg is (online of thuis = 0).')
+  }
   if (['create_appointment', 'move_appointment'].includes(name)) {
     if (minuteOf(String(input.end)) <= minuteOf(String(input.start))) throw new Error('Het einde ligt voor het begin.')
   }
@@ -829,6 +854,13 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
 
     case 'cancel':
       return cancel(api, input)
+
+    case 'find_meeting_times':
+      try {
+        return await findMeetingTimes(api, input as unknown as MeetingTimesInput)
+      } catch (error) {
+        return { error: `Kan niet: ${error instanceof Error ? error.message : String(error)}` }
+      }
 
     case 'get_snapshot': {
       const from = typeof input.from === 'string' ? input.from : isoDate(new Date())

@@ -123,7 +123,7 @@ const clockOf = (ms: number): string => {
 
 /** Sets up an appointment the way Jarvis would: propose, confirm. */
 async function appointment(api: TimeTrackerAPI, title: string, date: string, start: string, end: string, areaId = 'personal'): Promise<void> {
-  const proposed = (await runTool(api, 'create_appointment', { title, date, start, end, areaId })) as { pendingId?: string; error?: string }
+  const proposed = (await runTool(api, 'create_appointment', { title, date, start, end, areaId, travelMinutes: 0 })) as { pendingId?: string; error?: string }
   if (!proposed.pendingId) throw new Error(`setup: ${proposed.error ?? 'geen voorstel'}`)
   await runTool(api, 'confirm', { pendingIds: [proposed.pendingId] })
 }
@@ -992,6 +992,63 @@ const COMPOUND: Scenario[] = [
       { after: 1, name: 'regel over zondag', test: async (api) => (await api.assistant.rules()).some((rule) => rule.active && /zondag/i.test(rule.description)) }
     ],
     toolBudget: 7
+  },
+  {
+    id: 'S15',
+    family: 'reistijd vragen',
+    category: 'challenge',
+    title: 'Kapper zonder plek of reistijd',
+    expect: 'Vraagt eerst waar het is en hoe lang hij reist (en maakt nog niets); na het antwoord stelt hij de afspraak Kapper donderdag 15:00 voor met 10 minuten reistijd, en na ja staat die erin.',
+    turns: [{ text: `Ik heb donderdag om drie uur een afspraak bij de kapper, half uur.` }, { text: 'In Zevenaar, tien minuten fietsen.' }, { text: 'Ja.' }],
+    checks: [
+      { after: 0, name: 'vraagt eerst, maakt niets', test: async (api, turns) => turns[0]!.reply.includes('?') && (await eventsOn(api, THURSDAY, /kapper/i)).length === 0 },
+      { after: 2, name: 'kapper do 15:00', test: async (api) => (await eventsOn(api, THURSDAY, /kapper/i)).some((event) => clockOf(event.startsAt) === '15:00') }
+    ],
+    toolBudget: 5
+  },
+  {
+    id: 'S16',
+    family: 'afspreken met iemand',
+    category: 'challenge',
+    title: 'Wanneer kan ik met Juul afspreken',
+    expect: 'Zoekt met find_meeting_times vrije avondmomenten deze week en noemt kort twee of drie opties; maakt nog niets aan.',
+    turns: [{ text: 'Wanneer kan ik deze week s avonds een uurtje met Juul afspreken?' }],
+    checks: [{ after: 0, name: 'zoekt met de tool', test: async (_api, turns) => turns[0]!.tools.some((tool) => tool.name === 'find_meeting_times') }],
+    toolBudget: 2
+  },
+  {
+    id: 'S17',
+    family: 'afspreken met iemand',
+    category: 'challenge',
+    title: 'Koffie met Tessie: zoeken, kiezen, vastleggen',
+    expect: 'Zoekt momenten van 90 minuten na de stage met 20 minuten reistijd; na "doe de eerste maar" stelt hij die afspraak voor met 20 minuten reistijd in Arnhem, en na ja staat die erin.',
+    turns: [
+      { text: 'Zoek een moment voor koffie met Tessie in Arnhem, anderhalf uur, twintig minuten rijden, ergens deze week na mijn stage.' },
+      { text: 'Doe de eerste maar.' },
+      { text: 'Ja.' }
+    ],
+    checks: [
+      { after: 0, name: 'zoekt met de tool', test: async (_api, turns) => turns[0]!.tools.some((tool) => tool.name === 'find_meeting_times') },
+      {
+        after: 2,
+        name: 'afspraak met Tessie staat erin',
+        test: async (api) => {
+          for (let offset = 0; offset <= 7; offset += 1) if ((await eventsOn(api, inDays(offset), /tessie|koffie/i)).length > 0) return true
+          return false
+        }
+      }
+    ],
+    toolBudget: 6
+  },
+  {
+    id: 'S18',
+    family: 'afspreken met iemand',
+    category: 'challenge',
+    title: 'Een berichtje voor Sanne',
+    expect: 'Zoekt momenten voor een etentje van twee uur deze week en geeft een berichtje met de opties dat Hidde naar Sanne kan sturen.',
+    turns: [{ text: 'Kun je een berichtje maken dat ik naar Sanne kan sturen voor een etentje van twee uur deze week?' }],
+    checks: [{ after: 0, name: 'geeft opties in een berichtje', test: async (_api, turns) => turns[0]!.tools.some((tool) => tool.name === 'find_meeting_times') && /\d{1,2}[:.]\d{2}|om \d/.test(turns[0]!.reply) }],
+    toolBudget: 2
   }
 ]
 

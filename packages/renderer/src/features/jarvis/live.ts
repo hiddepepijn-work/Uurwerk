@@ -114,7 +114,7 @@ interface ToolCall {
 
 /** What a wire reports; the conversation (LiveCall) decides what it means. */
 interface WireEvents {
-  heard(delta: string): void
+  heard(delta: string, replace?: boolean): void
   /** Hidde started talking over Jarvis. */
   interrupted(): void
   /** A new answer starts. */
@@ -458,8 +458,9 @@ class CascadeWire implements Wire {
           return
         }
         switch (event.type) {
+          case 'hearing':
           case 'heard':
-            events.heard(event.text ?? '')
+            events.heard(event.text ?? '', true)
             break
           case 'reply_start':
             events.replyStart()
@@ -664,8 +665,9 @@ export class LiveCall {
   private async connect(live: JarvisLiveSession): Promise<void> {
     let wire: GeminiWire | OpenAIWire | CascadeWire | null = null
     const events: WireEvents = {
-      heard: (delta) => {
-        this.heard += delta
+      heard: (delta, replace) => {
+        // Our own line sends the whole sentence each time (live while he talks, then final).
+        this.heard = replace ? delta : this.heard + delta
         this.handlers.onHeard(this.heard.trim())
       },
       interrupted: () => {
@@ -781,9 +783,19 @@ export class LiveCall {
       this.loudest = 0
       this.lastReport = now
     }
-    // His own voice is in the air while it plays, and a little after: see gate.ts.
-    const speaking = !!this.voiceContext && this.playUntil + 0.3 > this.voiceContext.currentTime
-    const decision = this.gate.hear(rms, now, speaking)
+    // While Jarvis talks the microphone is deaf, and for half a second after: his own voice
+    // came back through the speaker and he kept interrupting himself (28 Sep 2026). Cutting
+    // him off is a tap on the screen.
+    const speaking = !!this.voiceContext && this.playUntil + 0.5 > this.voiceContext.currentTime
+    if (speaking) {
+      if (this.gate.isOpen) {
+        this.gate.reset()
+        this.wire.paused()
+      }
+      this.preroll = []
+      return
+    }
+    const decision = this.gate.hear(rms, now, false)
     if (decision.opened) {
       trail(`je praat (${rms.toFixed(3)} boven ${decision.threshold.toFixed(3)}${speaking ? ', door Jarvis heen' : ''})`)
       for (const chunk of this.preroll) this.send(chunk)

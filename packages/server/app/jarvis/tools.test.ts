@@ -300,7 +300,8 @@ describe('Jarvis tools', () => {
       date: day,
       start: '10:00',
       end: '10:30',
-      areaId: 'personal'
+      areaId: 'personal',
+      travelMinutes: 0
     })
     const [event] = await api.calendar.eventsInRange(new Date(`${day}T00:00:00`).getTime(), new Date(`${day}T23:59:00`).getTime())
     expect(event).toMatchObject({ title: 'Kapper', createdBy: 'jarvis' })
@@ -441,5 +442,41 @@ describe('Jarvis tools', () => {
     }
     expect(review.done).toEqual(['Af'])
     expect(review.notDone.map((task) => task.title)).toEqual(['Niet af'])
+  })
+})
+
+describe('Jarvis tools: appointments with people', () => {
+  it('will not make an appointment without knowing the travel time', async () => {
+    const result = (await runTool(api, 'create_appointment', { title: 'Tandarts', date: next(2), start: '10:00', end: '10:30', areaId: 'personal' })) as { error?: string }
+    expect(result.error).toContain('Reistijd ontbreekt')
+  })
+
+  it('finds free moments around appointments and travel, and writes the message', async () => {
+    const day = next(2)
+    await proposeAndConfirm('create_appointment', { title: 'Voetbal', date: day, start: '18:00', end: '19:30', areaId: 'personal', travelMinutes: 0 })
+    const found = (await runTool(api, 'find_meeting_times', { minutes: 60, from: day, to: day, part: 'avond', travelMinutes: 15 })) as {
+      options: Array<{ date: string; start: string; leaveAt: string | null }>
+      message: string
+    }
+    // Voetbal until 19:30, then 15 minutes of travel: 20:00 is the first half hour that fits.
+    expect(found.options[0]).toMatchObject({ date: day, start: '20:00', leaveAt: '19:45' })
+    expect(found.message).toMatch(/^Ik kan .* om 20:00\. Wat past jou\?$/)
+  })
+
+  it('spreads the options over the days, one each', async () => {
+    const from = next(1)
+    const found = (await runTool(api, 'find_meeting_times', { minutes: 60, from, part: 'avond', count: 3 })) as { options: Array<{ date: string }> }
+    expect(new Set(found.options.map((option) => option.date)).size).toBe(found.options.length)
+    expect(found.options.length).toBe(3)
+  })
+})
+
+describe('Jarvis tools: meeting times and tasks', () => {
+  it('prefers a moment without a task, and names the task when there is no other', async () => {
+    const day = next(4)
+    const task = await api.tasks.create({ title: 'Werkstuk lezen', areaId: 'school', estimateMin: 60 })
+    await proposeAndConfirm('schedule_task', { taskId: task.id, date: day, start: '18:00', end: '19:00' })
+    const found = (await runTool(api, 'find_meeting_times', { minutes: 60, from: day, to: day, part: 'avond' })) as { options: Array<{ start: string; tasksThere: string[] }> }
+    expect(found.options[0]).toMatchObject({ start: '19:00', tasksThere: [] })
   })
 })

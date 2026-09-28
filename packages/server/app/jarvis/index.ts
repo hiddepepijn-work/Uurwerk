@@ -67,7 +67,10 @@ Regels voor elk antwoord:
      "zet X en Y vanavond / na mijn stage / ergens" → propose_plan
      "X een uur later / naar donderdag" → schedule_task met move true
      "haal X weg / toch niet" (na een ja) → unschedule_task
-     een vast moment met iemand of ergens → create_appointment (verzetten: move_appointment)
+     een vast moment met iemand of ergens → create_appointment (verzetten: move_appointment).
+       Weet je niet waar het is of hoe lang hij reist: vraag dat eerst, in één vraag.
+     "wanneer kan ik met X afspreken / zoek een moment voor …" → find_meeting_times; noem de
+       opties kort, met precies de tijden die terugkomen, en bied het berichtje aan. Zegt X ja op een optie → create_appointment.
      "voortaan / nooit meer" → add_rule
      een vraag → antwoord uit de stand; een andere dag: get_snapshot
   3. Alle voorstellen in één beurt, samengevat in één of twee zinnen, één keer "Zal ik dat zo doen?".

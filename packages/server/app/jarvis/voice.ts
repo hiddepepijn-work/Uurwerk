@@ -328,7 +328,7 @@ class FluxListener {
    * `keyterms`: the words Hidde uses that a general model mishears (his task titles, "inplannen",
    * "Tessie"). On his phone Flux once heard "staan u niet in planeet" for "staat niet in de planning".
    */
-  constructor(key: string, onTurn: (text: string) => void, keyterms: Promise<string[]>) {
+  constructor(key: string, onTurn: (text: string) => void, keyterms: Promise<string[]>, onHearing?: (text: string) => void) {
     this.ready = keyterms
       .catch(() => [] as string[])
       .then(
@@ -342,12 +342,12 @@ class FluxListener {
               log.warn('Jarvis cascade: Flux did not connect.', error)
               resolve(false)
             })
-            this.listen(onTurn)
+            this.listen(onTurn, onHearing)
           })
       )
   }
 
-  private listen(onTurn: (text: string) => void): void {
+  private listen(onTurn: (text: string) => void, onHearing?: (text: string) => void): void {
     this.socket.on('message', (data) => {
       let event: { type?: string; event?: string; transcript?: string }
       try {
@@ -356,6 +356,8 @@ class FluxListener {
         return
       }
       if (event.type === 'TurnInfo' && event.event === 'EndOfTurn') onTurn((event.transcript ?? '').trim())
+      // What he is saying, while he says it: the screen shows it live.
+      else if (event.type === 'TurnInfo' && event.transcript) onHearing?.(event.transcript.trim())
     })
   }
 
@@ -449,7 +451,9 @@ class VoiceSession {
 
     const deepgramKey = deps.secret('deepgramKey')
     const openaiKey = deps.secret('openaiKey')
-    if (deepgramKey) this.flux = new FluxListener(deepgramKey, (text) => this.fluxTurn(text), keytermsFor(deps.api))
+    if (deepgramKey) {
+      this.flux = new FluxListener(deepgramKey, (text) => this.fluxTurn(text), keytermsFor(deps.api), (text) => this.send({ type: 'hearing', text }))
+    }
     else if (openaiKey) this.listener = new LiveListener(openaiKey)
     for (const text of FILLERS) void fillerAudio(text)
     // The cache is made while he is still saying hello, not while he waits for an answer.
