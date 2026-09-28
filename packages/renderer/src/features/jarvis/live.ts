@@ -5,6 +5,7 @@ import type { JarvisLiveSession, JarvisLiveUsage } from '@core/contract/api.js'
 
 import { api } from '../../api/client.js'
 import { SpeechGate } from './gate.js'
+import { isGoodbye } from './goodbye.js'
 import type { OrbState } from './JarvisOrb.js'
 
 /**
@@ -36,6 +37,10 @@ export interface LiveHandlers {
 /** Both models take 24 kHz (Gemini resamples); the context is made before the token is in. */
 const MIC_RATE = 24_000
 const VOICE_RATE = 24_000
+/** Quiet this long after his goodbye (nothing playing or coming) before the call ends. */
+const LEAVE_BEAT_MS = 700
+/** A goodbye never keeps the call open longer than this, whatever is still going on. */
+const LEAVE_CAP_MS = 20_000
 /** Samples per chunk sent: 40 ms. */
 const CHUNK = 960
 /** Audio kept from before the gate opened, so the first syllable is not lost. */
@@ -554,8 +559,16 @@ export class LiveCall {
   private usage: JarvisLiveUsage = { ...EMPTY }
   private frame = 0
   private closed = false
-  /** end_conversation was called: close once the goodbye has been spoken. */
+  /** Hidde said goodbye (end_conversation, or isGoodbye on his words): close once it is spoken. */
   private goodbye = false
+  /** Already waiting to leave: once is enough. */
+  private leaving = false
+  /** The last thing Jarvis finished saying: what Hidde's "ja" or "nee" answers. */
+  private lastAnswer = ''
+  /** Hidde's current sentence was already checked for a goodbye. */
+  private judged = true
+  /** Sentences of his voice still being decoded: not playing yet, but about to. */
+  private decoding = 0
   /** How often a dropped connection was picked up (Gemini only: it hands out handles). */
   private resumes = 0
   /** For the trail: loudest the microphone got since the last report, chunks sent. */
@@ -671,6 +684,8 @@ export class LiveCall {
     const events: WireEvents = {
       heard: (delta, replace) => {
         // Our own line sends the whole sentence each time (live while he talks, then final).
+        // A new sentence is checked for a goodbye once; a late piece of the last one is not.
+        if (!this.heard.trim() && delta.trim()) this.judged = false
         this.heard = replace ? delta : this.heard + delta
         this.handlers.onHeard(this.heard.trim())
       },
@@ -701,13 +716,28 @@ export class LiveCall {
         this.working = working
         this.replyDone = true
         this.muted = false
-        if (this.goodbye && !working) this.leaveAfterSpeaking()
+        if (working) return
+        // His sentence, checked once: "doei" ends the call even when the model forgets
+        // end_conversation (it often did, and it never took a "ja" to "was dat het?").
+        if (!this.judged && this.heard.trim()) {
+          this.judged = true
+          if (!this.goodbye && isGoodbye(this.heard, this.lastAnswer)) {
+            trail(`doei gehoord: "${this.heard.trim().slice(0, 80)}"`)
+            this.goodbye = true
+          }
+        }
+        if (this.reply.trim()) this.lastAnswer = this.reply.trim()
+        if (this.goodbye) this.leaveAfterSpeaking()
       },
       usage: (usage) => add(this.usage, usage),
       tools: async (calls) => {
         trail(`tools: ${calls.map((call) => call.name).join(', ')}`)
-        if (calls.some((call) => call.name === 'end_conversation')) this.goodbye = true
         this.setPhase('thinking')
+        if (calls.some((call) => call.name === 'end_conversation')) {
+          this.goodbye = true
+          // Gemini can finish the turn before the call comes in: then no turnDone follows.
+          this.leaveAfterSpeaking()
+        }
         return Promise.all(
           calls.map(async (call) => {
             try {
@@ -839,8 +869,10 @@ export class LiveCall {
     if (!context) return
     const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0))
     const decoded = context.decodeAudioData(bytes.buffer).catch(() => null)
+    this.decoding += 1
     this.files = this.files.then(async () => {
       const buffer = await decoded
+      this.decoding -= 1
       if (buffer && !this.muted && !this.closed) this.schedule(buffer)
     })
   }
@@ -925,24 +957,37 @@ export class LiveCall {
   /** Typed instead of spoken, in the same conversation. */
   say(text: string): void {
     this.heard = text
+    this.judged = false
     this.wire?.text(text)
     this.setPhase('thinking')
   }
 
-  /** Waits until the goodbye has been heard, then ends the call and tells the screen. */
+  /**
+   * Waits until the goodbye has been heard, then ends the call and tells the screen. Heard:
+   * the answer is complete and nothing is decoding or playing, for a beat, so the last word
+   * is not clipped and an answer still on its way is not cut off.
+   */
   private leaveAfterSpeaking(): void {
+    if (this.leaving) return
+    this.leaving = true
+    const started = Date.now()
+    let quietSince: number | null = null
     const check = (): void => {
       if (this.closed) return
-      if (this.playing.size > 0) {
-        setTimeout(check, 200)
+      const now = Date.now()
+      const late = now - started > LEAVE_CAP_MS
+      const busy = !this.replyDone || this.working || this.decoding > 0 || this.playing.size > 0
+      if (busy && !late) quietSince = null
+      else quietSince ??= now
+      if (!late && (quietSince === null || now - quietSince < LEAVE_BEAT_MS)) {
+        setTimeout(check, 150)
         return
       }
       trail('gesprek afgesloten door Jarvis (doei)')
       this.finish(null)
       this.handlers.onGoodbye?.()
     }
-    // A beat after the last word, so the goodbye does not get clipped.
-    setTimeout(check, 600)
+    check()
   }
 
   private finish(problem: string | null): void {

@@ -48,11 +48,15 @@ const all = (blocks: PlanBlock[], events: CalendarEvent[]) =>
   upcomingReminders(blocks, events, at(0), at(24))
 
 describe('reminders', () => {
-  it('warns 15 minutes before a planned task, and not before a break', () => {
+  it('warns 30 and 15 minutes before a planned task and as it starts, and not before a break', () => {
     const reminders = all([block(810, 900), block(900, 915, 'break')], [])
-    expect(reminders).toHaveLength(1)
-    expect(reminders[0]!.at).toBe(at(13, 15))
-    expect(reminders[0]!.title).toBe('Architectuur onderzoek')
+    expect(reminders.map((r) => [r.at, r.cue])).toEqual([
+      [at(13), 'soon30'],
+      [at(13, 15), 'soon15'],
+      [at(13, 30), 'begins']
+    ])
+    expect(reminders.every((r) => r.title === 'Architectuur onderzoek')).toBe(true)
+    expect(reminders[2]!.body).toBe('Nu · 13:30–15:00 · GIS Applicatie EcoVi')
   })
 
   it('counts back from leaving, not from the appointment, when there is travel', () => {
@@ -73,11 +77,12 @@ describe('reminders', () => {
     expect(reminders[1]!.title).toBe('Over een kwartier weg')
   })
 
-  it('warns 30 and 15 minutes before an appointment without travel', () => {
+  it('warns 30 and 15 minutes before an appointment without travel, and as it starts', () => {
     const reminders = all([], [event({ location: null })])
-    expect(reminders.map((r) => [r.kind, r.at, r.title])).toEqual([
-      ['appointment', at(18, 30), 'Etentje met Tessie'],
-      ['appointment', at(18, 45), 'Etentje met Tessie']
+    expect(reminders.map((r) => [r.kind, r.at, r.title, r.cue])).toEqual([
+      ['appointment', at(18, 30), 'Etentje met Tessie', 'soon30'],
+      ['appointment', at(18, 45), 'Etentje met Tessie', 'soon15'],
+      ['appointment', at(19), 'Etentje met Tessie', 'begins']
     ])
   })
 

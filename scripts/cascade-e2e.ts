@@ -26,6 +26,7 @@ import { runTool } from '@core/services/jarvis-tools.js'
 import { SYSTEM } from '../packages/server/app/jarvis/index.js'
 import { configureVoice, handleVoiceUpgrade, VOICE_PATH, voiceBusy, voiceTicket } from '../packages/server/app/jarvis/voice.js'
 import { speakGemini } from '../packages/server/app/jarvis/speech.js'
+import { isGoodbye } from '../packages/renderer/src/features/jarvis/goodbye.js'
 
 function key(name: string): string {
   if (process.env[name]) return process.env[name]!.trim()
@@ -194,8 +195,13 @@ async function main(): Promise<void> {
 
   const lines = ['Wat staat er morgen op de planning?', 'Zet morgenavond om acht uur een uur kast fixen erin.', 'Ja, doe maar.']
   let problems = 0
+  /** Each line with the answer before it: what the app's own goodbye check sees. */
+  const exchanges: Array<{ heard: string; before: string }> = []
+  let before = ''
   for (const line of lines) {
     const result = await say(line)
+    exchanges.push({ heard: result.heard, before })
+    before = result.reply
     const ok = result.doneMs !== null && result.firstAudioMs !== null && result.reply.trim().length > 0
     if (!ok) problems += 1
     console.log(`\n${ok ? '✓' : '✗'} "${line}"`)
@@ -226,6 +232,12 @@ ${remembers ? '✓' : '✗'} nieuw gesprek, "Wat hebben we net samen ingepland?"
   const byeOk = bye.tools.includes('end_conversation') && bye.reply.trim().length > 0
   if (!byeOk) problems += 1
   console.log(`\n${byeOk ? '✓' : '✗'} doei: tools ${bye.tools.join(', ') || '-'}\n   Jarvis: ${bye.reply.trim()}`)
+  // The app's own check (goodbye.ts) closes on what was heard, even without the tool; and a
+  // yes to a proposal ("Ja, doe maar.") is never taken for a goodbye.
+  const falseGoodbyes = exchanges.filter((exchange) => isGoodbye(exchange.heard, exchange.before)).map((exchange) => exchange.heard)
+  const heardOk = isGoodbye(bye.heard, complaint.reply) && falseGoodbyes.length === 0
+  if (!heardOk) problems += 1
+  console.log(`\n${heardOk ? '✓' : '✗'} doei ook zonder tool herkend: "${bye.heard}"${falseGoodbyes.length ? `; ten onrechte: ${falseGoodbyes.join(' | ')}` : ''}`)
 
   socket.close(1000)
   await sleep(3000)

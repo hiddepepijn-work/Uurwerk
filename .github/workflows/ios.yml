@@ -51,12 +51,17 @@ jobs:
       # iOS plays only PCM-style formats as a notification sound; the clips are kept as
       # WAV in the repo (Jarvis's voice, scripts/voice-clips.ts) and converted here, where
       # afconvert comes with the system.
-      - name: Voice clips to .caf
+      - name: Voice clips and cues to .caf
         run: |
           mkdir -p packages/mobile/dist/sounds
           for clip in packages/mobile/sounds/*.wav; do
             name=$(basename "$clip" .wav)
             afconvert -f caff -d LEI16@24000 "$clip" "packages/mobile/dist/sounds/$name.caf"
+          done
+          # The cues (scripts/cue-sounds.ts): notification sounds and the in-app start/stop/done.
+          for clip in packages/renderer/src/assets/cues/*.wav; do
+            name=$(basename "$clip" .wav)
+            afconvert -f caff -d LEI16@44100 "$clip" "packages/mobile/dist/sounds/cue-$name.caf"
           done
           ls -la packages/mobile/dist/sounds
 

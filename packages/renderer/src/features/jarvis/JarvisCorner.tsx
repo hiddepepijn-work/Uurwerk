@@ -126,6 +126,9 @@ export function JarvisCorner() {
   const phaseRef = useRef<OrbState>('idle')
   const cardKey = useRef(0)
   const lingerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Cards on screen, for the call's handlers (made once, when the call starts). */
+  const cardCount = useRef(0)
+  cardCount.current = cards.length
 
   const touch = (): void => {
     lastActivity.current = Date.now()
@@ -200,6 +203,8 @@ export function JarvisCorner() {
           setPhase('idle')
           lingerThenLeave(trouble ? 7_000 : LINGER_MS)
         },
+        // "Doei": gone as soon as he has said it, unless there are cards to read.
+        onGoodbye: () => lingerThenLeave(cardCount.current > 0 ? LINGER_MS : 600),
         onToolResult: (name, result) => {
           if (name !== 'confirm') return
           const made = cardsFrom(result)

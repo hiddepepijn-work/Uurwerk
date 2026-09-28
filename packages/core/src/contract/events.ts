@@ -35,6 +35,8 @@ export interface AppEvents {
    * The main process owns the hotkeys but must not know how the UI is laid out, so it
    * names the destination and the renderer decides what that means.
    */
+  /** Laptop: a reminder's moment came; the main window plays its sound (the toast is silent). */
+  'cue:play': { cue: 'soon30' | 'soon15' | 'begins' }
   /** Open Jarvis; a moment makes him start the conversation himself. */
   /** `prompt`: a situation Jarvis opens with (a check-in answered "nog niet"). */
   'jarvis:open': { moment: 'morning' | 'evening' | null; prompt?: string }

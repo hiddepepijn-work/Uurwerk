@@ -1,6 +1,7 @@
 /**
  * The laptop's side of the reminders: the same list the phone schedules, shown as Windows
- * notifications when their moment comes — 15 minutes before a task or appointment, and
+ * notifications when their moment comes — 30 and 15 minutes before a task or appointment and
+ * as it starts, each with its own sound, and
  * "verzamel je spullen" / "lukt het?" at 30 and 15 minutes before leaving.
  *
  * A check every half minute rather than timers per reminder: the plan changes under us
@@ -11,6 +12,7 @@ import { Notification } from 'electron'
 import { upcomingReminders } from '@core/services/reminders.js'
 import { toIsoDate } from '@core/util/time.js'
 import type { Backend } from '@backend/create.js'
+import { emitEvent } from './events.js'
 import { log } from './logger.js'
 
 const CHECK_MS = 30_000
@@ -37,10 +39,13 @@ export function startReminders(backend: Backend, onOpen: () => void): void {
           title: reminder.title,
           body: reminder.body,
           // Leaving is the one that must not be missed.
-          urgency: reminder.kind === 'leave' ? 'critical' : 'normal'
+          urgency: reminder.kind === 'leave' ? 'critical' : 'normal',
+          // The app plays its own sound for these: one bell, two bells, a fanfare.
+          silent: !!reminder.cue
         })
         notification.on('click', onOpen)
         notification.show()
+        if (reminder.cue) emitEvent('cue:play', { cue: reminder.cue })
       }
     } catch (error) {
       log.warn('Reminder check failed.', error)

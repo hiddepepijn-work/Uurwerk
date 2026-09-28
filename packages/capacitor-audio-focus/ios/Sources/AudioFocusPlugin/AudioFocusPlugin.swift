@@ -1,3 +1,4 @@
+import AudioToolbox
 import AVFoundation
 import Capacitor
 import Foundation
@@ -31,7 +32,8 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "voiceSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "liveCheckin", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "liveTake", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "notificationButtons", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "notificationButtons", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cue", returnType: CAPPluginReturnPromise)
     ]
 
     private var audioEngine: AVAudioEngine?
@@ -239,6 +241,34 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         let answers = UserDefaults.standard.array(forKey: "uurwerk.live.answers") ?? []
         UserDefaults.standard.removeObject(forKey: "uurwerk.live.answers")
         call.resolve(["answers": answers])
+    }
+
+    /// Start, stop and done: a tap always, and the sound as a system sound — which iOS keeps
+    /// quiet when the ring/silent switch is on silent, and plays at the ringer's volume otherwise.
+    @objc func cue(_ call: CAPPluginCall) {
+        let name = call.getString("name") ?? ""
+        DispatchQueue.main.async {
+            switch name {
+            case "done": UINotificationFeedbackGenerator().notificationOccurred(.success)
+            case "start", "begins": UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            case "soon15": UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            default: UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            }
+            if let sound = self.cueSound(name) { AudioServicesPlaySystemSound(sound) }
+            call.resolve()
+        }
+    }
+
+    private var cueSounds: [String: SystemSoundID] = [:]
+
+    /// The .caf the iOS build made from scripts/cue-sounds.ts, in the bundle's web folder.
+    private func cueSound(_ name: String) -> SystemSoundID? {
+        if let sound = cueSounds[name] { return sound }
+        guard let url = Bundle.main.url(forResource: "cue-\(name)", withExtension: "caf", subdirectory: "public/sounds") else { return nil }
+        var sound: SystemSoundID = 0
+        guard AudioServicesCreateSystemSoundID(url as CFURL, &sound) == kAudioServicesNoError else { return nil }
+        cueSounds[name] = sound
+        return sound
     }
 
     // The check-in buttons with an icon each. Capacitor registers them without; this replaces

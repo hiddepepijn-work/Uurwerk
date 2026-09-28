@@ -3,20 +3,26 @@
  * notifications) and the laptop (desktop notifications), so both say the same thing at
  * the same moment.
  *
- *   planned task             15 min before   "Over 15 min: <task>"
- *   appointment, no travel   30 and 15 min before   "Over 30 min" / "Over 15 min: <appointment>"
+ *   planned task             30 and 15 min before, and as it starts
+ *   appointment, no travel   30 and 15 min before, and as it starts
  *   planned task, halfway    "Ben je al bezig met <task>?"   (Ja, bezig / Nog niet)
  *   planned task, at its end "Is <task> gelukt?"            (Gelukt / Nog niet af)
  *   appointment with travel  30 min before leaving   "Verzamel je spullen"
  *                            15 min before leaving   "Hidde, lukt het?" — spoken
  *
  * Leaving is when the outbound travel block starts. Nothing here knows about platforms.
+ *
+ * Each warning carries a cue: the sound that says how close it is (scripts/cue-sounds.ts).
+ * One soft bell at 30 minutes, two at 15, a fanfare when it starts.
  */
 
 import type { CalendarEvent, PlanBlock, Task } from '../contract/types.js'
 import { fromIsoDate } from '../util/time.js'
 
 export type ReminderKind = 'task' | 'appointment' | 'gather' | 'leave' | 'checkin'
+
+/** How close the thing is, as a sound. */
+export type ReminderCue = 'soon30' | 'soon15' | 'begins'
 
 export interface Reminder {
   /** Stable across recomputes, so a reschedule replaces rather than duplicates. */
@@ -25,6 +31,7 @@ export interface Reminder {
   at: number
   title: string
   body: string
+  cue?: ReminderCue
   /** A check-in on a planned task: the notification gets answer buttons. */
   checkin?: { taskId: string; stage: 'midway' | 'end'; important: boolean; task: string }
 }
@@ -44,6 +51,15 @@ const MIN = 60_000
 const clock = (ms: number): string =>
   new Date(ms).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
 
+/** The three warnings before something starts, earliest first. */
+const WARNINGS: { minutes: number; cue: ReminderCue }[] = [
+  { minutes: 30, cue: 'soon30' },
+  { minutes: 15, cue: 'soon15' },
+  { minutes: 0, cue: 'begins' }
+]
+
+const lead = (minutes: number): string => (minutes === 0 ? 'Nu' : `Over ${minutes} min`)
+
 export function upcomingReminders(
   blocks: PlanBlock[],
   events: CalendarEvent[],
@@ -58,13 +74,16 @@ export function upcomingReminders(
     if (block.kind !== 'task') continue
     const start = fromIsoDate(block.date).getTime() + block.startMin * MIN
     const end = fromIsoDate(block.date).getTime() + block.endMin * MIN
-    out.push({
-      key: `task:${block.id}:${start}`,
-      kind: 'task',
-      at: start - 15 * MIN,
-      title: block.taskTitle ?? block.title ?? 'Volgende taak',
-      body: `Over 15 min · ${clock(start)}–${clock(end)}${block.projectName ? ` · ${block.projectName}` : ''}`
-    })
+    for (const { minutes, cue } of WARNINGS) {
+      out.push({
+        key: minutes === 15 ? `task:${block.id}:${start}` : `task:${block.id}:${start}:${minutes}`,
+        kind: 'task',
+        at: start - minutes * MIN,
+        title: block.taskTitle ?? block.title ?? 'Volgende taak',
+        body: `${lead(minutes)} · ${clock(start)}–${clock(end)}${block.projectName ? ` · ${block.projectName}` : ''}`,
+        cue
+      })
+    }
 
     // Check-ins: halfway (only for half an hour or more) whether he started, at the end whether it
     // is done. A task that is already done gets neither.
@@ -105,14 +124,15 @@ export function upcomingReminders(
     const where = event.location ? ` · ${event.location}` : ''
 
     if (!travel) {
-      // Two warnings, like a departure: one to wrap up, one to go.
-      for (const minutes of [30, 15]) {
+      // One to wrap up, one to go, and one as it starts.
+      for (const { minutes, cue } of WARNINGS) {
         out.push({
           key: `appointment:${event.id}:${event.startsAt}:${minutes}`,
           kind: 'appointment',
           at: event.startsAt - minutes * MIN,
           title: event.title,
-          body: `Over ${minutes} min · ${clock(event.startsAt)}${where}`
+          body: `${lead(minutes)} · ${clock(event.startsAt)}${where}`,
+          cue
         })
       }
       continue
@@ -124,14 +144,16 @@ export function upcomingReminders(
       kind: 'gather',
       at: leave - 30 * MIN,
       title: 'Verzamel je spullen',
-      body: `${event.title} om ${clock(event.startsAt)}${where} · vertrek ${clock(leave)}`
+      body: `${event.title} om ${clock(event.startsAt)}${where} · vertrek ${clock(leave)}`,
+      cue: 'soon30'
     })
     out.push({
       key: `leave:${event.id}:${leave}`,
       kind: 'leave',
       at: leave - 15 * MIN,
       title: 'Over een kwartier weg',
-      body: `${event.title} om ${clock(event.startsAt)}${where} · vertrek ${clock(leave)}`
+      body: `${event.title} om ${clock(event.startsAt)}${where} · vertrek ${clock(leave)}`,
+      cue: 'soon15'
     })
   }
 

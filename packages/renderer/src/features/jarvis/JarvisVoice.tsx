@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, events } from '../../api/client.js'
 import { CloseIcon, SendIcon } from '../../ui/icons.js'
 import { askJarvis } from './ask.js'
+import { isGoodbye } from './goodbye.js'
 import { JarvisOrb, type OrbState } from './JarvisOrb.js'
 import { LiveCall } from './live.js'
 
@@ -53,6 +54,10 @@ export function JarvisVoice({
   const [draft, setDraft] = useState('')
   const level = useRef(0)
   const conversation = useRef<string | null>(null)
+  /** His last answer in the turn-based mode: what a "ja" or "nee" answers. */
+  const lastAnswer = useRef('')
+  const close = useRef(onClose)
+  close.current = onClose
   const player = useRef<{ stop: () => void } | null>(null)
   const alive = useRef(false)
   const live = useRef<LiveCall | null>(null)
@@ -156,10 +161,15 @@ export function JarvisVoice({
         })
         if (!alive.current) return
         conversation.current = answer.conversationId
+        const before = lastAnswer.current
+        lastAnswer.current = answer.text
         setReply(answer.text)
         setPhase('speaking')
         await speak(answer.audio, answer.text, answer.audioType ?? undefined)
-        if (alive.current) void listen()
+        if (!alive.current) return
+        // "Doei": he has answered it, and the screen closes instead of listening again.
+        if (input.text && isGoodbye(input.text, before)) close.current()
+        else void listen()
       } catch (error) {
         setProblem(error instanceof Error ? error.message : String(error))
         setPhase('idle')
@@ -214,7 +224,7 @@ export function JarvisVoice({
           },
           // "Doei": he said goodbye and finished speaking, so the screen closes too.
           onGoodbye: () => {
-            if (alive.current) onClose()
+            if (alive.current) close.current()
           }
         })
         if (!alive.current) {
@@ -239,6 +249,7 @@ export function JarvisVoice({
     if (!open) return
     alive.current = true
     conversation.current = null
+    lastAnswer.current = ''
     setReply('')
     setHeard('')
     setProblem(null)

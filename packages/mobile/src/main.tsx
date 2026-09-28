@@ -31,11 +31,12 @@ import { upcomingReminders } from '@core/services/reminders.js'
 import { toIsoDate } from '@core/util/time.js'
 
 import { App } from '@renderer/app/App.js'
+import { playCue, setCuePlayer } from '@renderer/lib/cues.js'
 import '@renderer/styles/fonts.js'
 import './styles.css'
 
 import { openPhoneDatabase } from './database.js'
-import { onCheckinAnswered, onQuestionTapped, scheduleNotifications, type Checkin, type CheckinAnswer } from './notifications.js'
+import { onCheckinAnswered, onQuestionTapped, scheduleNotifications, testCueNotifications, type Checkin, type CheckinAnswer } from './notifications.js'
 import { liveQueue } from './live.js'
 import { AudioFocus, speakEvening, speakMorning } from './speech.js'
 import { PhoneSync } from './sync.js'
@@ -284,6 +285,12 @@ async function start(): Promise<void> {
     }
   }, 1000)
 
+  // The phone plays cues natively: the silent switch turns the sound into just a tap.
+  if (Platform.isNativePlatform()) {
+    setCuePlayer((cue) => void AudioFocus.cue({ name: cue }).catch(() => undefined))
+    window.phoneCues = { test: testCueNotifications }
+  }
+
   console.info('[boot] 4 render')
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
@@ -371,6 +378,7 @@ async function start(): Promise<void> {
     else if (action === 'timer') {
       const running = backend.trackingService.isRunning()
       void (running ? window.api!.tracking.stopRun() : window.api!.tracking.startRun(null)).then(() => {
+        playCue(running ? 'stop' : 'start')
         emit('ui:open', { target: 'today' })
         refreshWidgets()
       })

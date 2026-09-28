@@ -59,17 +59,25 @@ const DAYS_AHEAD = 3
 const REMINDER_HOURS = 48
 const MAX_PENDING = 64
 
-/** Every reminder sound; the questions bring their own. */
-const SOUNDS = ['ochtend.caf', 'avond.caf', 'herinnering.caf', 'vertrek.caf']
+/** Every notification sound: the spoken clips, and the cues (scripts/cue-sounds.ts). */
+const SOUNDS = ['ochtend.caf', 'avond.caf', 'herinnering.caf', 'vertrek.caf', 'cue-soon30.caf', 'cue-soon15.caf', 'cue-begins.caf']
 
-const REMINDER_SOUND: Record<Reminder['kind'], string | undefined> = {
-  task: undefined,
-  checkin: undefined,
-  appointment: undefined,
-  gather: 'herinnering.caf',
-  // The spoken one: "Hidde, lukt het? Nog een kwartier, dan moet je in de auto zitten."
-  leave: 'vertrek.caf'
-}
+/**
+ * What a reminder sounds like: one bell at 30 minutes, two at 15, a fanfare as it starts.
+ * Leaving keeps its spoken clip — "Hidde, lukt het? Nog een kwartier…" must not be missed.
+ */
+const soundOf = (reminder: Reminder): string | undefined =>
+  reminder.kind === 'leave' ? 'vertrek.caf' : reminder.cue ? `cue-${reminder.cue}.caf` : undefined
+
+/** The two test notifications (Settings → Sounds); rescheduling leaves them alone. */
+const TEST_IDS = [999_000_001, 999_000_002]
+
+/**
+ * How a reminder shows: 'short' is its title and one line; 'empty' has no text at all and
+ * lives only as its sound, if iOS lets it (the test in Settings tells).
+ */
+const styleOf = async (): Promise<'short' | 'empty'> =>
+  (await Preferences.get({ key: 'cueStyle' })).value === 'empty' ? 'empty' : 'short'
 
 /** A reminder's key as a notification id: stable, positive, clear of the questions' ids. */
 const reminderId = (key: string): number => {
@@ -133,10 +141,11 @@ export async function scheduleNotifications(
 
   await registerCheckinButtons()
 
-  const pending = await LocalNotifications.getPending()
-  if (pending.notifications.length > 0) {
-    await LocalNotifications.cancel({ notifications: pending.notifications.map(({ id }) => ({ id })) })
+  const pending = (await LocalNotifications.getPending()).notifications.filter(({ id }) => !TEST_IDS.includes(id))
+  if (pending.length > 0) {
+    await LocalNotifications.cancel({ notifications: pending.map(({ id }) => ({ id })) })
   }
+  await clearDeliveredCues()
 
   const now = Date.now()
   const notifications: LocalNotificationSchema[] = []
@@ -166,22 +175,61 @@ export async function scheduleNotifications(
     }
   }
 
+  const style = await styleOf()
   for (const reminder of reminders(now, now + REMINDER_HOURS * 3_600_000)) {
     if (notifications.length >= MAX_PENDING) break
+    // The check-ins are the Live Activity's now: its Klaar/Bezig buttons ask the same question.
+    if (reminder.kind === 'checkin') continue
+    const quiet = style === 'empty' && reminder.kind !== 'leave'
     notifications.push({
       id: reminderId(reminder.key),
-      title: reminder.title,
-      body: reminder.body,
-      // Grouped on the lock screen: the check-ins together, the agenda together.
-      threadIdentifier: reminder.kind === 'checkin' ? 'checkins' : 'agenda',
+      title: quiet ? '' : reminder.title,
+      body: quiet ? '' : reminder.body,
+      threadIdentifier: 'agenda',
       schedule: { at: new Date(reminder.at), allowWhileIdle: true },
-      sound: REMINDER_SOUND[reminder.kind],
-      extra: { reminder: reminder.kind, ...(reminder.checkin ?? {}) },
-      ...(reminder.checkin ? { actionTypeId: reminder.checkin.stage === 'midway' ? 'checkin-midway' : 'checkin-end' } : {})
+      sound: soundOf(reminder),
+      extra: { reminder: reminder.kind, cue: reminder.cue ?? null }
     })
   }
 
   if (notifications.length > 0) await LocalNotifications.schedule({ notifications })
+}
+
+/**
+ * The reminders are only there for their sound; once the app is open again they have said
+ * what they had to, so they leave the lock screen. The morning and evening questions stay.
+ */
+async function clearDeliveredCues(): Promise<void> {
+  try {
+    const delivered = (await LocalNotifications.getDeliveredNotifications()).notifications
+    const cues = delivered.filter((entry) => {
+      const extra = (entry.extra ?? {}) as { reminder?: string }
+      return !!extra.reminder || TEST_IDS.includes(entry.id)
+    })
+    if (cues.length > 0) await LocalNotifications.removeDeliveredNotifications({ notifications: cues })
+  } catch {
+    // Nothing to tidy is not a problem.
+  }
+}
+
+/**
+ * Settings → Sounds → Test: one notification with no text at all in 10 seconds, one with a
+ * short line in 25. Whether the first arrives (sound only) decides which style is possible.
+ */
+export async function testCueNotifications(): Promise<void> {
+  const permission = await LocalNotifications.requestPermissions()
+  if (permission.display !== 'granted') return
+  if (!soundsInstalled) {
+    await installSounds()
+    soundsInstalled = true
+  }
+  const now = Date.now()
+  await LocalNotifications.schedule({
+    notifications: [
+      { id: TEST_IDS[0]!, title: '', body: '', threadIdentifier: 'agenda', schedule: { at: new Date(now + 10_000), allowWhileIdle: true }, sound: 'cue-soon15.caf' },
+      { id: TEST_IDS[1]!, title: 'Kamer opruimen', body: 'Nu · test', threadIdentifier: 'agenda', schedule: { at: new Date(now + 25_000), allowWhileIdle: true }, sound: 'cue-begins.caf' }
+    ]
+  })
 }
 
 let buttonsRegistered = false

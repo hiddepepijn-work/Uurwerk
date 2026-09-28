@@ -21,6 +21,8 @@ widget.add_file_references([group.new_reference('UurwerkWidget.swift'), group.ne
 shared = group.new_reference('CheckinLive.swift')
 widget.add_file_references([shared])
 app.add_file_references([shared])
+# "Hé Siri, Jarvis": an App Intent and its Siri phrases, in the app alone.
+app.add_file_references([group.new_reference('JarvisIntent.swift')])
 group.new_reference('Info.plist')
 group.new_reference('UurwerkWidget.entitlements')
 

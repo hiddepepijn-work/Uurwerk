@@ -14,6 +14,7 @@ import { PublishSettings } from './PublishSettings.js'
 import { ServerSettings } from './ServerSettings.js'
 import { FocusSettings } from './FocusSettings.js'
 import { JarvisSettings } from './JarvisSettings.js'
+import { SoundSettings } from './SoundSettings.js'
 import { areaFill } from '../agenda/agenda-model.js'
 import {
   SettingRow,
@@ -424,6 +425,7 @@ export function SettingsScreen() {
       <ServerSettings />
 
       <FocusSettings settings={settings} onPatch={(changes) => void patch(changes)} />
+      <SoundSettings />
       <JarvisSettings settings={settings} onPatch={(changes) => void patch(changes)} />
 
       <PublishSettings settings={settings} onPatch={(changes) => void patch(changes)} />

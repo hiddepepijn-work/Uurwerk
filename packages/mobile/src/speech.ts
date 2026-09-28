@@ -26,6 +26,8 @@ export const AudioFocus = registerPlugin<{
   liveCheckin(options: { json: string }): Promise<void>
   /** The check-in notification buttons again, natively, with an SF Symbol each. */
   notificationButtons(): Promise<void>
+  /** A cue (start, stop, done…): a tap, plus its sound unless the phone is on silent. */
+  cue(options: { name: string }): Promise<void>
   /** What was pressed on the Live Activity since the last call, oldest first. */
   liveTake(): Promise<{ answers: { answer: 'done' | 'busy'; taskId: string; at: number }[] }>
   addListener(
@@ -46,6 +48,7 @@ export const AudioFocus = registerPlugin<{
     voiceSession: async () => ({}),
     liveCheckin: async () => undefined,
     notificationButtons: async () => undefined,
+    cue: async () => undefined,
     liveTake: async () => ({ answers: [] }),
     addListener: async () => ({ remove: async () => undefined })
   }

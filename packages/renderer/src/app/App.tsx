@@ -18,6 +18,7 @@ import { ReportsScreen } from '../features/reports/ReportsScreen.js'
 import { StatisticsScreen } from '../features/statistics/StatisticsScreen.js'
 import { useTracking } from '../hooks/useTracking.js'
 import { events } from '../api/client.js'
+import { playCue } from '../lib/cues.js'
 
 /**
  * Plain state-based navigation instead of a router. Five fixed screens, no URLs, no deep
@@ -39,6 +40,8 @@ export function App() {
   const [voiceOpen, setVoiceOpen] = useState(false)
 
   useEffect(() => events.on('jarvis:open', () => setVoiceOpen(true)), [])
+  // Only this window plays a reminder's sound, so the Jarvis corner does not double it.
+  useEffect(() => events.on('cue:play', ({ cue }) => playCue(cue)), [])
   const compact = useCompact()
 
   const openSwitcher = useCallback(() => setSwitcherOpen(true), [])

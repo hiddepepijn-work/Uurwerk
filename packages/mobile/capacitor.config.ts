@@ -11,7 +11,9 @@ const config: CapacitorConfig = {
   },
   plugins: {
     LocalNotifications: {
-      sound: 'ochtend.caf'
+      sound: 'ochtend.caf',
+      // With the app open a reminder is only its sound: no banner over the screen.
+      presentationOptions: ['sound']
     }
   }
 }
