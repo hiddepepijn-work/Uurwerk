@@ -46,9 +46,12 @@ struct CheckinLiveActivity: Widget {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    CheckinButtons(state: context.state, stale: context.isStale, height: 34)
-                        .padding(.horizontal, 4)
-                        .padding(.top, 4)
+                    let phase = CheckinPhase(state: context.state, stale: context.isStale, now: Date())
+                    if phase != .before {
+                        CheckinButtons(state: context.state, stale: phase == .after, height: 34)
+                            .padding(.horizontal, 4)
+                            .padding(.top, 4)
+                    }
                 }
             } compactLeading: {
                 CheckinMiniRing(state: context.state, stale: context.isStale)
@@ -77,7 +80,7 @@ enum CheckinPhase {
     case before, during, after
 
     init(state: CheckinAttributes.ContentState, stale: Bool, now: Date) {
-        if stale || now >= state.end {
+        if now >= state.end {
             self = .after
         } else if now < state.start {
             self = .before
@@ -138,7 +141,7 @@ struct CheckinClock: View {
 
     var body: some View {
         let now = Date()
-        if stale || now >= state.end {
+        if now >= state.end {
             Text("klaar?").foregroundStyle(Palette.dangerText)
         } else if now < state.start {
             Text(timerInterval: now...state.start, countsDown: true)
@@ -304,7 +307,9 @@ struct CheckinLockView: View {
                 }
                 Spacer(minLength: 0)
             }
-            CheckinButtons(state: state, stale: stale, height: 40)
+            if phase != .before {
+                CheckinButtons(state: state, stale: phase == .after, height: 40)
+            }
         }
     }
 

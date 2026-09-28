@@ -165,10 +165,12 @@ final class LiveCheckin: NSObject {
             important: block.important,
             busy: busy.contains(block.taskId) || block.busy == true,
             project: block.project,
-            next: queue.first(where: { $0.start >= block.end - 60_000 && $0.taskId != block.taskId && !done.contains($0.taskId) })?.title
+            next: queue.first(where: { $0.start >= block.end - 60_000 && $0.start <= block.end + 30 * 60_000 && $0.taskId != block.taskId && !done.contains($0.taskId) })?.title
         )
         // Stale at the end of the block: the view then turns into the "gelukt?" question.
-        let content = ActivityContent(state: state, staleDate: state.end)
+        // A Live Activity only redraws on an update or when it goes stale. Stale at the start of
+        // a block that has not begun, so the buttons appear when it does; otherwise at its end.
+        let content = ActivityContent(state: state, staleDate: Date() < state.start ? state.start : state.end)
 
         if let current = activities.first(where: { $0.content.state.taskId == state.taskId && $0.content.state.start == state.start }) {
             if current.content.state != state { await current.update(content) }
