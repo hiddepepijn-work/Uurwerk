@@ -34,7 +34,8 @@ import { App } from '@renderer/app/App.js'
 import './styles.css'
 
 import { openPhoneDatabase } from './database.js'
-import { onCheckinAnswered, onQuestionTapped, scheduleNotifications } from './notifications.js'
+import { onCheckinAnswered, onQuestionTapped, scheduleNotifications, type Checkin, type CheckinAnswer } from './notifications.js'
+import { liveQueue } from './live.js'
 import { AudioFocus, speakEvening, speakMorning } from './speech.js'
 import { PhoneSync } from './sync.js'
 import { widgetData } from './widget-data.js'
@@ -141,9 +142,14 @@ async function start(): Promise<void> {
   const reschedule = (): void => {
     if (rescheduleTimer) clearTimeout(rescheduleTimer)
     rescheduleTimer = setTimeout(() => {
-      // Check-ins on planned tasks. "Gelukt" finishes it; "Ja, bezig" starts the timer if none runs;
+      void scheduleNotifications(reminders).catch(() => undefined)
+      refreshLive()
+      refreshWidgets()
+    }, 5_000)
+  }
+  // Check-ins on planned tasks. "Gelukt" finishes it; "Ja, bezig" starts the timer if none runs;
   // "Nog niet" on something important brings Jarvis in, who asks why and finds a new moment.
-  onCheckinAnswered((answer, checkin) => {
+  const answerCheckin = (answer: CheckinAnswer, checkin: Checkin): void => {
     void (async () => {
       const api = window.api!
       console.info(`[jarvis] check-in ${checkin.stage}: ${answer} op "${checkin.task}"${checkin.important ? ' (belangrijk)' : ''}`)
@@ -171,11 +177,31 @@ async function start(): Promise<void> {
       }
       emit('ui:open', { target: 'tasks' })
     })()
-  })
-  void scheduleNotifications(reminders).catch(() => undefined)
-      refreshWidgets()
-    }, 5_000)
   }
+
+  /**
+   * The Live Activity: first apply what was pressed on it while the app slept (✓ and ▶ work
+   * without opening the app), then hand over the queue it picks from.
+   */
+  let liveBusy = false
+  const refreshLive = (): void => {
+    if (liveBusy || !window.api) return
+    liveBusy = true
+    void (async () => {
+      const { answers } = await AudioFocus.liveTake()
+      for (const { answer, taskId } of answers) {
+        const task = backend.store.tasks.get(taskId)
+        if (!task) continue
+        if (answer === 'done' && task.status !== 'done') await window.api!.tasks.complete(taskId, true)
+        if (answer === 'busy' && !(await window.api!.tracking.currentRun())) await window.api!.tracking.startRun(taskId)
+      }
+      const running = await window.api!.tracking.currentRun()
+      await AudioFocus.liveCheckin({ json: JSON.stringify(liveQueue(backend, running?.segments.at(-1)?.taskId ?? null)) })
+    })()
+      .catch(() => undefined)
+      .finally(() => (liveBusy = false))
+  }
+
   /** The home-screen widgets read what this writes; a failure only means stale widgets. */
   let widgetProblemShown = false
   const refreshWidgets = (): void => {
@@ -213,6 +239,7 @@ async function start(): Promise<void> {
     }
   }
   window.api = api as unknown as TimeTrackerAPI
+  onCheckinAnswered(answerCheckin)
   window.events = bus
   window.audioFocus = AudioFocus
   // Talking to Jarvis: the phone's own speech recognition, through the native plugin.
@@ -306,6 +333,7 @@ async function start(): Promise<void> {
     })()
   })
   void scheduleNotifications(reminders).catch(() => undefined)
+  refreshLive()
 
   // Background: save the copy and hand the changes over while the app still may.
   void Capacitor.addListener('pause', () => {
@@ -315,6 +343,7 @@ async function start(): Promise<void> {
   void Capacitor.addListener('resume', () => {
     void sync.round()
     void scheduleNotifications(reminders).catch(() => undefined)
+    refreshLive()
     refreshWidgets()
   })
   refreshWidgets()
@@ -322,8 +351,9 @@ async function start(): Promise<void> {
   // The widget buttons (uurwerk://timer, jarvis, task, appointment, agenda) and the
   // Shortcuts automations that open Jarvis at 08:30 and 21:00 (jarvis?moment=morning).
   void Capacitor.addListener('appUrlOpen', ({ url }) => {
-    const { action, moment } = parseLink(url)
-    if (action === 'jarvis') emit('jarvis:open', { moment })
+    const { action, moment, checkin } = parseLink(url)
+    if (action === 'checkin' && checkin) answerCheckin(checkin.answer, checkin)
+    else if (action === 'jarvis') emit('jarvis:open', { moment })
     else if (action === 'focus') void focus.toggle()
     else if (action === 'task') emit('ui:open', { target: 'tasks' })
     else if (action === 'appointment') emit('ui:open', { target: 'addEvent' })

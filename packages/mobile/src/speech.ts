@@ -22,6 +22,10 @@ export const AudioFocus = registerPlugin<{
   keepAwake(options: { on: boolean }): Promise<void>
   /** A live call: conversation audio, with the AirPods' microphone when they are in. */
   voiceSession(options: { on: boolean }): Promise<{ input?: string }>
+  /** The Live Activity: today's planned tasks (live.ts); which one shows is decided natively. */
+  liveCheckin(options: { json: string }): Promise<void>
+  /** What was pressed on the Live Activity since the last call, oldest first. */
+  liveTake(): Promise<{ answers: { answer: 'done' | 'busy'; taskId: string; at: number }[] }>
   addListener(
     event: 'speechPartial' | 'speechEnd' | 'speechLevel',
     handler: (data: { text?: string; level?: number }) => void
@@ -38,6 +42,8 @@ export const AudioFocus = registerPlugin<{
     listenStop: async () => undefined,
     keepAwake: async () => undefined,
     voiceSession: async () => ({}),
+    liveCheckin: async () => undefined,
+    liveTake: async () => ({ answers: [] }),
     addListener: async () => ({ remove: async () => undefined })
   }
 })

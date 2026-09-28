@@ -20,3 +20,20 @@ describe('parseLink', () => {
     expect(parseLink('uurwerk://nothing')).toEqual({ action: null, moment: null })
   })
 })
+
+describe('the Live Activity link', () => {
+  it('carries the task and the answer', () => {
+    expect(parseLink('uurwerk://checkin?task=t1&stage=end&important=1&title=BO%20afmaken').checkin).toEqual({
+      taskId: 't1',
+      answer: 'notdone',
+      stage: 'end',
+      important: true,
+      task: 'BO afmaken'
+    })
+    expect(parseLink('uurwerk://checkin?task=t1&stage=midway').checkin?.answer).toBe('notyet')
+  })
+
+  it('is nothing without a task', () => {
+    expect(parseLink('uurwerk://checkin?stage=end').action).toBeNull()
+  })
+})

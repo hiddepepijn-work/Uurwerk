@@ -430,5 +430,6 @@ struct UurwerkWidgets: WidgetBundle {
     var body: some Widget {
         AgendaWidget()
         QuickWidget()
+        CheckinLiveActivity()
     }
 }

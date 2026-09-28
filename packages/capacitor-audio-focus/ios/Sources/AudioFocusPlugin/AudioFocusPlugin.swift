@@ -27,7 +27,9 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "listenStart", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "listenStop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "keepAwake", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "voiceSession", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "voiceSession", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "liveCheckin", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "liveTake", returnType: CAPPluginReturnPromise)
     ]
 
     private var audioEngine: AVAudioEngine?
@@ -214,6 +216,27 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         } catch {
             call.reject("Could not release the audio session: \(error.localizedDescription)")
         }
+    }
+
+    // The Live Activity lives in the app target (native/widget/CheckinLive.swift, shared with the
+    // widget), not in this module: its intents must run in the app. This only hands over the
+    // queue and collects what was pressed, through the same UserDefaults keys.
+    @objc func liveCheckin(_ call: CAPPluginCall) {
+        guard let json = call.getString("json") else {
+            call.reject("Missing json")
+            return
+        }
+        UserDefaults.standard.set(json, forKey: "uurwerk.live.queue")
+        if let live = NSClassFromString("UurwerkLiveCheckin") as? NSObject.Type {
+            _ = live.perform(NSSelectorFromString("sync"))
+        }
+        call.resolve()
+    }
+
+    @objc func liveTake(_ call: CAPPluginCall) {
+        let answers = UserDefaults.standard.array(forKey: "uurwerk.live.answers") ?? []
+        UserDefaults.standard.removeObject(forKey: "uurwerk.live.answers")
+        call.resolve(["answers": answers])
     }
 
     @objc func setWidgetData(_ call: CAPPluginCall) {

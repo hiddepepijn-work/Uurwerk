@@ -199,9 +199,16 @@ async function registerCheckinButtons(): Promise<void> {
 
 export type CheckinAnswer = 'busy' | 'notyet' | 'done' | 'notdone' | 'tap'
 
+export interface Checkin {
+  taskId: string
+  stage: 'midway' | 'end'
+  important: boolean
+  task: string
+}
+
 /** An answer to a check-in: which task, which moment, and what he pressed. */
 export function onCheckinAnswered(
-  handle: (answer: CheckinAnswer, checkin: { taskId: string; stage: 'midway' | 'end'; important: boolean; task: string }) => void
+  handle: (answer: CheckinAnswer, checkin: Checkin) => void
 ): void {
   void LocalNotifications.addListener('localNotificationActionPerformed', ({ actionId, notification }) => {
     const extra = (notification.extra ?? {}) as { reminder?: string; taskId?: string; stage?: 'midway' | 'end'; important?: boolean; task?: string }

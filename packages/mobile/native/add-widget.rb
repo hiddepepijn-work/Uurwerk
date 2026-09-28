@@ -14,7 +14,13 @@ app = project.targets.find { |target| target.name == 'App' } or abort('No App ta
 widget = project.new_target(:app_extension, 'UurwerkWidget', :ios, '17.0')
 
 group = project.main_group.new_group('UurwerkWidget', 'UurwerkWidget')
-widget.add_file_references([group.new_reference('UurwerkWidget.swift')])
+widget.add_file_references([group.new_reference('UurwerkWidget.swift'), group.new_reference('CheckinLiveActivity.swift')])
+
+# The Live Activity's data and buttons: in both. Its intents run in the app's process (so they
+# work while the app is closed); the widget only needs the types to draw the buttons.
+shared = group.new_reference('CheckinLive.swift')
+widget.add_file_references([shared])
+app.add_file_references([shared])
 group.new_reference('Info.plist')
 group.new_reference('UurwerkWidget.entitlements')
 
@@ -26,6 +32,8 @@ widget.build_configurations.each do |config|
   settings['GENERATE_INFOPLIST_FILE'] = 'NO'
   settings['CODE_SIGN_ENTITLEMENTS'] = 'UurwerkWidget/UurwerkWidget.entitlements'
   settings['SWIFT_VERSION'] = '5.0'
+  # CheckinLive.swift leaves out what only the app may do (start activities, the network).
+  settings['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = ['$(inherited)', 'WIDGET_EXTENSION']
   settings['TARGETED_DEVICE_FAMILY'] = '1,2'
   settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
   settings['SKIP_INSTALL'] = 'YES'
@@ -35,7 +43,8 @@ widget.build_configurations.each do |config|
   settings['CURRENT_PROJECT_VERSION'] = app.build_configurations.first.build_settings['CURRENT_PROJECT_VERSION'] || '1'
 end
 
-%w[WidgetKit SwiftUI AppIntents].each { |framework| widget.add_system_framework(framework) }
+%w[WidgetKit SwiftUI AppIntents ActivityKit].each { |framework| widget.add_system_framework(framework) }
+%w[AppIntents ActivityKit].each { |framework| app.add_system_framework(framework) }
 
 # The app carries the extension in PlugIns/ and builds it first.
 embed = app.new_copy_files_build_phase('Embed Foundation Extensions')
