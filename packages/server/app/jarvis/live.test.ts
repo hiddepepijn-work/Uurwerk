@@ -8,7 +8,7 @@ import { TOOLS } from '@core/services/jarvis-tools.js'
 
 import { writeFileSync } from 'node:fs'
 
-import { addTextUsage, addUsage, readSpend, toSchema, usageUsd } from './live.js'
+import { addTextUsage, addUsage, dateTable, readSpend, toSchema, usageUsd } from './live.js'
 
 let dir: string
 let path: string
@@ -86,5 +86,25 @@ describe('toSchema', () => {
       expect(schema).not.toContain('additionalProperties')
       expect(schema).not.toMatch(/"type":"[a-z]/)
     }
+  })
+})
+
+describe('dateTable', () => {
+  it('names this week and next, so "volgende week donderdag" is read off, not worked out', () => {
+    // Monday 28 September 2026.
+    const table = dateTable(new Date(2026, 8, 28, 12, 0))
+    expect(table).toContain('ma 2026-09-28 (vandaag)')
+    expect(table).toContain('di 2026-09-29 (morgen)')
+    expect(table).toContain('do 2026-10-01')
+    expect(table).toContain('volgende week: ma 2026-10-05')
+    expect(table).toContain('do 2026-10-08')
+    expect(table).not.toContain('2026-10-12')
+  })
+
+  it('still reaches the end of next week on a Sunday', () => {
+    const table = dateTable(new Date(2026, 9, 4, 12, 0))
+    expect(table).toContain('zo 2026-10-04 (vandaag)')
+    expect(table).toContain('volgende week: ma 2026-10-05')
+    expect(table).toContain('zo 2026-10-11')
   })
 })

@@ -179,8 +179,19 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'schedule_task',
-    description: 'Taak als blok op een vast tijdstip. Mag over andere taken; weigert over afspraken.' + PROPOSAL,
-    parameters: object({ taskId: { type: 'string' }, date, start: clock, end: clock }, ['taskId', 'date', 'start', 'end']),
+    description:
+      'Taak als blok op een vast tijdstip. Mag over andere taken; weigert over afspraken. Verzetten ("een uur later"): move true, dan gaat het oude blok van die dag weg.' +
+      PROPOSAL,
+    parameters: object(
+      {
+        taskId: { type: 'string' },
+        date,
+        start: clock,
+        end: clock,
+        move: { type: 'boolean', description: 'true = verzetten: andere blokken van deze taak op die dag weghalen' }
+      },
+      ['taskId', 'date', 'start', 'end']
+    ),
     writes: true,
     proposes: true
   },
@@ -375,12 +386,31 @@ async function snapshot(api: TimeTrackerAPI, from: IsoDate, to: IsoDate, withTas
   if (withTasks) {
     const today = isoDate(new Date())
     const tasks = await api.tasks.list({ status: 'active' })
+    // A deadline in the next three days with too little planned for it is marked here, by the
+    // code: the models did not reliably notice it themselves (benchmark B8).
+    const soon = [0, 1, 2].map((offset) => isoDate(new Date(Date.now() + offset * 86_400_000)))
+    const blocksOf = new Map<string, Awaited<ReturnType<typeof api.plans.day>>['blocks']>()
+    const plannedFor = async (taskId: string, until: string): Promise<number> => {
+      let minutes = 0
+      for (const day of soon.filter((entry) => entry <= until)) {
+        if (!blocksOf.has(day)) blocksOf.set(day, (await api.plans.day(day)).blocks)
+        for (const block of blocksOf.get(day)!) if (block.taskId === taskId) minutes += block.endMin - block.startMin
+      }
+      return minutes
+    }
+    const DUE = ['VANDAAG', 'MORGEN', 'OVERMORGEN']
     lines.push('', 'Open taken')
     for (const task of tasks.slice(0, 60)) {
       const late = task.dueDate !== null && task.dueDate < today ? ' TE LAAT' : ''
+      let risk = ''
+      const dueIn = task.dueDate ? soon.indexOf(task.dueDate) : -1
+      if (dueIn >= 0 && task.estimateMin) {
+        const missing = task.estimateMin - (await plannedFor(task.id, task.dueDate!))
+        if (missing > 0) risk = ` RISICO: deadline ${DUE[dueIn]}, nog ${missing} min niet ingepland`
+      }
       const estimate = task.estimateMin ? `, ${task.estimateMin} min` : ''
       const due = task.dueDate ? `, deadline ${task.dueDate}` : ''
-      lines.push(`  ${ref('t', task.id)} ${task.title} [${task.areaId ?? '-'}] ${task.priority}${estimate}${due}${late}`)
+      lines.push(`  ${ref('t', task.id)} ${task.title} [${task.areaId ?? '-'}] ${task.priority}${estimate}${due}${late}${risk}`)
     }
   }
   const rules = await api.assistant.rules()
@@ -550,7 +580,7 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
       return `Taak "${await taskTitle(input.taskId)}" aanpassen: ${changes.join(', ') || 'niets'}`
     }
     case 'schedule_task':
-      return `Taak "${await taskTitle(input.taskId)}" inplannen op ${String(input.date)} ${String(input.start)}–${String(input.end)}`
+      return `Taak "${await taskTitle(input.taskId)}" ${input.move === true ? 'verzetten naar' : 'inplannen op'} ${String(input.date)} ${String(input.start)}–${String(input.end)}`
     case 'plan_range':
       return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} opnieuw laten maken (afspraken en handmatige blokken blijven)`
     case 'clear_planning':
@@ -605,6 +635,10 @@ async function propose(api: TimeTrackerAPI, name: string, given: Input): Promise
   let input: Input
   try {
     input = await resolveRefs(api, given)
+    // A time with no date but a deadline: the model meant that day (the mini did this).
+    if (name === 'create_task' && input.start && input.end && !input.date && typeof input.dueDate === 'string') {
+      input = { ...input, date: input.dueDate }
+    }
     await precheck(api, name, input)
   } catch (error) {
     return { error: `Kan niet: ${error instanceof Error ? error.message : String(error)}` }
@@ -934,6 +968,11 @@ async function slotFor(
   const alongside: string[] = []
   const replaces: Array<{ id: string; title: string }> = []
   for (const block of plan.blocks) {
+    // Moving: the task's other blocks that day go, wherever they are.
+    if (input.move === true && block.taskId === task.id) {
+      replaces.push({ id: block.id, title: `${task.title} ${hm(block.startMin)}–${hm(block.endMin)}` })
+      continue
+    }
     if (!overlaps(block.startMin, block.endMin)) continue
     const title = block.taskTitle ?? block.title ?? block.kind
     const span = `${title} ${hm(block.startMin)}–${hm(block.endMin)}`

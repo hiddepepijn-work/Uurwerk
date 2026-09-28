@@ -174,6 +174,32 @@ describe('Jarvis tools', () => {
     expect(half.error).toContain('date, start én end')
   })
 
+  it('marks a deadline in the next days with too little planned for it', async () => {
+    const tomorrow = ahead(1)
+    const task = await api.tasks.create({ title: 'Scriptie inleveren', areaId: 'school', estimateMin: 180, dueDate: tomorrow })
+    const before = String(await runTool(api, 'get_snapshot', {}))
+    expect(before).toMatch(/Scriptie inleveren.*RISICO: deadline MORGEN, nog 180 min niet ingepland/)
+    await proposeAndConfirm('schedule_task', { taskId: task.id, date: tomorrow, start: '19:00', end: '22:00' })
+    const after = String(await runTool(api, 'get_snapshot', {}))
+    expect(after).not.toMatch(/Scriptie inleveren.*RISICO/)
+  })
+
+  it('moves a task block instead of adding a second one', async () => {
+    const day = next(3)
+    const mail = await api.tasks.create({ title: 'Mail beantwoorden', areaId: 'personal', estimateMin: 30 })
+    await proposeAndConfirm('schedule_task', { taskId: mail.id, date: day, start: '21:00', end: '21:30' })
+    const moved = await proposeAndConfirm('schedule_task', { taskId: mail.id, date: day, start: '22:00', end: '22:30', move: true })
+    expect(moved.executed[0]!.summary).toContain('verzetten naar')
+    const blocks = (await api.plans.day(day)).blocks.filter((block) => block.taskId === mail.id)
+    expect(blocks.map((block) => block.startMin)).toEqual([22 * 60])
+  })
+
+  it('takes the deadline as the day when a new task has a time but no date', async () => {
+    const day = next(2)
+    const done = await proposeAndConfirm('create_task', { title: 'Kast fixen', areaId: 'personal', dueDate: day, start: '20:00', end: '21:00' })
+    expect(done.executed[0]!.result).toMatchObject({ placed: `${day} 20:00–21:00` })
+  })
+
   it('lets tasks run through each other, and says so', async () => {
     const day = next(4)
     const bo = await api.tasks.create({ title: 'BO afmaken', areaId: 'school', estimateMin: 60 })
