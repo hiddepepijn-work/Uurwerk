@@ -372,6 +372,8 @@ export class CalendarRepo {
         `SELECT * FROM calendar_events
          WHERE deleted_at IS NULL AND cancelled = 0
            AND event_kind = 'appointment'
+           -- An all-day item (a birthday, a workday of someone else) holds no hours to file.
+           AND all_day = 0
            AND classification_status IN ('unclassified','suggested')
          ORDER BY starts_at`
       )

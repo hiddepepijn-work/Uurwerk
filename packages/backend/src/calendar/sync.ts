@@ -132,10 +132,11 @@ export function importEvents(input: {
         organizationId: suggestion.organizationId,
         projectId: suggestion.projectId,
         workTypeId: suggestion.workTypeId,
-        classificationStatus: decided ? 'confirmed' : 'suggested',
+        // An all-day item is about the day, not an hour of work: nothing to classify.
+        classificationStatus: incoming.allDay ? 'ignored' : decided ? 'confirmed' : 'suggested',
         confidence: suggestion.confidence,
         // A birthday calendar is visible without owning the hour.
-        includeInPlanning: !calendar?.ignoreForPlanning,
+        includeInPlanning: !incoming.allDay && !calendar?.ignoreForPlanning,
         // Nothing counts as worked time until someone says so — an imported meeting is not
         // automatically an hour on the internship.
         registrationMode: 'none',
@@ -152,6 +153,7 @@ export function importEvents(input: {
       })
 
       outcome.imported += 1
+      if (incoming.allDay) continue
       if (decided) outcome.autoClassified += 1
       else outcome.pending += 1
     }
