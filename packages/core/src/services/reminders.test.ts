@@ -52,7 +52,7 @@ describe('reminders', () => {
     const reminders = all([block(810, 900), block(900, 915, 'break')], [])
     expect(reminders).toHaveLength(1)
     expect(reminders[0]!.at).toBe(at(13, 15))
-    expect(reminders[0]!.title).toBe('Over 15 min: Architectuur onderzoek')
+    expect(reminders[0]!.title).toBe('Architectuur onderzoek')
   })
 
   it('counts back from leaving, not from the appointment, when there is travel', () => {
@@ -70,14 +70,14 @@ describe('reminders', () => {
       ['gather', at(17, 55)],
       ['leave', at(18, 10)]
     ])
-    expect(reminders[1]!.title).toBe('Hidde, lukt het?')
+    expect(reminders[1]!.title).toBe('Over een kwartier weg')
   })
 
   it('warns 30 and 15 minutes before an appointment without travel', () => {
     const reminders = all([], [event({ location: null })])
     expect(reminders.map((r) => [r.kind, r.at, r.title])).toEqual([
-      ['appointment', at(18, 30), 'Over 30 min: Etentje met Tessie'],
-      ['appointment', at(18, 45), 'Over 15 min: Etentje met Tessie']
+      ['appointment', at(18, 30), 'Etentje met Tessie'],
+      ['appointment', at(18, 45), 'Etentje met Tessie']
     ])
   })
 
@@ -97,8 +97,8 @@ describe('check-ins on planned tasks', () => {
       ['midway', at(15)],
       ['end', at(16)]
     ])
-    expect(checkins[0]!.title).toBe('Ben je al bezig met Architectuur onderzoek?')
-    expect(checkins[1]!.title).toBe('Is Architectuur onderzoek gelukt?')
+    expect(checkins[0]!.title).toBe('Al bezig met Architectuur onderzoek?')
+    expect(checkins[1]!.title).toBe('Architectuur onderzoek: gelukt?')
     expect(checkins.every((reminder) => reminder.checkin!.taskId === 't' && !reminder.checkin!.important)).toBe(true)
   })
 

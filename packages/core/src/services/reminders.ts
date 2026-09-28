@@ -62,8 +62,8 @@ export function upcomingReminders(
       key: `task:${block.id}:${start}`,
       kind: 'task',
       at: start - 15 * MIN,
-      title: `Over 15 min: ${block.taskTitle ?? block.title ?? 'volgende taak'}`,
-      body: `${clock(start)}–${clock(end)}${block.projectName ? ` · ${block.projectName}` : ''}`
+      title: block.taskTitle ?? block.title ?? 'Volgende taak',
+      body: `Over 15 min · ${clock(start)}–${clock(end)}${block.projectName ? ` · ${block.projectName}` : ''}`
     })
 
     // Check-ins: halfway (only for half an hour or more) whether he started, at the end whether it
@@ -77,8 +77,8 @@ export function upcomingReminders(
         key: `checkin:midway:${block.id}:${start}`,
         kind: 'checkin',
         at: start + Math.round((end - start) / 2 / (5 * MIN)) * 5 * MIN,
-        title: `Ben je al bezig met ${name}?`,
-        body: `Gepland ${clock(start)}–${clock(end)}.`,
+        title: `Al bezig met ${name}?`,
+        body: `Halverwege · gepland ${clock(start)}–${clock(end)}`,
         checkin: { taskId: block.taskId, stage: 'midway', important, task: name }
       })
     }
@@ -86,8 +86,8 @@ export function upcomingReminders(
       key: `checkin:end:${block.id}:${end}`,
       kind: 'checkin',
       at: end,
-      title: `Is ${name} gelukt?`,
-      body: important ? 'Belangrijk. Gelukt, of nog niet af?' : 'Gelukt, of nog niet af?',
+      title: `${name}: gelukt?`,
+      body: `${clock(start)}–${clock(end)} is voorbij${important ? ' · belangrijk' : ''}`,
       checkin: { taskId: block.taskId, stage: 'end', important, task: name }
     })
   }
@@ -111,8 +111,8 @@ export function upcomingReminders(
           key: `appointment:${event.id}:${event.startsAt}:${minutes}`,
           kind: 'appointment',
           at: event.startsAt - minutes * MIN,
-          title: `Over ${minutes} min: ${event.title}`,
-          body: `${clock(event.startsAt)}${where}`
+          title: event.title,
+          body: `Over ${minutes} min · ${clock(event.startsAt)}${where}`
         })
       }
       continue
@@ -124,14 +124,14 @@ export function upcomingReminders(
       kind: 'gather',
       at: leave - 30 * MIN,
       title: 'Verzamel je spullen',
-      body: `${event.title} om ${clock(event.startsAt)}${where}. Om ${clock(leave)} moet je weg.`
+      body: `${event.title} om ${clock(event.startsAt)}${where} · vertrek ${clock(leave)}`
     })
     out.push({
       key: `leave:${event.id}:${leave}`,
       kind: 'leave',
       at: leave - 15 * MIN,
-      title: 'Hidde, lukt het?',
-      body: `Over een kwartier moet je in de auto zitten. ${event.title} om ${clock(event.startsAt)}.`
+      title: 'Over een kwartier weg',
+      body: `${event.title} om ${clock(event.startsAt)}${where} · vertrek ${clock(leave)}`
     })
   }
 

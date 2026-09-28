@@ -18,6 +18,7 @@ import { Preferences } from '@capacitor/preferences'
 import type { Reminder } from '@core/services/reminders.js'
 
 import { toBase64 } from './database.js'
+import { AudioFocus } from './speech.js'
 
 type Target = 'planDay' | 'endOfDay'
 
@@ -38,8 +39,8 @@ const MOMENTS: Moment[] = [
     hour: 8,
     minutes: [30, 35, 40, 45],
     sound: 'ochtend.caf',
-    title: 'Goedemorgen Hidde',
-    body: 'Hoe ziet je ochtend eruit? Tik om je dag te plannen.',
+    title: 'Goedemorgen, Hidde',
+    body: 'Plan je dag · tik om te beginnen',
     target: 'planDay'
   },
   {
@@ -48,7 +49,7 @@ const MOMENTS: Moment[] = [
     minutes: [0, 10],
     sound: 'avond.caf',
     title: 'Dagafsluiting',
-    body: 'Is alles gelukt? Waar heb je aan gewerkt, en moet er nog iets in de agenda?',
+    body: 'Wat is er gelukt, en moet er nog iets in de agenda?',
     target: 'endOfDay'
   }
 ]
@@ -155,7 +156,8 @@ export async function scheduleNotifications(
         notifications.push({
           id: idFor(day, index, repeat),
           title: moment.title,
-          body: repeat === 0 ? moment.body : `${moment.body} (${repeat + 1}e keer)`,
+          body: repeat === 0 ? moment.body : `${moment.body} · ${repeat + 1}e keer`,
+          threadIdentifier: 'momenten',
           schedule: { at, allowWhileIdle: true },
           sound: moment.sound,
           extra: { target: moment.target, moment: moment.key, day: dayKey(day) }
@@ -170,6 +172,8 @@ export async function scheduleNotifications(
       id: reminderId(reminder.key),
       title: reminder.title,
       body: reminder.body,
+      // Grouped on the lock screen: the check-ins together, the agenda together.
+      threadIdentifier: reminder.kind === 'checkin' ? 'checkins' : 'agenda',
       schedule: { at: new Date(reminder.at), allowWhileIdle: true },
       sound: REMINDER_SOUND[reminder.kind],
       extra: { reminder: reminder.kind, ...(reminder.checkin ?? {}) },
@@ -195,6 +199,8 @@ async function registerCheckinButtons(): Promise<void> {
       { id: 'checkin-end', actions: [{ id: 'done', title: 'Gelukt', foreground: true }, { id: 'notdone', title: 'Nog niet af', foreground: true }] }
     ]
   })
+  // The same buttons again natively, now with an icon each (Capacitor has no icons for them).
+  await AudioFocus.notificationButtons().catch(() => undefined)
 }
 
 export type CheckinAnswer = 'busy' | 'notyet' | 'done' | 'notdone' | 'tap'

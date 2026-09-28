@@ -390,7 +390,7 @@ export function WeekScreen() {
           onOpenDay={setPlanningDate}
           interactive
           hourPx={44}
-          className="h-[max(680px,calc(100vh-400px))] rounded-[22px] bg-card px-3.5 pt-3"
+          className="h-[max(680px,calc(100vh-416px))] rounded-[22px] bg-card px-3.5 pt-3"
         />
       ) : (
       <WeekGrid

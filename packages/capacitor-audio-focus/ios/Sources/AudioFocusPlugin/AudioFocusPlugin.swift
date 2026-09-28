@@ -3,6 +3,7 @@ import Capacitor
 import Foundation
 import Speech
 import UIKit
+import UserNotifications
 import WidgetKit
 
 /// Uurwerk's only native code, in one plugin:
@@ -29,7 +30,8 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "keepAwake", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "voiceSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "liveCheckin", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "liveTake", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "liveTake", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "notificationButtons", returnType: CAPPluginReturnPromise)
     ]
 
     private var audioEngine: AVAudioEngine?
@@ -237,6 +239,26 @@ public class AudioFocusPlugin: CAPPlugin, CAPBridgedPlugin {
         let answers = UserDefaults.standard.array(forKey: "uurwerk.live.answers") ?? []
         UserDefaults.standard.removeObject(forKey: "uurwerk.live.answers")
         call.resolve(["answers": answers])
+    }
+
+    // The check-in buttons with an icon each. Capacitor registers them without; this replaces
+    // those two categories with the same identifiers and action ids, so its listener still gets
+    // every answer.
+    @objc func notificationButtons(_ call: CAPPluginCall) {
+        func action(_ id: String, _ title: String, _ symbol: String) -> UNNotificationAction {
+            if #available(iOS 15.0, *) {
+                return UNNotificationAction(identifier: id, title: title, options: [.foreground], icon: UNNotificationActionIcon(systemImageName: symbol))
+            }
+            return UNNotificationAction(identifier: id, title: title, options: [.foreground])
+        }
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationCategories { existing in
+            var categories = existing.filter { $0.identifier != "checkin-midway" && $0.identifier != "checkin-end" }
+            categories.insert(UNNotificationCategory(identifier: "checkin-midway", actions: [action("busy", "Ja, bezig", "play.fill"), action("notyet", "Nog niet", "xmark")], intentIdentifiers: [], options: []))
+            categories.insert(UNNotificationCategory(identifier: "checkin-end", actions: [action("done", "Gelukt", "checkmark"), action("notdone", "Nog niet af", "xmark")], intentIdentifiers: [], options: []))
+            center.setNotificationCategories(categories)
+            call.resolve()
+        }
     }
 
     @objc func setWidgetData(_ call: CAPPluginCall) {
