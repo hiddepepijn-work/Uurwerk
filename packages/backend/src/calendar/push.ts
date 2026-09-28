@@ -144,18 +144,26 @@ export { uidFor, isPlanUid, toEvent, sameAppointment }
 // a full reconcile, the event id in the UID. Imported events are never pushed back.
 
 const EVENT_UID_PREFIX = 'uurwerk-event-'
-const eventUid = (eventId: string): string => `${EVENT_UID_PREFIX}${eventId}@uurwerk.app`
+// The calendar it goes to is part of the UID: iCloud keeps a UID reserved for a while after its
+// calendar is deleted (412 on every PUT), so moving to another calendar needs fresh ones.
+const eventUid = (eventId: string, calendar = ''): string => `${EVENT_UID_PREFIX}${eventId}${calendar ? `-${shortHash(calendar)}` : ''}@uurwerk.app`
+
+function shortHash(text: string): string {
+  let hash = 5381
+  for (let index = 0; index < text.length; index++) hash = ((hash * 33) ^ text.charCodeAt(index)) >>> 0
+  return hash.toString(36)
+}
 const isEventUid = (uid: string): boolean => uid.startsWith(EVENT_UID_PREFIX)
 
 const sameEvent = (a: ParsedEvent, b: ParsedEvent): boolean =>
   sameAppointment(a, b) && (a.location ?? null) === (b.location ?? null) && a.allDay === b.allDay
 
 /** The entries Uurwerk made itself, as calendar events keyed by uid; imported ones never go back. */
-export function appointmentEvents(events: CalendarEvent[]): Map<string, ParsedEvent> {
+export function appointmentEvents(events: CalendarEvent[], calendar = ''): Map<string, ParsedEvent> {
   const wanted = new Map<string, ParsedEvent>()
   for (const event of events) {
     if (event.origin !== 'uurwerk' || event.cancelled || event.deletedAt) continue
-    const uid = eventUid(event.id)
+    const uid = eventUid(event.id, calendar)
     wanted.set(uid, {
       uid,
       summary: event.title,
@@ -181,7 +189,7 @@ export async function pushAppointments(backend: Backend, accountId: string, cale
   if (!calendar) throw new Error(`Calendar not found: ${calendarId}`)
   const provider = calDavProviderFor(backend, accountId)
 
-  const wanted = appointmentEvents(store.calendar.eventsInRange(from, to))
+  const wanted = appointmentEvents(store.calendar.eventsInRange(from, to), calendar.externalId)
 
   const existing = await provider.eventsIn(calendar.externalId, from, to)
   const onServer = new Map(existing.filter((event) => isEventUid(event.uid)).map((event) => [event.uid, event]))
@@ -210,3 +218,19 @@ export async function pushAppointments(backend: Backend, accountId: string, cale
 }
 
 export { eventUid, isEventUid }
+
+/** Everything Uurwerk planned in a window, as calendar events: its own agenda entries and the accepted plan. */
+export function feedEvents(backend: Backend, from: number, to: number): ParsedEvent[] {
+  const store = backend.store
+  const events = [...appointmentEvents(store.calendar.eventsInRange(from, to)).values()]
+  const days: string[] = []
+  for (let at = from; at < to; at += 86_400_000) {
+    const day = new Date(at)
+    days.push(`${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`)
+  }
+  for (const block of store.plans.acceptedBlocksForDays(days)) {
+    const event = toEvent(block)
+    if (event) events.push(event)
+  }
+  return events
+}

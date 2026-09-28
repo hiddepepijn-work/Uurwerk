@@ -129,3 +129,28 @@ export function writeCalendar(event: ParsedEvent, now = Date.now()): string {
   // Trailing CRLF: some servers treat a body without one as truncated.
   return `${lines.join('\r\n')}\r\n`
 }
+
+/**
+ * A whole calendar in one file, for a subscription (the iPhone's "Add Subscription
+ * Calendar"). The events are written as for CalDAV and taken out of their wrapper.
+ */
+export function writeFeed(events: ParsedEvent[], name: string, now = Date.now()): string {
+  const body = events.flatMap((event) => {
+    const lines = writeCalendar(event, now).split('\r\n')
+    return lines.slice(lines.indexOf('BEGIN:VEVENT'), lines.indexOf('END:VEVENT') + 1)
+  })
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    line('PRODID', UURWERK_PRODID),
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    line('X-WR-CALNAME', escapeText(name)),
+    // Ask the subscriber to look again every few minutes (iOS may choose to wait longer).
+    'REFRESH-INTERVAL;VALUE=DURATION:PT5M',
+    'X-PUBLISHED-TTL:PT5M',
+    ...body,
+    'END:VCALENDAR'
+  ]
+  return `${lines.join('\r\n')}\r\n`
+}

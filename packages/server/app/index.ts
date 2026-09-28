@@ -35,7 +35,8 @@ import { buildImplementation } from '@backend/implementation.js'
 import { installHost, unavailable, type SecretKey } from '@backend/host.js'
 import { log, setLogFile } from '@backend/log.js'
 import { ensureUurwerkCalendar, syncAllAccounts } from '@backend/calendar/index.js'
-import { pushAppointments } from '@backend/calendar/push.js'
+import { feedEvents, pushAppointments } from '@backend/calendar/push.js'
+import { writeFeed } from '@backend/calendar/ics-write.js'
 import type { TimeTrackerAPI } from '@core/contract/api.js'
 import type { Host } from '@backend/host.js'
 import type { Duplex } from 'node:stream'
@@ -64,6 +65,8 @@ export interface App {
     method: string,
     device: string
   ): Promise<void>
+  /** The agenda feed for a calendar subscription, or null when the token is wrong. */
+  feed(token: string): string | null
   /** A WebSocket upgrade (Jarvis's voice line); false when the path is not ours. */
   upgrade(request: IncomingMessage, socket: Duplex, head: Buffer, url: URL): boolean
   close(): void
@@ -341,6 +344,17 @@ export async function startApp(options: AppOptions): Promise<App> {
   return {
     handle,
     upgrade: handleVoiceUpgrade,
+    feed(token) {
+      // A long random token in the secrets (uurwerk-secrets set icalToken): the link itself is
+      // the key, as with any calendar subscription. Wrong or missing: nothing is given away.
+      const expected = secrets.get('icalToken')
+      if (!backend || !expected || expected.length < 24 || token.length !== expected.length) return null
+      let same = 0
+      for (let index = 0; index < token.length; index++) same |= token.charCodeAt(index) ^ expected.charCodeAt(index)
+      if (same !== 0) return null
+      const now = Date.now()
+      return writeFeed(feedEvents(backend, now - 7 * 86_400_000, now + 60 * 86_400_000), 'Uurwerk')
+    },
     close() {
       for (const timer of timers) clearInterval(timer)
       backend?.store.db.close()

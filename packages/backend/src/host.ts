@@ -33,6 +33,8 @@ export type SecretKey =
   | 'azureSpeechKey'
   // Jarvis's ear on the voice line: Deepgram Flux.
   | 'deepgramKey'
+  // The secret in the agenda feed's link (/ical/<token>.ics).
+  | 'icalToken'
   | `ics:${string}`
   | `icloud:${string}`
 

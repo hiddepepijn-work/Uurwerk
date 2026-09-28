@@ -27,6 +27,9 @@ const icloudKeyFor = (accountId: string): `icloud:${string}` => `icloud:${accoun
 /** The calendar Uurwerk creates and owns; the only one it ever writes to. */
 export const UURWERK_CALENDAR_NAME = 'Uurwerk'
 
+/** An entry Uurwerk wrote itself (a plan block or one of its own appointments). */
+export const isOwnUid = (uid: string): boolean => uid.startsWith('uurwerk-') && uid.endsWith('@uurwerk.app')
+
 /**
  * Adds a subscribed calendar.
  *
@@ -147,9 +150,10 @@ export async function ensureUurwerkCalendar(
     throw new Error('Only an iCloud account can hold the Uurwerk calendar.')
   }
 
-  const existing = (await provider.getCalendars()).find(
-    (calendar) => calendar.name === UURWERK_CALENDAR_NAME
-  )
+  const name = backend.store.settings.get().calendarPushTo.trim() || UURWERK_CALENDAR_NAME
+  const existing = (await provider.getCalendars()).find((calendar) => calendar.name === name)
+  // Only our own calendar is made on demand; a calendar of yours that is not there is a typo.
+  if (!existing && name !== UURWERK_CALENDAR_NAME) throw new Error(`No iCloud calendar named "${name}".`)
   const remote = existing ?? (await provider.createCalendar(UURWERK_CALENDAR_NAME))
 
   const local = backend.store.calendar.upsertCalendar({
@@ -159,8 +163,9 @@ export async function ensureUurwerkCalendar(
     writable: true
   })
 
-  // Nothing on it should ever block your planning: it *is* your planning.
-  backend.store.calendar.updateCalendar(local.id, { ignoreForPlanning: true })
+  // Nothing on our own calendar should block your planning: it *is* your planning. A calendar
+  // of yours keeps blocking it — your own appointments there are real.
+  if (remote.name === UURWERK_CALENDAR_NAME) backend.store.calendar.updateCalendar(local.id, { ignoreForPlanning: true })
   return local.id
 }
 
@@ -259,7 +264,9 @@ export async function syncAccount(backend: Backend, accountId: string): Promise<
         // them — a feedback loop that fills the week with its own output.
         if (calendar.name === UURWERK_CALENDAR_NAME) continue
 
-        const events = await provider.eventsIn(calendar.externalId, from, to)
+        // In a calendar of yours that Uurwerk also writes to, skip what it wrote: the same
+        // feedback loop, one entry at a time.
+        const events = (await provider.eventsIn(calendar.externalId, from, to)).filter((event) => !isOwnUid(event.uid))
         for (const event of events) seen.add(event.uid)
 
         const result = importEvents({

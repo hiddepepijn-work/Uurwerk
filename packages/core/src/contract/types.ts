@@ -1428,6 +1428,12 @@ export interface Settings {
   calendarAutoSync: boolean
   /** Minutes between refreshes. A published calendar is regenerated slowly anyway. */
   calendarSyncEveryMin: number
+  /**
+   * The iCloud calendar Uurwerk writes its own entries to, by name. "Uurwerk" is one it makes
+   * and owns; any other name is an existing calendar of yours, where it only ever touches
+   * the entries it wrote itself.
+   */
+  calendarPushTo: string
   /** Turn corrections into rules, so the same weekly meeting stops asking. */
   calendarLearn: boolean
   /** Say so when something was classified without asking, so it can be corrected. */

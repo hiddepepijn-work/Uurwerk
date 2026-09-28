@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { parseIcs, type ParsedEvent } from './ics-parse.js'
-import { escapeText, fold, toDateStamp, toUtcStamp, writeCalendar } from './ics-write.js'
+import { escapeText, fold, toDateStamp, toUtcStamp, writeCalendar, writeFeed } from './ics-write.js'
 
 const event = (overrides: Partial<ParsedEvent> = {}): ParsedEvent => ({
   uid: 'uurwerk-1@uurwerk.app',
@@ -154,5 +154,25 @@ describe('the primitives', () => {
 
   it('leaves a short line alone', () => {
     expect(fold('SUMMARY:Short')).toBe('SUMMARY:Short')
+  })
+})
+
+describe('a subscription feed', () => {
+  it('holds every event in one calendar and reads back whole', () => {
+    const text = writeFeed(
+      [event(), event({ uid: 'uurwerk-2@uurwerk.app', summary: 'Verjaardag', allDay: true, startsAt: Date.parse('2026-08-23T00:00:00'), endsAt: Date.parse('2026-08-24T00:00:00') })],
+      'Uurwerk'
+    )
+    expect(text.match(/BEGIN:VCALENDAR/g)).toHaveLength(1)
+    expect(text).toContain('X-WR-CALNAME:Uurwerk')
+    const parsed = parseIcs(text).events
+    expect(parsed.map((entry) => entry.summary)).toEqual(['Projectoverleg Maasarend', 'Verjaardag'])
+    expect(parsed[1]!.allDay).toBe(true)
+  })
+
+  it('is a valid empty calendar when nothing is planned', () => {
+    const text = writeFeed([], 'Uurwerk')
+    expect(text).toMatch(/^BEGIN:VCALENDAR\r\n[\s\S]*END:VCALENDAR\r\n$/)
+    expect(parseIcs(text).events).toHaveLength(0)
   })
 })

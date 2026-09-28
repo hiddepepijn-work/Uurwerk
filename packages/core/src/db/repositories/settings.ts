@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Twenty minutes: the publisher regenerates a shared calendar on its own schedule, so
   // asking more often mostly costs battery for the same file.
   calendarSyncEveryMin: 20,
+  calendarPushTo: 'Uurwerk',
   calendarLearn: true,
   calendarNotifyOnAuto: true,
   autoLaunch: true,

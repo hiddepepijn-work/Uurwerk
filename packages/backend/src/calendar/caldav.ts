@@ -363,17 +363,16 @@ export class CalDavProvider implements CalendarProvider {
     event: ParsedEvent
   ): Promise<{ externalId: string; etag: string | null }> {
     const url = this.resourceUrl(calendarExternalId, event.uid)
-    const { status, etag } = await this.request('PUT', url, {
-      body: writeCalendar(event),
-      headers: {
-        'Content-Type': 'text/calendar; charset=utf-8',
-        // Refuses rather than overwrites if something is already there.
-        'If-None-Match': '*'
-      }
-    })
+    const put = (headers: Record<string, string>) =>
+      this.request('PUT', url, { body: writeCalendar(event), headers: { 'Content-Type': 'text/calendar; charset=utf-8', ...headers } })
+    // Refuses rather than overwrites if something is already there.
+    let { status, etag, text } = await put({ 'If-None-Match': '*' })
+    // Already there, but not in the listing we reconciled against (a half-finished earlier
+    // push, a listing that lags): the URL carries our own UID, so it is ours to overwrite.
+    if (status === 412) ({ status, etag, text } = await put({}))
 
     if (status !== 201 && status !== 204 && status !== 200) {
-      throw new Error(`iCloud refused to create the event (${status}).`)
+      throw new Error(`iCloud refused to create the event (${status}): ${event.uid} ${text.replace(/\s+/g, ' ').slice(0, 300)}`)
     }
     return { externalId: url, etag }
   }

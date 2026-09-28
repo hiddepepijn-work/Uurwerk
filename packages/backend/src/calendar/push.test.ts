@@ -162,3 +162,16 @@ describe('appointments that reach the phone', () => {
     expect(parseIcs(ics).events[0]!.allDay).toBe(true)
   })
 })
+
+describe('the calendar in the uid', () => {
+  const event = (): CalendarEvent => ({ id: 'event-1', title: 'Tandarts', description: null, location: null, startsAt: 0, endsAt: 1, allDay: false, cancelled: false, deletedAt: null, origin: 'uurwerk' }) as CalendarEvent
+  it('gives each target calendar its own uids, still recognised as ours', () => {
+    const a = appointmentEvents([event()], 'https://p1/cal/a/')
+    const b = appointmentEvents([event()], 'https://p1/cal/b/')
+    const [uidA] = a.keys()
+    const [uidB] = b.keys()
+    expect(uidA).not.toBe(uidB)
+    expect(isEventUid(uidA!)).toBe(true)
+    expect(uidA).toMatch(/@uurwerk\.app$/)
+  })
+})

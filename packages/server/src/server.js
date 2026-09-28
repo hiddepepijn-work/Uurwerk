@@ -211,6 +211,18 @@ export async function createUurwerkServer(config = readConfig()) {
     }
 
     // ------------------------------------------------------------------ ingest
+    // ------------------------------------------------------------ agenda feed
+    // The iPhone's "Add Subscription Calendar": /ical/<token>.ics. No login (calendar apps
+    // cannot), so the token in the link is the key.
+    if (path.startsWith('/ical/')) {
+      // Calendar apps check a link with HEAD or a CalDAV probe before they GET it.
+      if (method !== 'GET' && method !== 'HEAD') return send(response, 405, '', { Allow: 'GET, HEAD' })
+      const token = path.slice('/ical/'.length).replace(/\.ics$/, '')
+      const body = app?.feed?.(token)
+      if (!body) return sendText(response, 404, 'Not found')
+      return send(response, 200, method === 'HEAD' ? undefined : body, { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-store' })
+    }
+
     if (path.startsWith('/publish/')) {
       return ingest(request, response, path.slice('/publish/'.length), method)
     }
