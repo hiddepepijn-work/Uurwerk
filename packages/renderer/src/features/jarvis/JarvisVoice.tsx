@@ -188,10 +188,12 @@ export function JarvisVoice({
 
   // A moment from a notification: Jarvis opens the conversation himself.
   const pendingMoment = useRef<'morning' | 'evening' | null>(null)
+  const pendingPrompt = useRef<string | null>(null)
   useEffect(
     () =>
-      events.on('jarvis:open', ({ moment }) => {
+      events.on('jarvis:open', ({ moment, prompt }) => {
         pendingMoment.current = moment
+        pendingPrompt.current = prompt ?? null
       }),
     []
   )
@@ -238,17 +240,25 @@ export function JarvisVoice({
     setProblem(null)
     const asked = pendingMoment.current
     pendingMoment.current = null
+    const prompt = pendingPrompt.current
+    pendingPrompt.current = null
     void api.jarvis
       .status()
       .then((status) => status.spend && setSpent(`${status.spend.usd.toFixed(2)} / ${status.spend.capUsd} deze maand`))
       .catch(() => undefined)
     // The first contact of the day opens the day, whatever it was opened for.
-    void (asked ? Promise.resolve(asked) : api.jarvis.status().then((status) => (status.openingDue ? 'morning' : null)).catch(() => null))
+    // A situation to open with (a check-in) goes first: the day's opening can wait for it.
+    void (prompt ? Promise.resolve(null) : asked ? Promise.resolve(asked) : api.jarvis.status().then((status) => (status.openingDue ? 'morning' : null)).catch(() => null))
       .then((moment) => {
         if (!alive.current) return
         return startLive(moment).then((ok) => {
-          if (ok || !alive.current) return
-          if (moment) void ask({ moment })
+          if (!alive.current) return
+          if (ok) {
+            if (prompt) live.current?.say(prompt)
+            return
+          }
+          if (prompt) void ask({ text: prompt })
+          else if (moment) void ask({ moment })
           else void listen()
         })
       })

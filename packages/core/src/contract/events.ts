@@ -36,7 +36,8 @@ export interface AppEvents {
    * names the destination and the renderer decides what that means.
    */
   /** Open Jarvis; a moment makes him start the conversation himself. */
-  'jarvis:open': { moment: 'morning' | 'evening' | null }
+  /** `prompt`: a situation Jarvis opens with (a check-in answered "nog niet"). */
+  'jarvis:open': { moment: 'morning' | 'evening' | null; prompt?: string }
   /** Laptop: the hotkey called Jarvis into the corner window. */
   'jarvis:summon': Record<string, never>
   'ui:open': { target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay' | 'addEvent' | 'agenda' }

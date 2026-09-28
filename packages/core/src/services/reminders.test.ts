@@ -86,3 +86,32 @@ describe('reminders', () => {
     expect(upcomingReminders([block(600, 690)], [], at(11), at(24))).toEqual([])
   })
 })
+
+describe('check-ins on planned tasks', () => {
+  const open = { priority: 'medium' as const, dueDate: null, status: 'open' as const }
+  const all = (taskOf: Parameters<typeof upcomingReminders>[4]) => upcomingReminders([block(14 * 60, 16 * 60)], [], at(0), at(24), taskOf)
+
+  it('asks halfway whether he started, and at the end whether it is done', () => {
+    const checkins = all(() => open).filter((reminder) => reminder.kind === 'checkin')
+    expect(checkins.map((reminder) => [reminder.checkin!.stage, reminder.at])).toEqual([
+      ['midway', at(15)],
+      ['end', at(16)]
+    ])
+    expect(checkins[0]!.title).toBe('Ben je al bezig met Architectuur onderzoek?')
+    expect(checkins[1]!.title).toBe('Is Architectuur onderzoek gelukt?')
+    expect(checkins.every((reminder) => reminder.checkin!.taskId === 't' && !reminder.checkin!.important)).toBe(true)
+  })
+
+  it('marks high priority, or a deadline within two days, as important', () => {
+    expect(all(() => ({ ...open, priority: 'high' })).find((reminder) => reminder.kind === 'checkin')!.checkin!.important).toBe(true)
+    expect(all(() => ({ ...open, dueDate: '2026-09-30' })).find((reminder) => reminder.kind === 'checkin')!.checkin!.important).toBe(true)
+    expect(all(() => ({ ...open, dueDate: '2026-10-09' })).find((reminder) => reminder.kind === 'checkin')!.checkin!.important).toBe(false)
+  })
+
+  it('skips a task that is already done, a short block halfway, and blocks without a task lookup', () => {
+    expect(all(() => ({ ...open, status: 'done' })).some((reminder) => reminder.kind === 'checkin')).toBe(false)
+    const short = upcomingReminders([block(14 * 60, 14 * 60 + 20)], [], at(0), at(24), () => open).filter((reminder) => reminder.kind === 'checkin')
+    expect(short.map((reminder) => reminder.checkin!.stage)).toEqual(['end'])
+    expect(all(undefined).some((reminder) => reminder.kind === 'checkin')).toBe(false)
+  })
+})

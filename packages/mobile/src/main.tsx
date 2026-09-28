@@ -34,7 +34,7 @@ import { App } from '@renderer/app/App.js'
 import './styles.css'
 
 import { openPhoneDatabase } from './database.js'
-import { onQuestionTapped, scheduleNotifications } from './notifications.js'
+import { onCheckinAnswered, onQuestionTapped, scheduleNotifications } from './notifications.js'
 import { AudioFocus, speakEvening, speakMorning } from './speech.js'
 import { PhoneSync } from './sync.js'
 import { widgetData } from './widget-data.js'
@@ -134,14 +134,45 @@ async function start(): Promise<void> {
       const plan = backend.store.plans.accepted('day', toIsoDate(day))
       if (plan) blocks.push(...backend.store.plans.blocks(plan.id))
     }
-    return upcomingReminders(blocks, backend.calendar.eventsInRange(fromMs, toMs + 86_400_000), fromMs, toMs)
+    return upcomingReminders(blocks, backend.calendar.eventsInRange(fromMs, toMs + 86_400_000), fromMs, toMs, (taskId) => backend.store.tasks.get(taskId))
   }
   // A changed plan moves its reminders; batched, because a replan is many writes.
   let rescheduleTimer: ReturnType<typeof setTimeout> | null = null
   const reschedule = (): void => {
     if (rescheduleTimer) clearTimeout(rescheduleTimer)
     rescheduleTimer = setTimeout(() => {
-      void scheduleNotifications(reminders).catch(() => undefined)
+      // Check-ins on planned tasks. "Gelukt" finishes it; "Ja, bezig" starts the timer if none runs;
+  // "Nog niet" on something important brings Jarvis in, who asks why and finds a new moment.
+  onCheckinAnswered((answer, checkin) => {
+    void (async () => {
+      const api = window.api!
+      console.info(`[jarvis] check-in ${checkin.stage}: ${answer} op "${checkin.task}"${checkin.important ? ' (belangrijk)' : ''}`)
+      if (answer === 'done') {
+        await api.tasks.complete(checkin.taskId, true)
+        emit('notify', { level: 'info', message: `${checkin.task} afgevinkt.` })
+        return
+      }
+      if (answer === 'busy') {
+        if (!(await api.tracking.currentRun())) await api.tracking.startRun(checkin.taskId)
+        emit('notify', { level: 'info', message: `Top, de timer loopt op ${checkin.task}.` })
+        return
+      }
+      if (answer === 'notyet' || answer === 'notdone') {
+        if (!checkin.important) {
+          emit('notify', { level: 'info', message: `Oké. ${checkin.task} blijft staan.` })
+          return
+        }
+        const why = checkin.stage === 'midway' ? `nog niet bezig is met "${checkin.task}", terwijl het nu gepland staat` : `"${checkin.task}" nog niet af heeft, terwijl het blok voorbij is`
+        emit('jarvis:open', {
+          moment: null,
+          prompt: `(Check-in. Hidde zegt dat hij ${why}. Het is belangrijk. Vraag kort en streng waarom, één vraag, en spreek daarna een nieuw moment af: schedule_task met move true, of unschedule_task als het echt niet meer hoeft.)`
+        })
+        return
+      }
+      emit('ui:open', { target: 'tasks' })
+    })()
+  })
+  void scheduleNotifications(reminders).catch(() => undefined)
       refreshWidgets()
     }, 5_000)
   }

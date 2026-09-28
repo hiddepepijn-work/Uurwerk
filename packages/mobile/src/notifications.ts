@@ -63,6 +63,7 @@ const SOUNDS = ['ochtend.caf', 'avond.caf', 'herinnering.caf', 'vertrek.caf']
 
 const REMINDER_SOUND: Record<Reminder['kind'], string | undefined> = {
   task: undefined,
+  checkin: undefined,
   appointment: undefined,
   gather: 'herinnering.caf',
   // The spoken one: "Hidde, lukt het? Nog een kwartier, dan moet je in de auto zitten."
@@ -129,6 +130,8 @@ export async function scheduleNotifications(
     soundsInstalled = true
   }
 
+  await registerCheckinButtons()
+
   const pending = await LocalNotifications.getPending()
   if (pending.notifications.length > 0) {
     await LocalNotifications.cancel({ notifications: pending.notifications.map(({ id }) => ({ id })) })
@@ -169,11 +172,43 @@ export async function scheduleNotifications(
       body: reminder.body,
       schedule: { at: new Date(reminder.at), allowWhileIdle: true },
       sound: REMINDER_SOUND[reminder.kind],
-      extra: { reminder: reminder.kind }
+      extra: { reminder: reminder.kind, ...(reminder.checkin ?? {}) },
+      ...(reminder.checkin ? { actionTypeId: reminder.checkin.stage === 'midway' ? 'checkin-midway' : 'checkin-end' } : {})
     })
   }
 
   if (notifications.length > 0) await LocalNotifications.schedule({ notifications })
+}
+
+let buttonsRegistered = false
+
+/**
+ * The answer buttons on a check-in. Each opens the app: iOS does not reliably run the app's
+ * code for a button pressed in the background, and "nog niet" should bring Jarvis anyway.
+ */
+async function registerCheckinButtons(): Promise<void> {
+  if (buttonsRegistered) return
+  buttonsRegistered = true
+  await LocalNotifications.registerActionTypes({
+    types: [
+      { id: 'checkin-midway', actions: [{ id: 'busy', title: 'Ja, bezig', foreground: true }, { id: 'notyet', title: 'Nog niet', foreground: true }] },
+      { id: 'checkin-end', actions: [{ id: 'done', title: 'Gelukt', foreground: true }, { id: 'notdone', title: 'Nog niet af', foreground: true }] }
+    ]
+  })
+}
+
+export type CheckinAnswer = 'busy' | 'notyet' | 'done' | 'notdone' | 'tap'
+
+/** An answer to a check-in: which task, which moment, and what he pressed. */
+export function onCheckinAnswered(
+  handle: (answer: CheckinAnswer, checkin: { taskId: string; stage: 'midway' | 'end'; important: boolean; task: string }) => void
+): void {
+  void LocalNotifications.addListener('localNotificationActionPerformed', ({ actionId, notification }) => {
+    const extra = (notification.extra ?? {}) as { reminder?: string; taskId?: string; stage?: 'midway' | 'end'; important?: boolean; task?: string }
+    if (extra.reminder !== 'checkin' || !extra.taskId || !extra.stage) return
+    const answer: CheckinAnswer = ['busy', 'notyet', 'done', 'notdone'].includes(actionId) ? (actionId as CheckinAnswer) : 'tap'
+    handle(answer, { taskId: extra.taskId, stage: extra.stage, important: !!extra.important, task: extra.task ?? 'je taak' })
+  })
 }
 
 /**

@@ -1130,6 +1130,28 @@ const COMPOUND: Scenario[] = [
       }
     ],
     toolBudget: 3
+  },
+  {
+    id: 'S24',
+    family: 'check-in',
+    category: 'challenge',
+    title: 'Check-in: nog niet bezig',
+    expect: 'Vraagt kort en streng waarom Hidde nog niet bezig is met Werkstuk inleveren (één vraag). Na "ik had geen zin, doe morgenavond om acht" verzet hij het blok naar morgen 20:00–21:00 (voorstel, na ja uitgevoerd).',
+    setup: async (api) => {
+      const task = await api.tasks.create({ title: 'Werkstuk inleveren', areaId: 'school', estimateMin: 60, priority: 'high' })
+      const proposed = (await runTool(api, 'schedule_task', { taskId: task.id, date: TODAY, start: '10:00', end: '11:00' })) as { pendingId?: string }
+      if (proposed.pendingId) await runTool(api, 'confirm', { pendingIds: [proposed.pendingId] })
+    },
+    turns: [
+      { text: '(Check-in. Hidde zegt dat hij nog niet bezig is met "Werkstuk inleveren", terwijl het nu gepland staat. Het is belangrijk. Vraag kort en streng waarom, één vraag, en spreek daarna een nieuw moment af: schedule_task met move true, of unschedule_task als het echt niet meer hoeft.)' },
+      { text: 'Ik had er gewoon geen zin in. Doe morgenavond om acht maar.' },
+      { text: 'Ja.' }
+    ],
+    checks: [
+      { after: 0, name: 'vraagt waarom', test: async (_api, turns) => turns[0]!.reply.includes('?') },
+      { after: 2, name: 'morgen 20:00', test: blockAt(D1, /werkstuk inleveren/i, '20:00', '21:00') }
+    ],
+    toolBudget: 5
   }
 ]
 
