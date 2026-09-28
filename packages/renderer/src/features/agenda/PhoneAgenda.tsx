@@ -3,10 +3,10 @@ import type { IsoDate } from '@core/contract/types.js'
 import { fromIsoDate, toIsoDate, toIsoWeek, weekRange } from '@core/util/time.js'
 import { useLiveQuery } from '../../hooks/useLiveQuery.js'
 import { EventComposer } from '../calendar/EventComposer.js'
-import { moveBlock } from './actions.js'
 import { ItemSheet, SlotSheet } from './AgendaSheets.js'
 import { agendaFor, colorFor, hhmm, OVERLAY_MIN, type AgendaItem, type AllDayItem } from './agenda-model.js'
-import { HOLD_MS, PressTracker, snapMinute, type PointerKind, type PressEvent } from './press.js'
+import { edgePx } from './drag.js'
+import { useTimelineDrag, type DragPreview } from './useTimelineDrag.js'
 
 /**
  * The phone's Agenda tab, in the widget's look: a day timeline as the main view and a
@@ -148,7 +148,8 @@ export function PhoneAgenda() {
  * With a `date` it is also where you plan by hand: tap an empty moment to put something
  * there, tap an item to see what it is, and move a task by dragging it — with the mouse by
  * pulling it, on the phone by holding it a moment first (press.ts), so scrolling through the
- * day never moves anything.
+ * day never moves anything. A mouse also stretches a task by its top or bottom edge, and Esc
+ * puts back a drag (useTimelineDrag.ts).
  */
 export function DayTimeline({
   items,
@@ -167,126 +168,18 @@ export function DayTimeline({
   const scroller = useScrollToNow(hourPx, nowMinute)
   const DAY_HOUR_PX = hourPx
   const area = useRef<HTMLDivElement>(null)
-  const press = useRef(new PressTracker())
-  const gesture = useRef<{ item: AgendaItem | null; grab: number; draggable: boolean; timer: number | null } | null>(null)
-  const dragging = useRef(false)
-  const [drag, setDrag] = useState<{ item: AgendaItem; startMin: number } | null>(null)
   const [slot, setSlot] = useState<number | null>(null)
   const [opened, setOpened] = useState<AgendaItem | null>(null)
-  const [problem, setProblem] = useState<string | null>(null)
-  const interactive = date !== undefined
-
-  // A finger dragging a block must not scroll the day underneath it.
-  useEffect(() => {
-    const element = scroller.current
-    if (!element) return
-    const hold = (event: TouchEvent): void => {
-      if (dragging.current) event.preventDefault()
-    }
-    element.addEventListener('touchmove', hold, { passive: false })
-    return () => element.removeEventListener('touchmove', hold)
-  }, [scroller])
-
-  const minuteAt = (clientY: number): number => {
-    const rect = area.current?.getBoundingClientRect()
-    return rect ? ((clientY - rect.top) / DAY_HOUR_PX) * 60 : 0
-  }
-
-  const finish = (): void => {
-    if (gesture.current?.timer) window.clearTimeout(gesture.current.timer)
-    gesture.current = null
-    dragging.current = false
-    window.removeEventListener('pointermove', onMove)
-    window.removeEventListener('pointerup', onUp)
-    window.removeEventListener('pointercancel', onCancel)
-  }
-
-  const handle = (event: PressEvent, clientY: number): void => {
-    const current = gesture.current
-    if (!current) return
-    if (event.type === 'click') {
-      finish()
-      if (current.item) setOpened(current.item)
-      else setSlot(Math.min(23 * 60 + 45, Math.floor(minuteAt(clientY) / 15) * 15))
-      return
-    }
-    if (event.type === 'drag-start') {
-      if (!current.draggable || !current.item) return
-      dragging.current = true
-      navigator.vibrate?.(12)
-      setDrag({ item: current.item, startMin: current.item.startMin })
-      return
-    }
-    if (event.type === 'drag-move' && current.draggable && current.item) {
-      const length = current.item.endMin - current.item.startMin
-      const start = Math.min(snapMinute(minuteAt(clientY) - current.grab), 24 * 60 - length)
-      setDrag({ item: current.item, startMin: Math.max(0, start) })
-      return
-    }
-    if (event.type === 'drag-end' && current.draggable && current.item) {
-      const item = current.item
-      const length = item.endMin - item.startMin
-      const start = Math.max(0, Math.min(snapMinute(minuteAt(clientY) - current.grab), 24 * 60 - length))
-      finish()
-      if (start === item.startMin || item.source.type !== 'block') {
-        setDrag(null)
-        return
-      }
-      void moveBlock(item.source.blockId, start, start + length)
-        .catch((error: unknown) => setProblem(error instanceof Error ? error.message : String(error)))
-        .finally(() => setDrag(null))
-      return
-    }
-    if (event.type === 'cancel' || event.type === 'drag-end') {
-      finish()
-      setDrag(null)
-    }
-  }
-
-  function onMove(event: PointerEvent): void {
-    handle(press.current.move(event.clientX, event.clientY, performance.now()), event.clientY)
-  }
-  function onUp(event: PointerEvent): void {
-    handle(press.current.up(event.clientX, event.clientY, performance.now()), event.clientY)
-    finish()
-  }
-  function onCancel(): void {
-    press.current.cancel()
-    finish()
-    setDrag(null)
-  }
-
-  const start = (event: React.PointerEvent, item: AgendaItem | null): void => {
-    if (!interactive || event.button !== 0 || gesture.current) return
-    event.stopPropagation()
-    const pointer = (event.pointerType === 'touch' || event.pointerType === 'pen' ? event.pointerType : 'mouse') as PointerKind
-    press.current.down(pointer, event.clientX, event.clientY, performance.now())
-    const draggable = !!item && item.kind === 'task' && item.source.type === 'block'
-    const y = event.clientY
-    gesture.current = {
-      item,
-      grab: item ? minuteAt(y) - item.startMin : 0,
-      draggable,
-      timer:
-        draggable && pointer !== 'mouse'
-          ? window.setTimeout(() => handle(press.current.hold(performance.now()), y), HOLD_MS)
-          : null
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    window.addEventListener('pointercancel', onCancel)
-  }
-
-  const ghost = drag
-    ? {
-        ...drag.item,
-        startMin: drag.startMin,
-        endMin: drag.startMin + (drag.item.endMin - drag.item.startMin),
-        lane: 0,
-        lanes: 1,
-        span: 1
-      }
-    : null
+  const { drag, problem, dismissProblem, pointerDown } = useTimelineDrag({
+    area,
+    scroller,
+    hourPx: DAY_HOUR_PX,
+    dates: date ? [date] : [],
+    enabled: date !== undefined,
+    onOpen: setOpened,
+    onEmpty: (_, minute) => setSlot(minute)
+  })
+  const ghost = drag ? ghostOf(drag) : null
 
   return (
     <div ref={scroller} className={`overflow-y-auto ${className}`}>
@@ -296,7 +189,7 @@ export function DayTimeline({
           ref={area}
           className="absolute top-[6px] right-0 bottom-0"
           style={{ left: GUTTER }}
-          onPointerDown={interactive ? (event) => start(event, null) : undefined}
+          onPointerDown={date ? (event) => pointerDown(event, null, date) : undefined}
         >
           {items.map((item) => (
             <Block
@@ -305,21 +198,14 @@ export function DayTimeline({
               hourPx={DAY_HOUR_PX}
               detailed
               dimmed={drag?.item.id === item.id}
-              onPointerDown={interactive ? (event) => start(event, item) : undefined}
+              onPointerDown={date ? (event) => pointerDown(event, item, date) : undefined}
             />
           ))}
           {ghost && <Block item={ghost} hourPx={DAY_HOUR_PX} detailed lifted />}
           {nowMinute !== null && <NowLine top={(nowMinute / 60) * DAY_HOUR_PX} />}
         </div>
       </div>
-      {problem && (
-        <button
-          onClick={() => setProblem(null)}
-          className="fixed right-4 bottom-24 left-4 z-40 rounded-[12px] border border-prio-med/40 bg-card px-4 py-3 text-left text-[13px] text-prio-med"
-        >
-          {problem}
-        </button>
-      )}
+      {problem && <ProblemNote text={problem} onDismiss={dismissProblem} />}
       {slot !== null && date && <SlotSheet date={date} minute={slot} onClose={() => setSlot(null)} />}
       {opened && <ItemSheet item={opened} onClose={() => setOpened(null)} />}
     </div>
@@ -328,12 +214,20 @@ export function DayTimeline({
 
 // ----------------------------------------------------------------- week
 
-/** Seven days in the widget's look, smaller. Shared with the desktop's Week screen. */
+/**
+ * Seven days in the widget's look, smaller. Shared with the desktop's Week screen.
+ *
+ * On the phone a day column is one big button to that day. `interactive` (the desktop)
+ * makes it the day timeline's gestures instead, across the week: click an item to see
+ * what it is, drag a task to another time or day, pull its edge to stretch it. A click on
+ * an empty moment still opens the day.
+ */
 export function WeekTimeline({
   days,
   today,
   nowMinute,
   onOpenDay,
+  interactive = false,
   hourPx = WEEK_HOUR_PX,
   className = 'min-h-0 flex-1 px-2 pb-4'
 }: {
@@ -341,11 +235,24 @@ export function WeekTimeline({
   today: IsoDate
   nowMinute: number
   onOpenDay: (date: IsoDate) => void
+  interactive?: boolean
   hourPx?: number
   className?: string
 }) {
   const scroller = useScrollToNow(hourPx, nowMinute)
   const WEEK_HOUR_PX = hourPx
+  const area = useRef<HTMLDivElement>(null)
+  const [opened, setOpened] = useState<AgendaItem | null>(null)
+  const { drag, problem, dismissProblem, pointerDown } = useTimelineDrag({
+    area,
+    scroller,
+    hourPx: WEEK_HOUR_PX,
+    dates: days.map((day) => day.date),
+    enabled: interactive,
+    onOpen: setOpened,
+    onEmpty: (date) => onOpenDay(date)
+  })
+  const ghost = drag ? ghostOf(drag) : null
 
   return (
     <div className={`flex flex-col ${className}`}>
@@ -388,23 +295,44 @@ export function WeekTimeline({
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
         <div className="relative" style={{ height: 24 * WEEK_HOUR_PX + 12 }}>
           <HourLines hourPx={WEEK_HOUR_PX} labels every={2} gutter={GUTTER - 8} />
-          <div className="absolute top-[6px] right-0 bottom-0 flex" style={{ left: GUTTER - 8 }}>
-            {days.map((day) => (
-              <button
-                key={day.date}
-                onClick={() => onOpenDay(day.date)}
-                aria-label={`Open ${day.date}`}
-                className={`relative h-full flex-1 border-l border-border/60 ${day.date === today ? 'bg-accent/5' : ''}`}
-              >
-                {day.items.map((item) => (
-                  <Block key={item.id} item={item} hourPx={WEEK_HOUR_PX} />
-                ))}
-                {day.date === today && <NowLine top={(nowMinute / 60) * WEEK_HOUR_PX} thin />}
-              </button>
-            ))}
+          <div ref={area} className="absolute top-[6px] right-0 bottom-0 flex" style={{ left: GUTTER - 8 }}>
+            {days.map((day) => {
+              const column = `relative h-full flex-1 border-l border-border/60 ${day.date === today ? 'bg-accent/5' : ''}`
+              const blocks = (
+                <>
+                  {day.items.map((item) => (
+                    <Block
+                      key={item.id}
+                      item={item}
+                      hourPx={WEEK_HOUR_PX}
+                      dimmed={drag?.item.id === item.id}
+                      onPointerDown={interactive ? (event) => pointerDown(event, item, day.date) : undefined}
+                    />
+                  ))}
+                  {ghost && drag?.date === day.date && (
+                    <>
+                      <Block item={ghost} hourPx={WEEK_HOUR_PX} lifted />
+                      <DragTime drag={drag} hourPx={WEEK_HOUR_PX} />
+                    </>
+                  )}
+                  {day.date === today && <NowLine top={(nowMinute / 60) * WEEK_HOUR_PX} thin />}
+                </>
+              )
+              return interactive ? (
+                <div key={day.date} className={column} onPointerDown={(event) => pointerDown(event, null, day.date)}>
+                  {blocks}
+                </div>
+              ) : (
+                <button key={day.date} onClick={() => onOpenDay(day.date)} aria-label={`Open ${day.date}`} className={column}>
+                  {blocks}
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>
+      {problem && <ProblemNote text={problem} onDismiss={dismissProblem} />}
+      {opened && <ItemSheet item={opened} onClose={() => setOpened(null)} />}
     </div>
   )
 }
@@ -488,6 +416,8 @@ function Block({
       }
     : {}
   const color = colorFor(item.areaId)
+  // The strips a mouse stretches a task by (useTimelineDrag reads `data-edge`).
+  const edge = onPointerDown && item.kind === 'task' && item.source.type === 'block' ? edgePx(height) : 0
 
   if (item.kind === 'break') {
     return (
@@ -550,7 +480,48 @@ function Block({
           {lifted ? `${hhmm(item.startMin)}–${hhmm(item.endMin)}` : item.meta}
         </div>
       )}
+      {edge > 0 && (
+        <>
+          <div data-edge="start" className="absolute top-0 right-0 left-0" style={{ height: edge, cursor: 'ns-resize' }} />
+          <div data-edge="end" className="absolute right-0 bottom-0 left-0" style={{ height: edge, cursor: 'ns-resize' }} />
+        </>
+      )}
     </div>
+  )
+}
+
+/** The dragged block as drawn: where it would land, the whole column wide. */
+const ghostOf = (drag: DragPreview): AgendaItem => ({
+  ...drag.item,
+  date: drag.date,
+  startMin: drag.startMin,
+  endMin: drag.endMin,
+  lane: 0,
+  lanes: 1,
+  span: 1
+})
+
+/** The time a dragged block would get, above it: a week's blocks are too small to say it. */
+function DragTime({ drag, hourPx }: { drag: DragPreview; hourPx: number }) {
+  return (
+    <div
+      className="pointer-events-none absolute left-0 z-30 rounded-[5px] bg-text px-1.5 font-mono text-[10px] leading-4 whitespace-nowrap text-bg tabular-nums"
+      style={{ top: Math.max(0, (drag.startMin / 60) * hourPx - 18) }}
+    >
+      {hhmm(drag.startMin)}–{hhmm(drag.endMin)}
+    </div>
+  )
+}
+
+/** A move that could not be saved; a click puts it away. */
+function ProblemNote({ text, onDismiss }: { text: string; onDismiss: () => void }) {
+  return (
+    <button
+      onClick={onDismiss}
+      className="fixed right-4 bottom-24 left-4 z-40 rounded-[12px] border border-prio-med/40 bg-card px-4 py-3 text-left text-[13px] text-prio-med"
+    >
+      {text}
+    </button>
   )
 }
 

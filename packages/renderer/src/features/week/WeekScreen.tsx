@@ -362,6 +362,7 @@ export function WeekScreen() {
           today={today}
           nowMinute={nowMinute}
           onOpenDay={setPlanningDate}
+          interactive
           hourPx={44}
           className="h-[680px] rounded-[16px] border border-border bg-card px-3 pt-3"
         />
@@ -398,6 +399,7 @@ export function WeekScreen() {
         </span>
         <span className="text-text-faint">
           Click a day to plan it.
+          {mode === 'plan' && ' Click a block to see it, drag it to move it, pull its edge to resize it.'}
           {mode !== 'plan' && ' Click empty space to add hours you did not track.'}
         </span>
       </div>

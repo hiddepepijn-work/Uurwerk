@@ -31,7 +31,23 @@ export async function placeTask(taskId: string, date: IsoDate, startMin: number,
   if (needsAccept) await api.plans.accept(planId)
 }
 
-/** A block dragged to another time on the same day, its length kept. */
+/** A block dragged to another time on the same day, or stretched there. */
 export async function moveBlock(blockId: string, startMin: number, endMin: number): Promise<void> {
   await api.plans.updateBlock(blockId, { startMin, endMin, source: 'manual', locked: true })
+}
+
+/**
+ * A task's block dragged to another day. Each day has its own plan, so the block cannot
+ * just change its date: it is placed in that day's plan first and only then taken out of
+ * its own, so a failure halfway leaves the task planned twice rather than not at all.
+ */
+export async function moveBlockToDay(
+  source: { blockId: string; taskId: string | null },
+  date: IsoDate,
+  startMin: number,
+  endMin: number
+): Promise<void> {
+  if (!source.taskId) throw new Error('Dit blok kan alleen binnen zijn eigen dag verschuiven.')
+  await placeTask(source.taskId, date, startMin, endMin)
+  await api.plans.removeBlock(source.blockId)
 }
