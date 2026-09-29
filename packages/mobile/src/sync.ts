@@ -9,6 +9,8 @@
 import { Preferences } from '@capacitor/preferences'
 
 import type { SyncStatus } from '@core/contract/api.js'
+import type { MoneyVaultStatus } from '@core/contract/types.js'
+import { MoneyVault, type VaultTransport } from '@core/money/vault.js'
 import type { Db } from '@core/db/index.js'
 import {
   acknowledge,
@@ -35,6 +37,8 @@ const TIMEOUT_MS = 30_000
 const KEY_URL = 'serverUrl'
 const KEY_TOKEN = 'deviceToken'
 const KEY_ADOPT = 'adoptAfterSwap'
+/** The Geld key (money/vault.ts). In Preferences: the app's own sandbox, like the device token. */
+const KEY_GELD = 'geldKey'
 
 export class PhoneSync {
   private timer: ReturnType<typeof setInterval> | null = null
@@ -47,16 +51,23 @@ export class PhoneSync {
   private lastError: string | null = null
   private url = ''
   private token = ''
+  private geldKey = ''
+  private moneySyncAt: number | null = null
+  private moneyError: string | null = null
+  private readonly moneyVault: MoneyVault
 
   constructor(
     private readonly db: Db,
     private readonly announce: (tables: Set<string>) => void
-  ) {}
+  ) {
+    this.moneyVault = new MoneyVault(db)
+  }
 
   /** Reads the stored link, finishes a pending download, starts the rounds. */
   async start(): Promise<void> {
     this.url = (await Preferences.get({ key: KEY_URL })).value ?? ''
     this.token = (await Preferences.get({ key: KEY_TOKEN })).value ?? ''
+    this.geldKey = (await Preferences.get({ key: KEY_GELD })).value ?? ''
 
     const adopt = (await Preferences.get({ key: KEY_ADOPT })).value
     if (adopt) {
@@ -138,6 +149,7 @@ export class PhoneSync {
       if (applied.applied > 0) {
         this.announce(new Set(response.feed.changes.map((change) => change.tbl)))
       }
+      await this.moneyRound()
       this.online = true
       this.lastError = null
       this.lastSyncAt = Date.now()
@@ -145,6 +157,53 @@ export class PhoneSync {
       this.online = false
       this.lastError = error instanceof Error ? error.message : String(error)
     }
+  }
+
+  // ------------------------------------------------------------ Geld
+
+  private readonly vaultTransport: VaultTransport = {
+    get: (since) => this.json('GET', `/api/geld/vault?since=${since}`),
+    post: (body) => this.json('POST', '/api/geld/vault', body)
+  }
+
+  /** Geld's sealed records, out and in. Its own error: it never holds up the rest. */
+  private async moneyRound(): Promise<void> {
+    if (!this.geldKey) return
+    try {
+      const result = await this.moneyVault.round(this.geldKey, this.vaultTransport)
+      if (result.applied > 0) this.announce(result.tables)
+      this.moneySyncAt = Date.now()
+      this.moneyError = null
+    } catch (error) {
+      this.moneyError = error instanceof Error ? error.message : String(error)
+    }
+  }
+
+  vaultStatus(): MoneyVaultStatus {
+    return {
+      enabled: Boolean(this.geldKey),
+      paired: this.paired,
+      lastSyncAt: this.moneySyncAt,
+      lastError: this.moneyError,
+      pending: this.moneyVault.pending()
+    }
+  }
+
+  async vaultSetup(passphrase: string): Promise<MoneyVaultStatus> {
+    if (!this.paired) throw new Error('Koppel de telefoon eerst aan de server (Instellingen → Sync).')
+    this.geldKey = await this.moneyVault.setup(passphrase, this.vaultTransport)
+    await Preferences.set({ key: KEY_GELD, value: this.geldKey })
+    await this.moneyRound()
+    return this.vaultStatus()
+  }
+
+  async vaultForget(): Promise<MoneyVaultStatus> {
+    this.geldKey = ''
+    await Preferences.remove({ key: KEY_GELD })
+    this.moneyVault.forget()
+    this.moneySyncAt = null
+    this.moneyError = null
+    return this.vaultStatus()
   }
 
   /** Links the phone. Always a download: the laptop put the data on the server first. */

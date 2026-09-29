@@ -127,6 +127,11 @@ async function start(): Promise<void> {
       },
       unpair: () => sync.unpair()
     },
+    moneyVault: {
+      vaultStatus: async () => sync.vaultStatus(),
+      vaultSetup: (passphrase) => sync.vaultSetup(passphrase),
+      vaultForget: async () => sync.vaultForget()
+    },
     fileFor: (artifact) => artifact.path
   })
 

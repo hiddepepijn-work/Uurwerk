@@ -20,6 +20,7 @@ import type {
 } from '@core/contract/api.js'
 import type { DayPlan, IsoDate, IsoWeek, PublishAudience, Settings } from '@core/contract/types.js'
 import { newId } from '@core/db/connection.js'
+import { MoneyLink } from '@core/money/link.js'
 import type { Store } from '@core/db/index.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 import { buildIndex } from '@core/services/publish.js'
@@ -829,6 +830,89 @@ export function buildImplementation(
         emitEvent('data:invalidated', { domain: 'tasks' })
       }
     },
+
+    // Geld: local to this copy. Every write tells the Geld screens to read again.
+    money: (() => {
+      const vault = () => {
+        const found = host().moneyVault
+        if (!found) throw new Error('Geld synchroniseren kan alleen vanaf een apparaat.')
+        return found
+      }
+      const bank = () => {
+        const found = host().bank
+        if (!found) throw new Error('De bank wordt opgehaald op de laptop; daar staat de sleutel.')
+        return found
+      }
+      const changed = <T>(value: T): T => {
+        emitEvent('data:invalidated', { domain: 'money' })
+        return value
+      }
+      // Agenda and tasks follow Geld (money/link.ts); what that touched is announced too.
+      const link = new MoneyLink(store)
+      const reconcile = (): void => {
+        const result = link.reconcile(toIsoDate(Date.now()))
+        if (result.tasks) emitEvent('data:invalidated', { domain: 'tasks' })
+        if (result.planning) {
+          emitEvent('data:invalidated', { domain: 'planning' })
+          emitEvent('data:invalidated', { domain: 'sessions' })
+        }
+        if (result.money) emitEvent('data:invalidated', { domain: 'money' })
+      }
+      const linked = <T>(value: T): T => {
+        reconcile()
+        return changed(value)
+      }
+      return {
+        state: async () => {
+          reconcile()
+          return store.money.state()
+        },
+        loadStarter: async () => changed(store.money.loadStarter()),
+        saveIncome: async (income) => changed(store.money.saveIncome(income)),
+        removeIncome: async (id) => changed(store.money.removeIncome(id)),
+        saveCost: async (cost) => changed(store.money.saveCost(cost)),
+        removeCost: async (id) => changed(store.money.removeCost(id)),
+        savePhase: async (phase) => changed(store.money.savePhase(phase)),
+        removePhase: async (id) => changed(store.money.removePhase(id)),
+        saveGoal: async (goal) => changed(store.money.saveGoal(goal)),
+        saveMilestone: async (milestone) => linked(store.money.saveMilestone(milestone)),
+        removeMilestone: async (id) => linked(store.money.removeMilestone(id)),
+        addEntry: async (entry) => changed(store.money.addEntry(entry)),
+        removeEntry: async (id) => changed(store.money.removeEntry(id)),
+        saveShift: async (shift) => {
+          const saved = store.money.saveShift(shift)
+          link.pushShift(saved)
+          emitEvent('data:invalidated', { domain: 'planning' })
+          return linked(saved)
+        },
+        removeShift: async (id) => {
+          link.dropShift(id)
+          store.money.removeShift(id)
+          emitEvent('data:invalidated', { domain: 'planning' })
+          return linked(undefined)
+        },
+        shiftWarnings: async () => store.money.state().shifts.filter((shift) => link.nightBeforeStage(shift)).map((shift) => shift.id),
+        saveProfile: async (profile) => changed(store.money.saveProfile(profile)),
+        close: async (month) => linked(store.money.close(month, toIsoDate(Date.now()))),
+        reopen: async (month) => linked(store.money.reopen(month)),
+        vaultStatus: async () => vault().vaultStatus(),
+        vaultSetup: async (passphrase) => changed(await vault().vaultSetup(passphrase)),
+        vaultForget: async () => vault().vaultForget(),
+        bankStatus: async () =>
+          host().bank?.status() ?? { here: false, canFetch: false, connected: false, validUntil: null, lastFetchAt: null, lastError: null },
+        bankConnect: async (applicationId, pem) => bank().connect(applicationId, pem),
+        bankFinish: async (code) => changed(await bank().finish(code)),
+        bankRefresh: async () => {
+          await bank().fetch(true)
+          return bank().status()
+        },
+        bankDisconnect: async () => changed(await bank().disconnect()),
+        saveManualSavings: async (input) => changed(store.money.saveManualSavings(input)),
+        setAccountRole: async (uid, role, lockedUntil) => changed(store.money.setAccountRole(uid, role, lockedUntil)),
+        sortTransaction: async (id, kind, refId, remember) => changed(store.money.sortTransaction(id, kind, refId, remember)),
+        removeRule: async (id) => changed(store.money.removeRule(id))
+      }
+    })(),
 
     assistant: {
       rules: async () => store.rules.list(),

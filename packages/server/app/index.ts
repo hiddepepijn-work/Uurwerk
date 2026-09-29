@@ -11,6 +11,8 @@
  *   PUT  /api/files/{id}.{ext} the bytes of a screenshot or timelapse
  *   POST /api/rpc/{domain}/{method}  any TimeTrackerAPI call, run here
  *   GET  /api/events           server-sent events, for a browser or phone watching live
+ *   GET  /api/geld/vault?since=n   Geld's sealed records newer than n (geld-vault.ts)
+ *   POST /api/geld/vault       sealed Geld records in; the server cannot read them
  *
  * server.js checks the token and hands over the device's name; nothing in here trusts a
  * request that did not come through that check.
@@ -38,9 +40,11 @@ import { ensureUurwerkCalendar, syncAllAccounts } from '@backend/calendar/index.
 import { feedEvents, pushAppointments } from '@backend/calendar/push.js'
 import { writeFeed } from '@backend/calendar/ics-write.js'
 import type { TimeTrackerAPI } from '@core/contract/api.js'
+import type { VaultPush } from '@core/money/vault.js'
 import type { Host } from '@backend/host.js'
 import type { Duplex } from 'node:stream'
 
+import { GeldVault } from './geld-vault.js'
 import { createJarvis } from './jarvis/index.js'
 import { handleVoiceUpgrade } from './jarvis/voice.js'
 
@@ -79,6 +83,8 @@ const FILE_NAME = /^[0-9a-f-]{36}\.(jpg|jpeg|png|webm)$/
 
 /** What no remote caller may run here: there is no screen, no window, no second server. */
 const NOT_OVER_RPC = new Set([
+  // Geld lives on the devices only; here it exists as sealed records (geld-vault.ts).
+  'money',
   'window',
   'startup',
   'sync',
@@ -96,6 +102,7 @@ export async function startApp(options: AppOptions): Promise<App> {
   setLogFile(() => join(options.dataDir, 'uurwerk.log'))
 
   const listeners = new Set<(event: AppEventName, payload: unknown) => void>()
+  const geldVault = new GeldVault(options.dataDir)
 
   // ---------------------------------------------------------------- secrets
   // Plain JSON, mode 0600, in a directory only the service user can read. There is no OS
@@ -238,6 +245,22 @@ export async function startApp(options: AppOptions): Promise<App> {
         schema: backend ? schemaVersion(backend.store.db) : currentSchema(),
         device
       })
+    }
+
+    if (path === '/api/geld/vault' && method === 'GET') {
+      const since = Number(new URL(request.url ?? '/', 'http://local').searchParams.get('since') ?? '0')
+      return json(response, 200, geldVault.feed(Number.isFinite(since) ? since : 0))
+    }
+
+    if (path === '/api/geld/vault' && method === 'POST') {
+      try {
+        const stored = geldVault.put(JSON.parse((await readBody(request, MAX_SYNC)).toString('utf8')) as VaultPush)
+        // The other devices pull at once, like any other change.
+        for (const listener of listeners) listener('data:invalidated', { domain: 'money' })
+        return json(response, 200, stored)
+      } catch (error) {
+        return json(response, 409, { error: error instanceof Error ? error.message : String(error) })
+      }
     }
 
     if (path === '/api/sync/snapshot' && method === 'PUT') {

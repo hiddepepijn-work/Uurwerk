@@ -1552,3 +1552,231 @@ export interface JarvisProposal {
   createdAt: number
   expiresAt: number
 }
+
+// ------------------------------------------------------------------ money (Geld)
+
+/**
+ * Geld: personal finance, kept on this copy only (tables `_geld_*`, never synced in the clear).
+ * Every amount is in euro cents, every date a local 'YYYY-MM-DD', every month 'YYYY-MM'.
+ */
+export type IsoMonth = string
+
+/**
+ * How an income arrives.
+ *   fixed  — the same amount on a day of the month (stagevergoeding, Belastingdienst)
+ *   weekly — a monthly estimate paid per week on the pay weekday, a week late (Adecco fulltime)
+ *   shifts — per worked shift; the amount follows the pay profile (Adecco next to the internship)
+ *   open   — not known yet; shown, never counted (Maasarend, EcoVi)
+ */
+export type MoneyIncomeKind = 'fixed' | 'weekly' | 'shifts' | 'open'
+
+export interface MoneyIncome {
+  id: string
+  name: string
+  kind: MoneyIncomeKind
+  amountCents: number | null
+  /** Day of the month it arrives (fixed); ignored for the other kinds. */
+  day: number | null
+  from: IsoDate | null
+  until: IsoDate | null
+}
+
+export interface MoneyCost {
+  id: string
+  name: string
+  category: string
+  amountCents: number
+  day: number
+  from: IsoDate | null
+  until: IsoDate | null
+}
+
+/** A stretch of months with its own budget and savings plan. */
+export interface MoneyPhase {
+  id: string
+  name: string
+  from: IsoDate
+  until: IsoDate
+  budgetCents: number
+  /** Planned monthly saving toward the goal; null = everything that is left. */
+  savingCents: number | null
+}
+
+export interface MoneyGoal {
+  id: string
+  name: string
+  /** What must be on the account on the date, after the milestones are paid. */
+  onAccountCents: number
+  /** Where the pot starts; negative when you begin in the red. */
+  startCents: number
+  date: IsoDate
+}
+
+/** Something paid out of the pot before the date: a flight, vaccinations. */
+export interface MoneyMilestone {
+  id: string
+  name: string
+  date: IsoDate
+  amountCents: number
+  paid: boolean
+}
+
+/**
+ *   spend    — out of the monthly budget
+ *   saving   — into the goal pot
+ *   extra    — into (positive) or out of (negative) the Extra account
+ *   shiftPay — a pay-out for shifts that arrived
+ */
+export type MoneyEntryKind = 'spend' | 'saving' | 'extra' | 'shiftPay'
+
+export interface MoneyEntry {
+  id: string
+  date: IsoDate
+  kind: MoneyEntryKind
+  amountCents: number
+  note: string
+  category: string | null
+  createdAt: number
+}
+
+export interface PremiumWindow {
+  /** 'HH:MM'; '24:00' is the end of the day. */
+  from: string
+  to: string
+  percent: number
+}
+
+export interface ShiftTemplate {
+  key: string
+  label: string
+  start: string
+  end: string
+  breakMinutes: number
+  /** When the unpaid break starts — it decides which premium window loses the minutes. */
+  breakAt: string
+}
+
+export interface PayProfile {
+  id: string
+  name: string
+  hourlyCents: number
+  kmOneWay: number
+  kmCents: number
+  /** Net divided by gross; learnt from pay slips, 0.9 until then. */
+  netFactor: number
+  premiums: PremiumWindow[]
+  templates: ShiftTemplate[]
+}
+
+export type MoneyShiftStatus = 'planned' | 'worked'
+
+export interface MoneyShift {
+  id: string
+  date: IsoDate
+  template: string
+  status: MoneyShiftStatus
+}
+
+/** A closed month: what went where. */
+export interface MoneyClosing {
+  month: IsoMonth
+  savingCents: number
+  fromExtraCents: number
+  extraCents: number
+  budgetLeftCents: number
+  closedAt: number
+}
+
+/** Everything Geld keeps, in one read: the screens compute from this. */
+export interface MoneyState {
+  accounts: MoneyAccount[]
+  transactions: MoneyTransaction[]
+  rules: MoneyRule[]
+  incomes: MoneyIncome[]
+  costs: MoneyCost[]
+  phases: MoneyPhase[]
+  goal: MoneyGoal | null
+  milestones: MoneyMilestone[]
+  entries: MoneyEntry[]
+  shifts: MoneyShift[]
+  profile: PayProfile | null
+  closings: MoneyClosing[]
+}
+
+export type NewMoneyEntry = Omit<MoneyEntry, 'id' | 'createdAt'>
+
+/** The encrypted sync of Geld between this device and the others (core/money/vault.ts). */
+export interface MoneyVaultStatus {
+  /** This device holds a key: Geld goes along with every sync round. */
+  enabled: boolean
+  /** The device is linked to the server at all; without it there is nothing to sync with. */
+  paired: boolean
+  lastSyncAt: number | null
+  lastError: string | null
+  /** Rows waiting to go out. */
+  pending: number
+}
+
+// ------------------------------------------------------------------ money: the bank
+
+/** A linked bank account. The savings account is the trip pot and can be locked until a date. */
+export interface MoneyAccount {
+  uid: string
+  iban: string
+  name: string
+  role: 'betaal' | 'spaar' | 'other'
+  /** Savings: withdrawals before this date that are not a milestone count as borrowed. */
+  lockedUntil: IsoDate | null
+  balanceCents: number | null
+  balanceDate: IsoDate | null
+}
+
+/**
+ * What a transaction is, once sorted:
+ *   spend     — out of the monthly budget
+ *   income    — a fixed income arrived (refId: the income)
+ *   shiftPay  — Adecco
+ *   cost      — a fixed cost was paid (refId: the cost)
+ *   saving    — from the current account into the savings account
+ *   milestone — paid for something booked ahead (refId: the milestone)
+ *   borrowed  — taken from the locked savings for something else
+ *   transfer  — between your own accounts, nothing else
+ *   ignore    — does not belong in any overview
+ *   null      — not sorted yet: shown under "nakijken"
+ */
+export type MoneyTransactionKind = 'spend' | 'income' | 'shiftPay' | 'cost' | 'saving' | 'milestone' | 'borrowed' | 'transfer' | 'ignore'
+
+export interface MoneyTransaction {
+  id: string
+  accountUid: string
+  date: IsoDate
+  /** Negative = out. */
+  amountCents: number
+  counterparty: string
+  counterIban: string | null
+  description: string
+  pending: boolean
+  kind: MoneyTransactionKind | null
+  refId: string | null
+  /** Sorted by hand: automatic sorting leaves it alone from then on. */
+  manual: boolean
+}
+
+/** "Contains this text → this kind": what you taught Uurwerk by sorting a transaction. */
+export interface MoneyRule {
+  id: string
+  pattern: string
+  kind: MoneyTransactionKind
+  refId: string | null
+}
+
+export interface MoneyBankStatus {
+  /** This device fetches from the bank at all (the laptop); the phone only receives. */
+  here: boolean
+  /** This device can fetch (it holds the key); the others get the transactions through the vault. */
+  canFetch: boolean
+  connected: boolean
+  validUntil: string | null
+  lastFetchAt: number | null
+  lastError: string | null
+}

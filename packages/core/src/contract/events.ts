@@ -24,7 +24,7 @@ export interface AppEvents {
   /** Encoding a day into a timelapse, which takes seconds rather than milliseconds. */
   'timelapse:progress': { date: string; done: number; total: number }
   /** Data changed behind the frontend's back — refetch the named domain. */
-  'data:invalidated': { domain: 'tasks' | 'sessions' | 'planning' | 'artifacts' | 'reports' | 'settings' }
+  'data:invalidated': { domain: 'tasks' | 'sessions' | 'planning' | 'artifacts' | 'reports' | 'settings' | 'money' }
   /** The weekly report job ran. */
   'report:generated': { week: string; docxPath: string }
   /** Something the user should see, surfaced as a toast. */
@@ -42,7 +42,7 @@ export interface AppEvents {
   'jarvis:open': { moment: 'morning' | 'evening' | null; prompt?: string }
   /** Laptop: the hotkey called Jarvis into the corner window. */
   'jarvis:summon': Record<string, never>
-  'ui:open': { target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay' | 'addEvent' | 'agenda' }
+  'ui:open': { target: 'switcher' | 'endOfDay' | 'today' | 'tasks' | 'planDay' | 'addEvent' | 'agenda' | 'money' }
 }
 
 export type AppEventName = keyof AppEvents

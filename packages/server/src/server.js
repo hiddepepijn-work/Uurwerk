@@ -30,6 +30,7 @@ import {
   sendText
 } from './http.js'
 import { DeviceStore } from './devices.js'
+import { geldPage } from './geld-pages.js'
 import { Library } from './library.js'
 import { Sessions } from './sessions.js'
 import { BlobStore, contentTypeOf, isSafeName } from './storage.js'
@@ -228,6 +229,12 @@ export async function createUurwerkServer(config = readConfig()) {
     }
 
     // ------------------------------------------------------------------ public
+    // Geld's bank return page and the two pages its bank application links to.
+    if (path.startsWith('/geld/') && method === 'GET') {
+      const html = geldPage(path, url)
+      if (html) return send(response, 200, html, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
+    }
+
     if (path === '/style.css' && method === 'GET') {
       return send(response, 200, STYLESHEET, {
         'Content-Type': 'text/css; charset=utf-8',

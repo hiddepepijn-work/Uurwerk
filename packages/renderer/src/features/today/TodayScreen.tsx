@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { MoneyTodayCard } from '../money/MoneyTodayCard.js'
 import type { Task } from '@core/contract/types.js'
 import { useLiveQuery } from '../../hooks/useLiveQuery.js'
 import { useThisWeek, useToday } from '../../hooks/useToday.js'
@@ -233,6 +234,7 @@ export function TodayScreen({
 
         {/* --------------------------------------------------------- right */}
         <aside className="flex flex-col gap-4">
+          <MoneyTodayCard onOpen={() => onNavigate('money')} />
           <TopPriority
             tasks={topTasks}
             activeTaskId={tracking.taskId}

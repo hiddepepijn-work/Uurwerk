@@ -10,6 +10,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import type { Backend } from '@backend/create.js'
 import type { Host } from '@backend/host.js'
 import type { SyncClient } from '@backend/sync-client.js'
+import type { BankLink } from '@backend/bank.js'
 
 import { captureNow } from './capture.js'
 import { emitEvent } from './events.js'
@@ -20,7 +21,7 @@ import { buildTimelapse } from './timelapse.js'
 import { hearWakeAudio } from './wake-listener.js'
 import { hideJarvis, openAppFromJarvis, setJarvisInteractive, showJarvis } from './windows.js'
 
-export function electronHost(backend: Backend, sync: SyncClient): Host {
+export function electronHost(backend: Backend, sync: SyncClient, bank: BankLink): Host {
   return {
     emit: (event, payload) => {
       emitEvent(event, payload)
@@ -82,6 +83,12 @@ export function electronHost(backend: Backend, sync: SyncClient): Host {
         return sync.status()
       },
       unpair: async () => sync.unpair()
+    },
+    bank,
+    moneyVault: {
+      vaultStatus: async () => sync.vaultStatus(),
+      vaultSetup: (passphrase) => sync.vaultSetup(passphrase),
+      vaultForget: async () => sync.vaultForget()
     },
     fileFor: (artifact) => artifact.path
   }

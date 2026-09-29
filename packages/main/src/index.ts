@@ -13,6 +13,7 @@ import { decideResume, type ArmedResume } from '@core/services/idle-resume.js'
 import { createBackend, type Backend } from '@backend/create.js'
 import { installHost } from '@backend/host.js'
 import { finishAdoption, swapInDownloadedCopy, SyncClient } from '@backend/sync-client.js'
+import { BankLink } from '@backend/bank.js'
 import { emitEvent } from './events.js'
 import { electronHost } from './host.js'
 import { registerIpc } from './ipc.js'
@@ -64,7 +65,8 @@ function start(): void {
   swapInDownloadedCopy(dbPath())
   backend = createBackend(dbPath())
   syncClient = new SyncClient(backend, dbPath())
-  installHost(electronHost(backend, syncClient))
+  const bank = new BankLink(backend)
+  installHost(electronHost(backend, syncClient, bank))
   finishAdoption(backend)
   const settings = backend.store.settings.get()
 
@@ -107,6 +109,10 @@ function start(): void {
   // Capture follows tracking, so the loop is safe to start here: with no run open it does
   // nothing but read a settings row every ten seconds.
   startCapture(backend)
+  // The bank: checked every half hour, read at most every six (PSD2 allows four unattended
+  // reads a day). Opening Geld reads sooner.
+  setInterval(() => void bank.fetch(false), 30 * 60_000)
+  setTimeout(() => void bank.fetch(false), 60_000)
 
   // Keep the tray in step with tracking, wherever the change came from.
   backend.trackingService.onChange((segment, reason) => {

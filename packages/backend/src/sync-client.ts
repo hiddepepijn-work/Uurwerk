@@ -18,6 +18,9 @@ import { extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import type { SyncStatus } from '@core/contract/api.js'
+import type { MoneyVaultStatus } from '@core/contract/types.js'
+import { wipeMoneyFromCopy } from '@core/money/schema.js'
+import { MoneyVault, type VaultTransport } from '@core/money/vault.js'
 import {
   acknowledge,
   adoptSnapshot,
@@ -64,11 +67,15 @@ export class SyncClient {
   private lastSyncAt: number | null = null
   private lastError: string | null = null
   private secretsHandedOver = false
+  private readonly moneyVault: MoneyVault
+  private moneySyncAt: number | null = null
+  private moneyError: string | null = null
 
   constructor(
     private readonly backend: Backend,
     private readonly dbPath: string
   ) {
+    this.moneyVault = new MoneyVault(backend.store.db)
     backend.store.db.exec(`
       CREATE TABLE IF NOT EXISTS _uploaded_files (
         artifact_id TEXT PRIMARY KEY,
@@ -167,6 +174,7 @@ export class SyncClient {
 
       if (applied.applied > 0) this.announce(response.feed.changes)
       await this.uploadFiles()
+      await this.moneyRound()
 
       this.online = true
       this.lastError = null
@@ -182,6 +190,57 @@ export class SyncClient {
       // Offline is expected; only a real refusal is worth more than a line in the log.
       log.info('Sync round did not complete; changes stay queued.', this.lastError)
     }
+  }
+
+  // ------------------------------------------------------------ Geld
+
+  private readonly vaultTransport: VaultTransport = {
+    get: (since) => this.request('GET', `/api/geld/vault?since=${since}`),
+    post: (body) => this.request('POST', '/api/geld/vault', body)
+  }
+
+  /**
+   * Geld's part of a round: sealed records out, sealed records in (core/money/vault.ts). Its own
+   * error, so a problem here never holds up the rest of the sync.
+   */
+  private async moneyRound(): Promise<void> {
+    const key = host().secrets.get('geldKey')
+    if (!key) return
+    try {
+      const result = await this.moneyVault.round(key, this.vaultTransport)
+      if (result.applied > 0) emitEvent('data:invalidated', { domain: 'money' })
+      this.moneySyncAt = Date.now()
+      this.moneyError = null
+    } catch (error) {
+      this.moneyError = error instanceof Error ? error.message : String(error)
+      log.info('Geld did not sync this round.', this.moneyError)
+    }
+  }
+
+  vaultStatus(): MoneyVaultStatus {
+    return {
+      enabled: Boolean(host().secrets.get('geldKey')),
+      paired: this.paired,
+      lastSyncAt: this.moneySyncAt,
+      lastError: this.moneyError,
+      pending: this.moneyVault.pending()
+    }
+  }
+
+  async vaultSetup(passphrase: string): Promise<MoneyVaultStatus> {
+    if (!this.paired) throw new Error('Koppel dit apparaat eerst aan de server (Instellingen → Sync).')
+    const key = await this.moneyVault.setup(passphrase, this.vaultTransport)
+    host().secrets.set('geldKey', key)
+    await this.moneyRound()
+    return this.vaultStatus()
+  }
+
+  vaultForget(): MoneyVaultStatus {
+    host().secrets.set('geldKey', '')
+    this.moneyVault.forget()
+    this.moneySyncAt = null
+    this.moneyError = null
+    return this.vaultStatus()
   }
 
   /** Tells the screens which parts of the data moved underneath them. */
@@ -280,6 +339,8 @@ export class SyncClient {
       const file = join(tmpdir(), `uurwerk-upload-${Date.now()}.db`)
       try {
         db.exec(`VACUUM INTO '${file.replace(/\\/g, '/').replace(/'/g, "''")}'`)
+        // Geld stays on this machine: the copy for the server leaves without it.
+        wipeMoneyFromCopy(db, file)
         const { seq } = await this.request<{ seq: number }>(
           'PUT',
           '/api/sync/snapshot',

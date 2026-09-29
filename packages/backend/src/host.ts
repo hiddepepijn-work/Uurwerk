@@ -35,6 +35,12 @@ export type SecretKey =
   | 'deepgramKey'
   // The secret in the agenda feed's link (/ical/<token>.ics).
   | 'icalToken'
+  // The key Geld is encrypted with before it goes to the server; derived from a passphrase.
+  | 'geldKey'
+  // Enable Banking (read-only bank access): the application, its RSA key, and the session.
+  | 'bankApp'
+  | 'bankKey'
+  | 'bankSession'
   | `ics:${string}`
   | `icloud:${string}`
 
@@ -63,6 +69,10 @@ export interface Host {
   relaunch(): Promise<void>
   /** This copy and the server. Only a device has one; on the server every call refuses. */
   sync: TimeTrackerAPI['sync']
+  /** Geld's encrypted sync, run by the same client as `sync`. Devices only; the server has none. */
+  moneyVault?: Pick<TimeTrackerAPI['money'], 'vaultStatus' | 'vaultSetup' | 'vaultForget'>
+  /** The bank link: only where the Enable Banking key is (the laptop). */
+  bank?: import('./bank.js').BankLink
   /**
    * Where the bytes of a screenshot or timelapse are on this machine. The laptop keeps them
    * where it wrote them; the server keeps uploads under the artifact id, because the path in

@@ -20,5 +20,6 @@ export function invalidatedDomains(tables: Set<string>): Domain[] {
   ) {
     domains.push('settings')
   }
+  if ([...tables].some((name) => name.startsWith('_geld_'))) domains.push('money')
   return domains
 }

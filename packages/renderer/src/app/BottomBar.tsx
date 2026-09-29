@@ -27,7 +27,8 @@ export function BottomBar({
 }) {
   const [moreOpen, setMoreOpen] = useState(false)
   const primary = ITEMS.filter((item) => PRIMARY.includes(item.id))
-  const rest = ITEMS.filter((item) => !PRIMARY.includes(item.id))
+  // Geld first and full width: of everything behind More, it is the one opened most.
+  const rest = ITEMS.filter((item) => !PRIMARY.includes(item.id)).sort((a, b) => Number(b.id === 'money') - Number(a.id === 'money'))
   const inRest = rest.some((item) => item.id === active)
   // A soft green glow springs to the active tab: measured from the tab, drawn as a circle on it.
   const activeTab = moreOpen || inRest ? 'more' : active
@@ -56,8 +57,8 @@ export function BottomBar({
                 // The tiles pop in one after another.
                 style={{ '--i': index } as CSSProperties}
                 className={`animate-pop-in motion-press flex h-16 items-center gap-3 rounded-[16px] px-4 text-[15px] font-bold ${
-                  id === active ? 'bg-rail-active text-accent-soft' : 'bg-input text-text'
-                }`}
+                  id === 'money' ? 'col-span-2' : ''
+                } ${id === active || id === 'money' ? 'bg-rail-active text-accent-soft' : 'bg-input text-text'}`}
               >
                 <Icon size={22} />
                 {label}

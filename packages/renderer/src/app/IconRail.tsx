@@ -5,8 +5,10 @@ import {
   ClockIcon,
   DocumentIcon,
   FolderIcon,
-  GearIcon
+  GearIcon,
+  WalletIcon
 } from '../ui/icons.js'
+import { Fragment } from 'react'
 import mark from '../assets/uurwerk-mark.png'
 import wordmark from '../assets/uurwerk-wordmark.png'
 import { HotkeyLegend } from './HotkeyLegend.js'
@@ -19,9 +21,10 @@ export type Screen =
   | 'projects'
   | 'reports'
   | 'statistics'
+  | 'money'
   | 'settings'
 
-export const ITEMS: Array<{ id: Screen; label: string; Icon: typeof ClockIcon }> = [
+export const ITEMS: Array<{ id: Screen; label: string; Icon: typeof ClockIcon; apart?: boolean }> = [
   { id: 'today', label: 'Today', Icon: ClockIcon },
   { id: 'week', label: 'Week', Icon: CalendarIcon },
   { id: 'tasks', label: 'Tasks', Icon: ChecklistIcon },
@@ -29,6 +32,9 @@ export const ITEMS: Array<{ id: Screen; label: string; Icon: typeof ClockIcon }>
   { id: 'projects', label: 'Projects', Icon: FolderIcon },
   { id: 'reports', label: 'Reports', Icon: DocumentIcon },
   { id: 'statistics', label: 'Statistics', Icon: BarChartIcon },
+  // Geld answers neither "what now" nor "what happened" but "what can I afford": its own
+  // question, so its own place — below a line, apart from the work screens.
+  { id: 'money', label: 'Geld', Icon: WalletIcon, apart: true },
   { id: 'settings', label: 'Settings', Icon: GearIcon }
 ]
 
@@ -60,11 +66,12 @@ export function IconRail({
       <div ref={containerRef} className="relative flex shrink-0 flex-col gap-1">
         {/* The light pill: springs to the active item instead of jumping there. */}
         <span aria-hidden="true" className="rounded-[12px] bg-text" style={thumbStyle} />
-        {ITEMS.map(({ id, label, Icon }) => {
+        {ITEMS.map(({ id, label, Icon, apart }) => {
           const isActive = id === active
           return (
+            <Fragment key={id}>
+            {apart && <span aria-hidden="true" className="mx-3 my-1.5 h-px shrink-0 bg-border" />}
             <button
-              key={id}
               onClick={() => onNavigate(id)}
               aria-current={isActive ? 'page' : undefined}
               data-active={isActive}
@@ -77,6 +84,7 @@ export function IconRail({
               </span>
               <span>{label}</span>
             </button>
+            </Fragment>
           )
         })}
       </div>

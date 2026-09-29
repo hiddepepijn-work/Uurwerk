@@ -16,6 +16,7 @@ import { WeekScreen } from '../features/week/WeekScreen.js'
 import { PhoneAgenda } from '../features/agenda/PhoneAgenda.js'
 import { ReportsScreen } from '../features/reports/ReportsScreen.js'
 import { StatisticsScreen } from '../features/statistics/StatisticsScreen.js'
+import { MoneyScreen } from '../features/money/MoneyScreen.js'
 import { useTracking } from '../hooks/useTracking.js'
 import { events } from '../api/client.js'
 import { playCue } from '../lib/cues.js'
@@ -80,6 +81,7 @@ export function App() {
       } else if (target === 'today') setScreen('today')
       else if (target === 'tasks') setScreen('tasks')
       else if (target === 'agenda') setScreen('week')
+      else if (target === 'money') setScreen('money')
       else if (target === 'addEvent') {
         setScreen('week')
         setComposerOpen(true)
@@ -127,6 +129,7 @@ export function App() {
           {screen === 'week' && (compact ? <PhoneAgenda /> : <WeekScreen />)}
           {screen === 'reports' && <ReportsScreen />}
           {screen === 'statistics' && <StatisticsScreen />}
+          {screen === 'money' && <MoneyScreen />}
         </main>
       </div>
 

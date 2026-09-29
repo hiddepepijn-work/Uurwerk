@@ -2,6 +2,7 @@ import { Db, openDatabase, openDatabaseWith, type SqlDriver } from './connection
 import { AreaRepo } from './repositories/areas.js'
 import { DayLogRepo, ProposalRepo, RuleRepo } from './repositories/assistant.js'
 import { IdeaRepo } from './repositories/ideas.js'
+import { MoneyRepo } from './repositories/money.js'
 import { ArtifactRepo } from './repositories/artifacts.js'
 import { AvailabilityRepo } from './repositories/availability.js'
 import { DayRepo, PublishedFileRepo } from './repositories/days.js'
@@ -59,6 +60,8 @@ export interface Store {
   /** Standing wishes: hard ones the planner enforces, soft ones Jarvis reads. */
   rules: RuleRepo
   ideas: IdeaRepo
+  /** Geld: personal finance. Underscore tables, local to this copy, never synced. */
+  money: MoneyRepo
   /** Per day: Jarvis's opening, closing and summary. */
   dayLog: DayLogRepo
   /** Jarvis's proposals and what a "ja" did with them. Local to this copy. */
@@ -89,6 +92,7 @@ export function createStore(db: Db): Store {
     screenTime: new ScreenTimeRepo(db),
     rules: new RuleRepo(db),
     ideas: new IdeaRepo(db),
+    money: new MoneyRepo(db),
     dayLog: new DayLogRepo(db),
     proposals: new ProposalRepo(db)
   }

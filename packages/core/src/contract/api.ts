@@ -79,7 +79,24 @@ import type {
   WorkType,
   Idea,
   IdeaStatus,
-  NewIdea
+  NewIdea,
+  IsoMonth,
+  MoneyClosing,
+  MoneyCost,
+  MoneyEntry,
+  MoneyGoal,
+  MoneyIncome,
+  MoneyMilestone,
+  MoneyPhase,
+  MoneyShift,
+  MoneyState,
+  MoneyVaultStatus,
+  MoneyAccount,
+  MoneyBankStatus,
+  MoneyRule,
+  MoneyTransactionKind,
+  NewMoneyEntry,
+  PayProfile
 } from './types.js'
 
 export interface ProposeRequest {
@@ -632,6 +649,49 @@ export interface TimeTrackerAPI {
     add(idea: NewIdea): Promise<Idea>
     update(id: string, patch: Partial<Pick<Idea, 'text' | 'projectId' | 'areaId' | 'status'>>): Promise<Idea>
     remove(id: string): Promise<void>
+  }
+
+  /**
+   * Geld: personal finance, on this copy only. The screens read the whole state once and do the
+   * sums themselves (core/money is pure); the writes are plain upserts. A draft without an id
+   * adds, with an id replaces.
+   */
+  money: {
+    state(): Promise<MoneyState>
+    loadStarter(): Promise<MoneyState>
+    saveIncome(income: Omit<MoneyIncome, 'id'> & { id?: string }): Promise<MoneyIncome>
+    removeIncome(id: string): Promise<void>
+    saveCost(cost: Omit<MoneyCost, 'id'> & { id?: string }): Promise<MoneyCost>
+    removeCost(id: string): Promise<void>
+    savePhase(phase: Omit<MoneyPhase, 'id'> & { id?: string }): Promise<MoneyPhase>
+    removePhase(id: string): Promise<void>
+    saveGoal(goal: Omit<MoneyGoal, 'id'> & { id?: string }): Promise<MoneyGoal>
+    saveMilestone(milestone: Omit<MoneyMilestone, 'id'> & { id?: string }): Promise<MoneyMilestone>
+    removeMilestone(id: string): Promise<void>
+    addEntry(entry: NewMoneyEntry): Promise<MoneyEntry>
+    removeEntry(id: string): Promise<void>
+    saveShift(shift: Omit<MoneyShift, 'id'> & { id?: string }): Promise<MoneyShift>
+    removeShift(id: string): Promise<void>
+    saveProfile(profile: PayProfile): Promise<PayProfile>
+    /** Closes a month as proposed (core/money/status.ts closingProposal). */
+    close(month: IsoMonth): Promise<MoneyClosing>
+    reopen(month: IsoMonth): Promise<void>
+    /** The encrypted sync with the other devices: status, open with a passphrase, forget the key. */
+    vaultStatus(): Promise<MoneyVaultStatus>
+    vaultSetup(passphrase: string): Promise<MoneyVaultStatus>
+    vaultForget(): Promise<MoneyVaultStatus>
+    /** The bank (Enable Banking, read-only). Fetching happens where the key is: the laptop. */
+    bankStatus(): Promise<MoneyBankStatus>
+    bankConnect(applicationId: string, privateKeyPem: string): Promise<{ url: string }>
+    bankFinish(codeOrUrl: string): Promise<MoneyBankStatus>
+    bankRefresh(): Promise<MoneyBankStatus>
+    bankDisconnect(): Promise<MoneyBankStatus>
+    saveManualSavings(input: { iban: string; name: string; balanceCents: number; date: IsoDate; lockedUntil: IsoDate | null }): Promise<void>
+    setAccountRole(uid: string, role: MoneyAccount['role'], lockedUntil: IsoDate | null): Promise<void>
+    sortTransaction(id: string, kind: MoneyTransactionKind | null, refId: string | null, remember: boolean): Promise<void>
+    removeRule(id: string): Promise<MoneyRule[]>
+    /** Shift ids that are a night shift ending on the morning of a stage day. */
+    shiftWarnings(): Promise<string[]>
   }
 
   assistant: {

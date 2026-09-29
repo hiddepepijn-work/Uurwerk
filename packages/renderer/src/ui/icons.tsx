@@ -164,3 +164,12 @@ export const MicIcon = svg(
     <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
   </>
 )
+
+/** Geld: a wallet, drawn like the rest — outline, round joins, no fill. */
+export const WalletIcon = svg(
+  <>
+    <path d="M19 7V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3" />
+    <path d="M3 7h16a1 1 0 0 1 1 1v3" />
+    <path d="M21 11h-4a2 2 0 0 0 0 4h4z" />
+  </>
+)
