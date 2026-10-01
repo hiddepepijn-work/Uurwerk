@@ -79,6 +79,11 @@ function start(): void {
   registerIpc(backend, syncClient, () => setupHotkeys())
   // Offline first: the app is fully usable before, and without, the first round.
   syncClient.start()
+  // A lid closed two seconds after an edit would take the edit to sleep with it; push now.
+  // And on waking, pull at once rather than at the next half-minute round.
+  powerMonitor.on('suspend', () => void syncClient?.round())
+  powerMonitor.on('lock-screen', () => void syncClient?.round())
+  powerMonitor.on('resume', () => void syncClient?.round())
   setupTray()
   setupHotkeys()
   applyAutoLaunch(settings.autoLaunch)
@@ -418,7 +423,22 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
+/** Set once the last sync round has had its chance; the second quit then goes through. */
+let flushedBeforeQuit = false
+
+app.on('before-quit', (event) => {
+  // Stopping the run is a change the phone must hear about, or it keeps showing the timer
+  // running all night (30 Sep 2026: stopped here at 22:39, never pushed, the phone showed
+  // nine hours). So: stop the run, give sync a few seconds to push it, then really quit.
+  if (!flushedBeforeQuit && backend && syncClient?.paired) {
+    event.preventDefault()
+    flushedBeforeQuit = true
+    backend.trackingService.stopRun()
+    const flush = syncClient.round()
+    const limit = new Promise((resolve) => setTimeout(resolve, 4_000))
+    void Promise.race([flush, limit]).finally(() => app.quit())
+    return
+  }
   quitting = true
   if (tickHandle) clearInterval(tickHandle)
   if (idleHandle) clearInterval(idleHandle)

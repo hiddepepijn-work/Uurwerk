@@ -13,6 +13,9 @@ import { isImportant } from '@core/services/reminders.js'
 import { fromIsoDate, toIsoDate } from '@core/util/time.js'
 
 export interface LiveBlock {
+  /** A planned task (with buttons), an appointment, or the drive to one. */
+  kind: 'task' | 'appointment' | 'leave'
+  /** The task, or 'event:<id>' for an appointment or its drive. */
   taskId: string
   title: string
   /** Epoch ms. */
@@ -51,21 +54,37 @@ export function liveQueue(backend: Backend, running: Running | null, now = Date.
       const end = fromIsoDate(block.date).getTime() + block.endMin * MIN
       if (end < now - 60 * MIN) continue
       out.push({
+        kind: 'task',
         taskId: block.taskId,
         title: block.taskTitle ?? block.title ?? task.title,
         start,
         end,
         important: isImportant(task, block.date),
         project: block.projectName ?? null,
-        busy: block.taskId === runningTaskId
+        busy: block.taskId === runningTaskId && !(running !== null && now - running.startedAt > 10 * 60 * MIN)
       })
     }
   }
-  if (running && !out.some((block) => block.taskId === running.taskId && block.start <= now && block.end > now)) {
+  // Appointments, and the drive to them: when to leave matters more than any task.
+  const events = backend.calendar.eventsInRange(now - 60 * MIN, now + 2 * 86_400_000).filter((event) => !event.cancelled && !event.allDay)
+  for (const event of events) {
+    if (event.kind === 'travel' || event.endsAt < now) continue
+    const outbound = events.find((travel) => travel.kind === 'travel' && travel.parentEventId === event.id && travel.travelDirection === 'outbound')
+    if (outbound && event.startsAt > now) {
+      out.push({ kind: 'leave', taskId: `event:${event.id}:leave`, title: `Vertrekken · ${event.title}`, start: outbound.startsAt, end: event.startsAt, important: true, project: event.location ?? null, busy: false })
+    }
+    out.push({ kind: 'appointment', taskId: `event:${event.id}`, title: event.title, start: event.startsAt, end: event.endsAt, important: false, project: event.location ?? null, busy: false })
+  }
+
+  // A timer that has run for more than ten hours was forgotten (a night through): it does not
+  // get to push the planned task of this morning off the lock screen.
+  const forgotten = running !== null && now - running.startedAt > 10 * 60 * MIN
+  if (running && !forgotten && !out.some((block) => block.taskId === running.taskId && block.start <= now && block.end > now)) {
     const task = backend.store.tasks.get(running.taskId)
     if (task) {
       const planned = Math.max(15, task.estimateMin ?? 60)
       out.push({
+        kind: 'task',
         taskId: task.id,
         title: task.title,
         start: running.startedAt,
@@ -77,5 +96,5 @@ export function liveQueue(backend: Backend, running: Running | null, now = Date.
       })
     }
   }
-  return out.sort((a, b) => a.start - b.start).slice(0, 12)
+  return out.sort((a, b) => a.start - b.start).slice(0, 16)
 }

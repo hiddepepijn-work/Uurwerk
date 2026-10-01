@@ -25,6 +25,8 @@ struct CheckinAttributes: ActivityAttributes {
         var project: String?
         /// The task planned after this one, for "daarna …".
         var next: String? = nil
+        /// "task" (buttons), "appointment" or "leave" (the drive to one); nil from older builds = task.
+        var kind: String? = nil
     }
 }
 
@@ -73,6 +75,8 @@ struct CheckinBusyIntent: LiveActivityIntent {
 
 /// One planned task, as live.ts writes it.
 struct LiveBlock: Codable {
+    /// "task", "appointment" or "leave"; missing from an older app = task.
+    let kind: String?
     let taskId: String
     let title: String
     let start: Double
@@ -148,9 +152,19 @@ final class LiveCheckin: NSObject {
         let done = Set(answers.filter { $0["answer"] as? String == "done" }.compactMap { $0["taskId"] as? String })
         let busy = Set(answers.filter { $0["answer"] as? String == "busy" }.compactMap { $0["taskId"] as? String })
         let queue = LiveStore.queue()
-        let focus = queue.first { block in
-            !done.contains(block.taskId) && block.end > now - 30 * 60_000 && block.start <= now + 30 * 60_000
+        let isTask = { (block: LiveBlock) in (block.kind ?? "task") == "task" }
+        // Leaving comes first: the drive to an appointment outranks any task in that window.
+        // Then what is on now (a task lingers half an hour after its end, for "gelukt?"), then
+        // what starts within three hours, so a ✓ moves on to the next task instead of ending.
+        let leaving = queue.first { $0.kind == "leave" && $0.start <= now && $0.end > now }
+        let current = queue.first { block in
+            !done.contains(block.taskId) && block.start <= now + 30 * 60_000 &&
+                block.end > (isTask(block) ? now - 30 * 60_000 : now)
         }
+        let upcoming = queue.first { block in
+            !done.contains(block.taskId) && block.start > now && block.start <= now + 3 * 3_600_000
+        }
+        let focus = leaving ?? current ?? upcoming
         let activities = Activity<CheckinAttributes>.activities
 
         guard let block = focus else {
@@ -165,7 +179,8 @@ final class LiveCheckin: NSObject {
             important: block.important,
             busy: busy.contains(block.taskId) || block.busy == true,
             project: block.project,
-            next: queue.first(where: { $0.start >= block.end - 60_000 && $0.start <= block.end + 30 * 60_000 && $0.taskId != block.taskId && !done.contains($0.taskId) })?.title
+            next: queue.first(where: { $0.start >= block.end - 60_000 && $0.start <= block.end + 30 * 60_000 && $0.taskId != block.taskId && !done.contains($0.taskId) })?.title,
+            kind: block.kind ?? "task"
         )
         // Stale at the end of the block: the view then turns into the "gelukt?" question.
         // A Live Activity only redraws on an update or when it goes stale. Stale at the start of

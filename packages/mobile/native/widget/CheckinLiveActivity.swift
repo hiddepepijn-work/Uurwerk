@@ -33,7 +33,7 @@ struct CheckinLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.center) {
                     let phase = CheckinPhase(state: context.state, stale: context.isStale, now: Date())
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(phase.chip(busy: context.state.busy).uppercased() + " · \(clock(context.state.start))–\(clock(context.state.end))")
+                        Text(phase.chip(state: context.state).uppercased() + " · \(clock(context.state.start))–\(clock(context.state.end))")
                             .font(.system(size: 11, weight: .bold))
                             .tracking(0.5)
                             .foregroundStyle(phase.soft)
@@ -47,7 +47,7 @@ struct CheckinLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     let phase = CheckinPhase(state: context.state, stale: context.isStale, now: Date())
-                    if phase != .before {
+                    if phase != .before && (context.state.kind ?? "task") == "task" {
                         CheckinButtons(state: context.state, stale: phase == .after, height: 34)
                             .padding(.horizontal, 4)
                             .padding(.top, 4)
@@ -93,7 +93,11 @@ enum CheckinPhase {
         }
     }
 
-    func chip(busy: Bool) -> String {
+    func chip(state: CheckinAttributes.ContentState) -> String {
+        // An appointment or the drive to one: no check-in words, just what it is.
+        if state.kind == "leave" { return self == .before ? "Straks weg" : "Vertrekken" }
+        if state.kind == "appointment" { return self == .before ? "Straks" : self == .during ? "Afspraak" : "Voorbij" }
+        let busy = state.busy
         switch self {
         case .before: return "Straks"
         case .during: return busy ? "Nu bezig" : "Nu gepland"
@@ -295,7 +299,7 @@ struct CheckinLockView: View {
                 CheckinRing(state: state, stale: stale)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(phase.chip(busy: state.busy).uppercased())
+                        Text(phase.chip(state: state).uppercased())
                             .font(.system(size: 11, weight: .bold))
                             .tracking(0.7)
                             .foregroundStyle(phase.ink)
@@ -327,7 +331,7 @@ struct CheckinLockView: View {
                 }
                 Spacer(minLength: 0)
             }
-            if phase != .before {
+            if phase != .before && (state.kind ?? "task") == "task" {
                 CheckinButtons(state: state, stale: phase == .after, height: 40)
             }
         }
