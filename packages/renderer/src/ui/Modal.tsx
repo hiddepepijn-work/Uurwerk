@@ -31,7 +31,8 @@ export function Modal({ open, title, subtitle, onClose, children, footer, width 
   return (
     <div
       // On a phone the dialog is the whole screen, above the tab bar, clear of the notch.
-      className="modal-enter fixed inset-0 z-[60] flex items-center justify-center bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] wide:bg-scrim wide:p-6"
+      // no-drag: the title bar's drag region would otherwise swallow clicks on what lies over it.
+      className="modal-enter no-drag fixed inset-0 z-[60] flex items-center justify-center bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] wide:bg-scrim wide:p-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}

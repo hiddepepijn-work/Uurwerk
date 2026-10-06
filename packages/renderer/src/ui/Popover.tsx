@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 
 /**
  * A panel anchored to a control.
@@ -7,6 +8,11 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefO
  * every place these are used — the task editor, the day planner — sits inside a modal that
  * scrolls, and an absolutely positioned panel gets clipped by the first ancestor with
  * `overflow: auto`. Fixed escapes that entirely.
+ *
+ * And rendered into <body>, not where it is used: on the laptop the dialog panel has
+ * `contain: paint` and `will-change: transform` (its entrance), which makes the panel the
+ * frame for `fixed` children and clips them to it. The calendar then opened offset and
+ * cut off, and its days could not be clicked (6 Oct 2026). Above the dialog's z-[60].
  *
  * Flips above the anchor when there is no room below, so a field near the bottom of a
  * dialog does not open a calendar off the edge of the window.
@@ -79,7 +85,7 @@ export function Popover({
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <div
       ref={panelRef}
       role="dialog"
@@ -89,9 +95,10 @@ export function Popover({
         left: position?.left ?? -9999,
         width
       }}
-      className="animate-scale-in z-50 rounded-[16px] border border-border bg-card p-3 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+      className="animate-scale-in no-drag z-[70] rounded-[16px] border border-border bg-card p-3 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
     >
       {children}
-    </div>
+    </div>,
+    document.body
   )
 }
