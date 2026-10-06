@@ -128,8 +128,8 @@ export class TaskRepo {
     this.db.run(
       `INSERT INTO tasks
          (id, project_id, area_id, work_type_id, title, priority, status, estimate_min,
-          due_date, earliest_start_date, notes, focus_mode, sort_order, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`,
+          due_date, earliest_start_date, must_do_date, notes, focus_mode, sort_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         input.projectId ?? null,
@@ -141,6 +141,7 @@ export class TaskRepo {
         input.estimateMin ?? null,
         input.dueDate ?? null,
         input.earliestStartDate ?? null,
+        input.mustDoDate ?? null,
         input.notes?.trim() || null,
         input.focusMode ?? 'auto',
         nextOrder,

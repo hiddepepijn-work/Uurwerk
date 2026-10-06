@@ -128,6 +128,7 @@ export function PhoneAgenda() {
           days={days}
           today={today}
           nowMinute={minute}
+          interactive
           onOpenDay={(day) => {
             setDate(day)
             setView('day')
@@ -225,10 +226,10 @@ export function DayTimeline({
 /**
  * Seven days in the widget's look, smaller. Shared with the desktop's Week screen.
  *
- * On the phone a day column is one big button to that day. `interactive` (the desktop)
- * makes it the day timeline's gestures instead, across the week: click an item to see
- * what it is, drag a task to another time or day, pull its edge to stretch it. A click on
- * an empty moment still opens the day.
+ * The day timeline's gestures, across the week: tap an empty moment to put a task or an
+ * appointment there, tap an item to see what it is, drag a task to another time or day
+ * (on the phone after holding it a moment), pull its edge to stretch it. The date above a
+ * column opens that day. Without `interactive` a column is one big button to its day.
  */
 export function WeekTimeline({
   days,
@@ -251,6 +252,7 @@ export function WeekTimeline({
   const WEEK_HOUR_PX = hourPx
   const area = useRef<HTMLDivElement>(null)
   const [opened, setOpened] = useState<AgendaItem | null>(null)
+  const [slot, setSlot] = useState<{ date: IsoDate; minute: number } | null>(null)
   const { drag, problem, dismissProblem, pointerDown } = useTimelineDrag({
     area,
     scroller,
@@ -258,7 +260,7 @@ export function WeekTimeline({
     dates: days.map((day) => day.date),
     enabled: interactive,
     onOpen: setOpened,
-    onEmpty: (date) => onOpenDay(date)
+    onEmpty: (date, minute) => setSlot({ date, minute })
   })
   const ghost = drag ? ghostOf(drag) : null
   const settled = useSettled(drag)
@@ -360,6 +362,7 @@ export function WeekTimeline({
       </div>
       {problem && <ProblemNote text={problem} onDismiss={dismissProblem} />}
       {opened && <ItemSheet item={opened} onClose={() => setOpened(null)} />}
+      {slot && <SlotSheet date={slot.date} minute={slot.minute} onClose={() => setSlot(null)} />}
     </div>
   )
 }

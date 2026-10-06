@@ -6,16 +6,18 @@
  * The files are made by scripts/cue-sounds.ts.
  */
 
+import countdown from '../assets/cues/countdown.wav?url'
 import begins from '../assets/cues/begins.wav?url'
 import done from '../assets/cues/done.wav?url'
 import soon15 from '../assets/cues/soon15.wav?url'
+import sprintEnd from '../assets/cues/sprintEnd.wav?url'
 import soon30 from '../assets/cues/soon30.wav?url'
 import start from '../assets/cues/start.wav?url'
 import stop from '../assets/cues/stop.wav?url'
 
-export type Cue = 'start' | 'stop' | 'done' | 'soon30' | 'soon15' | 'begins'
+export type Cue = 'start' | 'stop' | 'done' | 'soon30' | 'soon15' | 'begins' | 'countdown' | 'sprintEnd'
 
-const FILES: Record<Cue, string> = { start, stop, done, soon30, soon15, begins }
+const FILES: Record<Cue, string> = { start, stop, done, soon30, soon15, begins, countdown, sprintEnd }
 
 const playInWindow = (cue: Cue): void => {
   const audio = new Audio(FILES[cue])

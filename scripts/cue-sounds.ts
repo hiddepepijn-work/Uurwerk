@@ -12,6 +12,8 @@
  *   soon30   one soft bell                 ("Seintje")
  *   soon15   the bell twice, higher        ("Dubbele klok")
  *   begins   timpani roll, run, brass hit  ("Fanfare dramatisch")
+ *   countdown  five ticks, one a second, then the start signal at five seconds ("5 sec")
+ *   sprintEnd  three bells down and up: the ten minutes are over
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -151,6 +153,32 @@ const CUES: Record<string, { seconds: number; play: (mix: Mix) => void }> = {
       m.tone(hit, 65, { dur: 0.9, overtones: [0.4], glideTo: 45, gain: 0.55, attack: 0.002 })
       m.tone(hit, N.G6, { ...bell, dur: 1.5, gain: 0.16 })
       m.tone(hit + 0.02, N.C6, { ...bell, dur: 1.5, gain: 0.12 })
+    }
+  },
+  countdown: {
+    seconds: 6.6,
+    play: (m) => {
+      // Five woodblock ticks, one per second, the last one higher: 5, 4, 3, 2, 1.
+      for (let i = 0; i < 5; i++) {
+        const f = i === 4 ? 1760 : 1320
+        m.tone(i, f, { dur: 0.09, overtones: [0.3, 0.1], attack: 0.001, gain: 0.3 })
+        m.tone(i, f / 4, { dur: 0.06, overtones: [], attack: 0.001, gain: 0.25 })
+      }
+      // Go: a bright rising chord with a boom under it.
+      const go = 5
+      m.tone(go, 65, { dur: 0.6, overtones: [0.4], glideTo: 50, gain: 0.5, attack: 0.002 })
+      ;[N.C5, N.E5, N.G5, N.C6].forEach((f, i) => m.tone(go + i * 0.04, f, { ...marimba, dur: 0.5, gain: 0.26 }))
+      ;[N.C4, N.G4, N.C5, N.E5].forEach((f) => m.tone(go + 0.12, f, { dur: 1.2, overtones: [], type: "sawtooth", gain: 0.04, attack: 0.02 }))
+      m.tone(go + 0.16, N.G6, { ...bell, dur: 1.3, gain: 0.14 })
+    }
+  },
+  sprintEnd: {
+    seconds: 2.4,
+    play: (m) => {
+      m.tone(0, N.G5, bell)
+      m.tone(0.25, N.E5, bell)
+      m.tone(0.5, N.C6, { ...bell, dur: 1.8, gain: 0.2 })
+      m.tone(0.5, N.E6, glass)
     }
   }
 }

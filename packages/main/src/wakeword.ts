@@ -110,10 +110,20 @@ export class WakeWordDetector {
   }
 
   /**
-   * Takes 16 kHz 16-bit mono audio in any amount; runs the models once per 80 ms of it.
-   * Returns true when "hey jarvis" was heard in what came in.
+   * After a stretch of audio it did not hear (a call): what it remembers is from before, so
+   * it scores nothing until the whole window is new again.
    */
-  async push(samples: Int16Array): Promise<{ heard: boolean; best: number }> {
+  skipped(): void {
+    this.pending = []
+    this.warmup = FEATURE_WINDOW
+  }
+
+  /**
+   * Takes 16 kHz 16-bit mono audio in any amount; runs the models once per 80 ms of it.
+   * Returns true when "hey jarvis" was heard in what came in. `threshold` overrides the
+   * usual one for this audio (music playing asks for a surer call).
+   */
+  async push(samples: Int16Array, threshold = this.options.threshold): Promise<{ heard: boolean; best: number }> {
     for (const sample of samples) this.pending.push(sample)
     let heard = false
     let best = 0
@@ -137,7 +147,7 @@ export class WakeWordDetector {
         continue
       }
       best = Math.max(best, value)
-      if (value >= this.options.threshold && this.processed >= this.quietUntil) {
+      if (value >= threshold && this.processed >= this.quietUntil) {
         heard = true
         this.quietUntil = this.processed + (this.options.refractoryMs / 1000) * 16000
       }

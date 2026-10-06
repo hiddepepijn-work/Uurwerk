@@ -190,6 +190,7 @@ export interface NewTask {
   estimateMin?: number | null
   dueDate?: IsoDate | null
   earliestStartDate?: IsoDate | null
+  mustDoDate?: IsoDate | null
   notes?: string | null
   focusMode?: FocusMode
 }

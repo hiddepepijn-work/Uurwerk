@@ -3,6 +3,7 @@ import { api, events } from '../../api/client.js'
 import { CloseIcon, SendIcon } from '../../ui/icons.js'
 import { askJarvis } from './ask.js'
 import { isGoodbye } from './goodbye.js'
+import { isSprintCommand } from '@core/domain/sprint.js'
 import { JarvisOrb, type OrbState } from './JarvisOrb.js'
 import { LiveCall } from './live.js'
 
@@ -186,6 +187,12 @@ export function JarvisVoice({
     const offEnd = bridge.onEnd((text) => {
       level.current = 0
       if (!alive.current) return
+      // "5 sec": the countdown is the answer; Jarvis says nothing and the sheet closes.
+      if (isSprintCommand(text)) {
+        void api.sprint.start().catch(() => undefined)
+        close.current()
+        return
+      }
       if (text.trim()) void ask({ text: text.trim() })
       else setPhase('idle')
     })
@@ -315,6 +322,11 @@ export function JarvisVoice({
     const text = draft.trim()
     if (!text || phase === 'thinking') return
     setDraft('')
+    if (isSprintCommand(text)) {
+      void api.sprint.start().catch(() => undefined)
+      close.current()
+      return
+    }
     setHeard(text)
     if (live.current) live.current.say(text)
     else void ask({ text })

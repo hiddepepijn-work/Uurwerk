@@ -13,9 +13,17 @@ import { Button } from '../../ui/Button.js'
 import { DateField } from '../../ui/DateField.js'
 import { Modal } from '../../ui/Modal.js'
 import { PriorityDot, PRIORITY_LABEL } from '../../ui/PriorityDot.js'
+import { TimeField } from '../../ui/TimeField.js'
+import { placeTask } from '../agenda/actions.js'
 import { areaFill, colorFor } from '../agenda/agenda-model.js'
 
 const PRIORITIES: Priority[] = ['high', 'medium', 'low']
+
+/** The next quarter hour from now, as minutes since midnight: where a new block starts. */
+const nextQuarter = (): number => {
+  const now = new Date()
+  return Math.min(23 * 60 + 45, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15)
+}
 
 export interface DependencyEdit {
   dependsOnTaskId: string
@@ -78,6 +86,9 @@ export function TaskEditor({
   const [due, setDue] = useState('')
   const [earliestStart, setEarliestStart] = useState('')
   const [mustDo, setMustDo] = useState('')
+  /** A moment in the agenda, set by hand: a locked block the planner works around. */
+  const [planDate, setPlanDate] = useState('')
+  const [planStart, setPlanStart] = useState(9 * 60)
   const [notes, setNotes] = useState('')
   const [focusMode, setFocusMode] = useState<FocusMode>('auto')
   const [edges, setEdges] = useState<DependencyEdit[]>([])
@@ -96,6 +107,8 @@ export function TaskEditor({
     setDue(task?.dueDate ?? '')
     setEarliestStart(task?.earliestStartDate ?? '')
     setMustDo(task?.mustDoDate ?? '')
+    setPlanDate('')
+    setPlanStart(nextQuarter())
     setNotes(task?.notes ?? '')
     setFocusMode(task?.focusMode ?? 'auto')
     setEdges(
@@ -160,6 +173,11 @@ export function TaskEditor({
       // must not leave the rest of the edit unsaved.
       const id = task && onUpdate ? (await onUpdate(task.id, fields), task.id) : (await onCreate(fields)).id
       if (onSaveDependencies) await onSaveDependencies(id, edges)
+      if (planDate) {
+        // As long as the estimate, within reason; without one, an hour.
+        const length = Math.min(Math.max(fields.estimateMin ?? 60, 15), 8 * 60)
+        await placeTask(id, planDate, planStart, Math.min(24 * 60, planStart + length))
+      }
 
       onClose()
     } catch (error) {
@@ -374,6 +392,17 @@ export function TaskEditor({
               Pins it to that day, above everything the ranking would otherwise pick.
             </span>
           </div>
+        </div>
+
+        <div className={group}>
+          <span className={label}>{editing ? 'Also schedule at' : 'Schedule at'}</span>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <DateField value={planDate} onChange={setPlanDate} placeholder="Not in the agenda yet" />
+            {planDate && <TimeField value={planStart} onChange={setPlanStart} step={15} />}
+          </div>
+          <span className={help}>
+            Puts it in the agenda at that moment, for as long as the estimate. The planner leaves it there.
+          </span>
         </div>
 
         <label className={group}>

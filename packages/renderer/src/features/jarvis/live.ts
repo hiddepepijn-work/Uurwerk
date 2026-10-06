@@ -6,6 +6,7 @@ import type { JarvisLiveSession, JarvisLiveUsage } from '@core/contract/api.js'
 import { api } from '../../api/client.js'
 import { SpeechGate } from './gate.js'
 import { isGoodbye } from './goodbye.js'
+import { isSprintCommand } from '@core/domain/sprint.js'
 import type { OrbState } from './JarvisOrb.js'
 
 /**
@@ -135,6 +136,8 @@ interface WireEvents {
   usage(usage: JarvisLiveUsage): void
   tools(calls: ToolCall[]): Promise<Array<{ call: ToolCall; result: Record<string, unknown> }>>
   closed(code: number, reason: string): void
+  /** The server recognised a command and answers nothing ("5 sec"). */
+  command?(name: string): void
 }
 
 interface Wire {
@@ -483,6 +486,9 @@ class CascadeWire implements Wire {
             void events.tools([call]).then(([done]) => wire.send({ type: 'tool_result', id: call.id, result: done?.result ?? null }))
             break
           }
+          case 'command':
+            events.command?.(event.name ?? '')
+            break
           case 'turn_done':
             events.turnDone(false)
             break
@@ -688,6 +694,9 @@ export class LiveCall {
         if (!this.heard.trim() && delta.trim()) this.judged = false
         this.heard = replace ? delta : this.heard + delta
         this.handlers.onHeard(this.heard.trim())
+        // The models that hear for themselves (Gemini, OpenAI) are about to answer: the five-second
+        // command is caught here, their answer muted. Our own line catches it on the server.
+        if (live.provider !== 'cascade' && isSprintCommand(this.heard)) this.sprint()
       },
       interrupted: () => {
         // Hidde started talking: stop Jarvis mid-sentence. What he says now is a new line.
@@ -749,6 +758,9 @@ export class LiveCall {
             }
           })
         )
+      },
+      command: (name) => {
+        if (name === 'sprint') this.sprint()
       },
       closed: (code, reason) => {
         // A connection replaced by a resumed one closes quietly.
@@ -967,6 +979,22 @@ export class LiveCall {
    * the answer is complete and nothing is decoding or playing, for a beat, so the last word
    * is not clipped and an answer still on its way is not cut off.
    */
+  /**
+   * "5 sec": no answer, no words. The countdown starts on the device (api.sprint) and the call
+   * leaves at once; the countdown sound is the reply.
+   */
+  private sprinted = false
+  private sprint(): void {
+    if (this.sprinted) return
+    this.sprinted = true
+    trail('vijf seconden: aftellen, geen antwoord')
+    this.muted = true
+    if (this.playing.size > 0) this.cutOff()
+    void api.sprint.start().catch(() => undefined)
+    this.goodbye = true
+    this.leaveAfterSpeaking()
+  }
+
   private leaveAfterSpeaking(): void {
     if (this.leaving) return
     this.leaving = true

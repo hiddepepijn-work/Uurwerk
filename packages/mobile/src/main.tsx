@@ -36,7 +36,7 @@ import '@renderer/styles/fonts.js'
 import './styles.css'
 
 import { openPhoneDatabase } from './database.js'
-import { onCheckinAnswered, onQuestionTapped, scheduleNotifications, testCueNotifications, type Checkin, type CheckinAnswer } from './notifications.js'
+import { onCheckinAnswered, onQuestionTapped, scheduleNotifications, scheduleSprintEnd, testCueNotifications, type Checkin, type CheckinAnswer } from './notifications.js'
 import { liveQueue } from './live.js'
 import { AudioFocus, speakEvening, speakMorning } from './speech.js'
 import { PhoneSync } from './sync.js'
@@ -294,6 +294,13 @@ async function start(): Promise<void> {
   if (Platform.isNativePlatform()) {
     setCuePlayer((cue) => void AudioFocus.cue({ name: cue }).catch(() => undefined))
     window.phoneCues = { test: testCueNotifications }
+    // The sprint's end rings from the lock screen too; the in-app cue only while open.
+    let sprintEnds: number | null = null
+    bus.on('sprint:changed', (state) => {
+      if (state.endsAt === sprintEnds) return
+      sprintEnds = state.endsAt
+      void scheduleSprintEnd(state.endsAt)
+    })
   }
 
   console.info('[boot] 4 render')

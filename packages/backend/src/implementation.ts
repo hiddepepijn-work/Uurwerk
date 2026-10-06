@@ -21,6 +21,7 @@ import type {
 import type { DayPlan, IsoDate, IsoWeek, PublishAudience, Settings } from '@core/contract/types.js'
 import { newId } from '@core/db/connection.js'
 import { MoneyLink } from '@core/money/link.js'
+import { SprintTimer } from './sprint.js'
 import type { Store } from '@core/db/index.js'
 import { runTool } from '@core/services/jarvis-tools.js'
 import { buildIndex } from '@core/services/publish.js'
@@ -830,6 +831,15 @@ export function buildImplementation(
         emitEvent('data:invalidated', { domain: 'tasks' })
       }
     },
+
+    sprint: (() => {
+      const timer = new SprintTimer()
+      return {
+        status: async () => timer.status(),
+        start: async () => timer.start(),
+        stop: async () => timer.stop()
+      }
+    })(),
 
     // Geld: local to this copy. Every write tells the Geld screens to read again.
     money: (() => {

@@ -60,7 +60,7 @@ const REMINDER_HOURS = 48
 const MAX_PENDING = 64
 
 /** Every notification sound: the spoken clips, and the cues (scripts/cue-sounds.ts). */
-const SOUNDS = ['ochtend.caf', 'avond.caf', 'herinnering.caf', 'vertrek.caf', 'cue-soon30.caf', 'cue-soon15.caf', 'cue-begins.caf']
+const SOUNDS = ['ochtend.caf', 'avond.caf', 'herinnering.caf', 'vertrek.caf', 'cue-soon30.caf', 'cue-soon15.caf', 'cue-begins.caf', 'cue-sprintEnd.caf']
 
 /**
  * What a reminder sounds like: one bell at 30 minutes, two at 15, a fanfare as it starts.
@@ -71,6 +71,9 @@ const soundOf = (reminder: Reminder): string | undefined =>
 
 /** The two test notifications (Settings → Sounds); rescheduling leaves them alone. */
 const TEST_IDS = [999_000_001, 999_000_002]
+
+/** The end of a "5 sec" sprint; rescheduling the agenda leaves it alone too. */
+const SPRINT_ID = 999_000_010
 
 /**
  * How a reminder shows: 'short' is its title and one line; 'empty' has no text at all and
@@ -141,7 +144,7 @@ export async function scheduleNotifications(
 
   await registerCheckinButtons()
 
-  const pending = (await LocalNotifications.getPending()).notifications.filter(({ id }) => !TEST_IDS.includes(id))
+  const pending = (await LocalNotifications.getPending()).notifications.filter(({ id }) => !TEST_IDS.includes(id) && id !== SPRINT_ID)
   if (pending.length > 0) {
     await LocalNotifications.cancel({ notifications: pending.map(({ id }) => ({ id })) })
   }
@@ -295,4 +298,33 @@ export function onQuestionTapped(open: (target: Target, moment: 'morning' | 'eve
 
     open(target, moment)
   })
+}
+
+/**
+ * The end of the ten minutes, as a notification: a locked phone puts the page to sleep, so its
+ * own timer would ring late or not at all. Cancelled when the sprint stops or starts again.
+ */
+export async function scheduleSprintEnd(endsAt: number | null): Promise<void> {
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: SPRINT_ID }] })
+    if (endsAt === null || endsAt <= Date.now()) return
+    if (!soundsInstalled) {
+      await installSounds()
+      soundsInstalled = true
+    }
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: SPRINT_ID,
+          title: 'Tien minuten om',
+          body: 'Lekker bezig. Door, of even pauze?',
+          threadIdentifier: 'sprint',
+          schedule: { at: new Date(endsAt), allowWhileIdle: true },
+          sound: 'cue-sprintEnd.caf'
+        }
+      ]
+    })
+  } catch {
+    // Without the notification the in-app sound still plays when the app is open.
+  }
 }

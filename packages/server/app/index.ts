@@ -85,6 +85,8 @@ const FILE_NAME = /^[0-9a-f-]{36}\.(jpg|jpeg|png|webm)$/
 const NOT_OVER_RPC = new Set([
   // Geld lives on the devices only; here it exists as sealed records (geld-vault.ts).
   'money',
+  // The sprint counts down on the device that heard it.
+  'sprint',
   'window',
   'startup',
   'sync',

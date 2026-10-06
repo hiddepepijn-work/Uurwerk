@@ -651,6 +651,13 @@ export interface TimeTrackerAPI {
     remove(id: string): Promise<void>
   }
 
+  /** "5 sec": a five-second countdown, then ten minutes of focus on a timer of its own. */
+  sprint: {
+    status(): Promise<import('../domain/sprint.js').SprintState>
+    start(): Promise<import('../domain/sprint.js').SprintState>
+    stop(): Promise<import('../domain/sprint.js').SprintState>
+  }
+
   /**
    * Geld: personal finance, on this copy only. The screens read the whole state once and do the
    * sums themselves (core/money is pure); the writes are plain upserts. A draft without an id

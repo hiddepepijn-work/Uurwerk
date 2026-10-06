@@ -7,6 +7,7 @@ import { EventComposer } from '../features/calendar/EventComposer.js'
 import { useCompact } from '../hooks/useCompact.js'
 import { toIsoDate } from '@core/util/time.js'
 import { TopBar } from './TopBar.js'
+import { SprintPill } from './SprintPill.js'
 import { TodayScreen } from '../features/today/TodayScreen.js'
 import { TasksScreen } from '../features/tasks/TasksScreen.js'
 import { ProjectsScreen } from '../features/projects/ProjectsScreen.js'
@@ -152,6 +153,8 @@ export function App() {
           onClose={() => setComposerOpen(false)}
         />
       )}
+
+      <SprintPill compact={compact} />
 
       <TaskSwitcher
         open={switcherOpen}

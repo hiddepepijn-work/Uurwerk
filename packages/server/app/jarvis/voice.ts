@@ -17,6 +17,7 @@
  */
 
 import { randomBytes, randomUUID } from 'node:crypto'
+import { isSprintCommand } from '@core/domain/sprint.js'
 import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { IncomingMessage } from 'node:http'
@@ -511,6 +512,7 @@ class VoiceSession {
       case 'end':
         return this.heard()
       case 'text':
+        if (message.text?.trim() && this.command(message.text)) return
         if (message.text?.trim()) return this.answer(message.text.trim())
         return
       case 'cutoff':
@@ -531,7 +533,18 @@ class VoiceSession {
     this.fluxHandled = true
     if (!text.trim()) return
     this.send({ type: 'heard', text })
+    if (this.command(text)) return
     void this.answer(text)
+  }
+
+  /**
+   * A command the device carries out without an answer: "5 sec" starts the countdown, and
+   * Jarvis says nothing (the language model never sees it). True when it was one.
+   */
+  private command(text: string): boolean {
+    if (!isSprintCommand(text)) return false
+    this.send({ type: 'command', name: 'sprint' })
+    return true
   }
 
   /**
@@ -572,6 +585,7 @@ class VoiceSession {
     this.spent += (pcm.length / (SAMPLE_RATE * 2) / 60) * STT_PER_MINUTE
     if (!text) return
     this.send({ type: 'heard', text })
+    if (this.command(text)) return
     await this.answer(text)
   }
 

@@ -36,7 +36,9 @@ export interface AppEvents {
    * names the destination and the renderer decides what that means.
    */
   /** Laptop: a reminder's moment came; the main window plays its sound (the toast is silent). */
-  'cue:play': { cue: 'soon30' | 'soon15' | 'begins' }
+  'cue:play': { cue: 'soon30' | 'soon15' | 'begins' | 'countdown' | 'sprintEnd' }
+  /** The five-second sprint moved on: countdown, ten minutes of focus, or over. */
+  'sprint:changed': import('../domain/sprint.js').SprintState
   /** Open Jarvis; a moment makes him start the conversation himself. */
   /** `prompt`: a situation Jarvis opens with (a check-in answered "nog niet"). */
   'jarvis:open': { moment: 'morning' | 'evening' | null; prompt?: string }

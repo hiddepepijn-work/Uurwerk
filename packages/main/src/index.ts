@@ -30,6 +30,7 @@ import { startScreenTime, stopScreenTime } from './screen-time.js'
 import { syncAllAccounts } from '@backend/calendar/index.js'
 import { applyAutoLaunch, launchedAtLogin } from './startup.js'
 import { log } from './logger.js'
+import { startAudioContext, stopAudioContext } from './audio-context.js'
 
 let backend: Backend | null = null
 let syncClient: SyncClient | null = null
@@ -99,6 +100,8 @@ function start(): void {
 
   // Jarvis's corner: created hidden at start, because the wake word listens in it.
   createJarvisWindow((target) => openInWindow(target))
+  // Calls and music, so the wake word does not hear "Hey Jarvis" in them.
+  startAudioContext()
 
   startTimerTick()
   startIdleWatchdog()
@@ -440,6 +443,7 @@ app.on('before-quit', (event) => {
     return
   }
   quitting = true
+  stopAudioContext()
   if (tickHandle) clearInterval(tickHandle)
   if (idleHandle) clearInterval(idleHandle)
   if (calendarHandle) clearInterval(calendarHandle)
