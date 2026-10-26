@@ -174,6 +174,12 @@ export interface Task {
   notes: string | null
   /** auto = the rule in domain/focus.ts; always / never override it for this task. */
   focusMode: FocusMode
+  /** Steps inside the task: passport, charger, tickets. Empty when it has none. */
+  checklist: ChecklistItem[]
+  /** Moments chosen for this task alone, local time "YYYY-MM-DDTHH:MM". */
+  remindAt: string[]
+  /** The task ("t:<id>") or appointment ("a:<id>") this one prepares for. */
+  prepFor: string | null
   sortOrder: number
   createdAt: number
   completedAt: number | null
@@ -193,6 +199,28 @@ export interface NewTask {
   mustDoDate?: IsoDate | null
   notes?: string | null
   focusMode?: FocusMode
+  checklist?: ChecklistItem[]
+  remindAt?: string[]
+  prepFor?: string | null
+}
+
+export interface ChecklistItem {
+  text: string
+  done: boolean
+}
+
+/**
+ * Whether a task or appointment has been checked for preparation: none = nothing needed,
+ * asked = Hidde has been asked and not answered, planned = the preparation is in as tasks.
+ * No record at all means nobody has looked yet.
+ */
+export type PrepStatus = 'none' | 'asked' | 'planned'
+
+export interface PrepCheck {
+  ref: string
+  status: PrepStatus
+  note: string | null
+  updatedAt: number
 }
 
 export type FocusMode = 'auto' | 'always' | 'never'
@@ -213,6 +241,9 @@ export type TaskPatch = Partial<
     | 'mustDoDate'
     | 'notes'
     | 'focusMode'
+    | 'checklist'
+    | 'remindAt'
+    | 'prepFor'
     | 'sortOrder'
   >
 >

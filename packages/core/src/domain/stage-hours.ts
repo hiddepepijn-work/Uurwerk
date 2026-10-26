@@ -1,10 +1,11 @@
 /**
  * The default shape of an internship day, in one place.
  *
- * Nine to six, Monday to Friday. It is a default and not a rule — every day and every
+ * Nine to half past five, Monday to Friday: a morning up to the lunch break at half past
+ * twelve and an afternoon from one, the two blocks the planner fills. It is a default and not a rule — every day and every
  * weekday can be given its own window — but it is the answer whenever nothing has been
  * said yet, and it has to be the same answer in the planner, in the editor and in the
- * migration that seeds the pattern. Three copies of "nine to six" would drift.
+ * migration that seeds the pattern. Three copies of the same window would drift.
  *
  * The weekend has no internship hours at all. That is not the same as "no work": a Saturday
  * is open for school and personal work, it simply cannot hold internship time.
@@ -14,7 +15,7 @@ import type { IsoDate } from '../contract/types.js'
 import { isoWeekday } from '../util/time.js'
 
 export const DEFAULT_STAGE_START_MIN = 9 * 60
-export const DEFAULT_STAGE_END_MIN = 18 * 60
+export const DEFAULT_STAGE_END_MIN = 17 * 60 + 30
 
 export interface StageWindow {
   startMin: number

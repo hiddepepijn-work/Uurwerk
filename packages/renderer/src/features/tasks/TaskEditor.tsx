@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
   Area,
+  ChecklistItem,
   DependencyType,
+  PrepStatus,
   NewTask,
   Priority,
   Project,
@@ -15,6 +17,7 @@ import { Modal } from '../../ui/Modal.js'
 import { PriorityDot, PRIORITY_LABEL } from '../../ui/PriorityDot.js'
 import { TimeField } from '../../ui/TimeField.js'
 import { placeTask } from '../agenda/actions.js'
+import { api } from '../../api/client.js'
 import { areaFill, colorFor } from '../agenda/agenda-model.js'
 
 const PRIORITIES: Priority[] = ['high', 'medium', 'low']
@@ -91,6 +94,13 @@ export function TaskEditor({
   const [planStart, setPlanStart] = useState(9 * 60)
   const [notes, setNotes] = useState('')
   const [focusMode, setFocusMode] = useState<FocusMode>('auto')
+  /** Steps inside the task (migration 023). */
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([])
+  const [newStep, setNewStep] = useState('')
+  /** Own push moments, as a day and a minute of the day. */
+  const [moments, setMoments] = useState<Array<{ date: string; minute: number }>>([])
+  /** '' = nobody checked yet whether this needs preparing. */
+  const [prep, setPrep] = useState<PrepStatus | ''>('')
   const [edges, setEdges] = useState<DependencyEdit[]>([])
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -111,6 +121,13 @@ export function TaskEditor({
     setPlanStart(nextQuarter())
     setNotes(task?.notes ?? '')
     setFocusMode(task?.focusMode ?? 'auto')
+    setChecklist(task?.checklist ?? [])
+    setNewStep('')
+    setMoments(
+      (task?.remindAt ?? []).map((at) => ({ date: at.slice(0, 10), minute: Number(at.slice(11, 13)) * 60 + Number(at.slice(14, 16)) }))
+    )
+    setPrep('')
+    if (task) void api.prep.get(`t:${task.id}`).then((check) => setPrep(check?.status ?? '')).catch(() => undefined)
     setEdges(
       dependencies.map((dependency) => ({
         dependsOnTaskId: dependency.dependsOnTaskId,
@@ -166,13 +183,18 @@ export function TaskEditor({
         earliestStartDate: earliestStart || null,
         mustDoDate: mustDo || null,
         notes: notes.trim() || null,
-        focusMode
+        focusMode,
+        checklist: [...checklist, ...(newStep.trim() ? [{ text: newStep.trim(), done: false }] : [])],
+        remindAt: moments
+          .filter((moment) => moment.date)
+          .map((moment) => `${moment.date}T${String(Math.floor(moment.minute / 60)).padStart(2, '0')}:${String(moment.minute % 60).padStart(2, '0')}`)
       }
 
       // The dependency write can be rejected for a cycle, so it goes last: a refused edge
       // must not leave the rest of the edit unsaved.
       const id = task && onUpdate ? (await onUpdate(task.id, fields), task.id) : (await onCreate(fields)).id
       if (onSaveDependencies) await onSaveDependencies(id, edges)
+      if (prep) await api.prep.set(`t:${id}`, prep)
       if (planDate) {
         // As long as the estimate, within reason; without one, an hour.
         const length = Math.min(Math.max(fields.estimateMin ?? 60, 15), 8 * 60)
@@ -431,6 +453,82 @@ export function TaskEditor({
             className="w-full resize-y rounded-input bg-input px-3.5 py-3 text-[14px] leading-normal font-medium text-text outline-none"
           />
           <span className={help}>Jarvis reads these when it reminds you or asks how it went.</span>
+        </label>
+
+        <div className={group}>
+          <span className={label}>Checklist</span>
+          {checklist.map((item, index) => (
+            <div key={index} className="flex items-center gap-2.5">
+              <input
+                type="checkbox"
+                className="h-5 w-5 accent-[var(--color-accent)]"
+                checked={item.done}
+                onChange={(event) =>
+                  setChecklist((current) => current.map((entry, at) => (at === index ? { ...entry, done: event.target.checked } : entry)))
+                }
+              />
+              <span className={`flex-1 text-[14px] font-medium ${item.done ? 'text-text-faint line-through' : 'text-text'}`}>{item.text}</span>
+              <button
+                type="button"
+                aria-label="Remove step"
+                className="text-[13px] font-semibold text-text-faint hover:text-warn"
+                onClick={() => setChecklist((current) => current.filter((_, at) => at !== index))}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <input
+            value={newStep}
+            onChange={(event) => setNewStep(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || !newStep.trim()) return
+              event.preventDefault()
+              setChecklist((current) => [...current, { text: newStep.trim(), done: false }])
+              setNewStep('')
+            }}
+            placeholder="Add a step and press Enter"
+            className={field}
+          />
+        </div>
+
+        <div className={group}>
+          <span className={label}>Remind me at</span>
+          {moments.map((moment, index) => (
+            <div key={index} className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+              <DateField
+                value={moment.date}
+                onChange={(date) => setMoments((current) => current.map((entry, at) => (at === index ? { ...entry, date } : entry)))}
+              />
+              <TimeField
+                value={moment.minute}
+                step={15}
+                onChange={(minute) => setMoments((current) => current.map((entry, at) => (at === index ? { ...entry, minute } : entry)))}
+              />
+              <button
+                type="button"
+                aria-label="Remove reminder"
+                className="px-1 text-[13px] font-semibold text-text-faint hover:text-warn"
+                onClick={() => setMoments((current) => current.filter((_, at) => at !== index))}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <Button variant="ghost" onClick={() => setMoments((current) => [...current, { date: due || '', minute: 9 * 60 }])}>
+            + Reminder
+          </Button>
+          <span className={help}>A push on the phone and the laptop at that moment, with the steps still open.</span>
+        </div>
+
+        <label className={group}>
+          <span className={label}>Needs preparation?</span>
+          <select value={prep} onChange={(event) => setPrep(event.target.value as PrepStatus | '')} className={select}>
+            <option value="">Not checked yet — Jarvis will ask</option>
+            <option value="none">Nothing needed</option>
+            <option value="planned">Yes, the preparation is in as tasks</option>
+            <option value="asked">Not sure yet — keep asking</option>
+          </select>
         </label>
 
         <div className={group}>

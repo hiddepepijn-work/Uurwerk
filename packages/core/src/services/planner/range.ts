@@ -189,16 +189,41 @@ class Calendar {
     notAfter?: IsoDate,
     after?: Position
   ): { date: IsoDate; startMin: number; endMin: number } | null {
-    return this.scan(minutes, stage, false, notAfter, after) ?? this.scan(minutes, stage, true, notAfter, after)
+    return (
+      this.scan(minutes, stage, false, notAfter, after, false) ??
+      this.scan(minutes, stage, true, notAfter, after, false)
+    )
   }
 
-  /** One pass over either the working week (reserve false) or the weekend (reserve true). */
+  /**
+   * Takes a whole internship half-day: the earliest internship gap, from `after` to its end.
+   *
+   * Internship days have two blocks, the morning up to lunch and the afternoon after it.
+   * Cutting them into ninety-minute pieces gave a day of six fragments of different tasks,
+   * which is not how a working day at the internship goes. The lunch break and any
+   * appointment are walls, so the gaps that remain are exactly those half-days.
+   *
+   * `minMinutes` keeps a sliver left over by an appointment from becoming a block of its own.
+   */
+  takeWhole(
+    minMinutes: number,
+    notAfter?: IsoDate,
+    after?: Position
+  ): { date: IsoDate; startMin: number; endMin: number } | null {
+    return this.scan(minMinutes, true, false, notAfter, after, true)
+  }
+
+  /**
+   * One pass over either the working week (reserve false) or the weekend (reserve true).
+   * `whole` takes the rest of the gap instead of `minutes`, which is then only the minimum.
+   */
   private scan(
     minutes: number,
     stage: boolean,
     reserve: boolean,
-    notAfter?: IsoDate,
-    after?: Position
+    notAfter: IsoDate | undefined,
+    after: Position | undefined,
+    whole: boolean
   ): { date: IsoDate; startMin: number; endMin: number } | null {
     for (let index = 0; index < this.gaps.length; index++) {
       const gap = this.gaps[index]!
@@ -213,7 +238,7 @@ class Calendar {
       }
       if (gapEnd - start < minutes) continue
 
-      const slot = { date: gap.date, startMin: start, endMin: start + minutes }
+      const slot = { date: gap.date, startMin: start, endMin: whole ? gapEnd : start + minutes }
 
       // Up to two remainders: what sat in front of the constraint, and what is left behind
       // the block. Either can be empty.
@@ -381,11 +406,7 @@ export function planRange(input: RangePlanInput): RangeProposal {
     const needMin = scored.scheduleMin - (alreadyPlanned.get(scored.task.id) ?? 0)
     if (needMin <= 0) continue
 
-    for (const chunk of splitIntoBlocks(needMin, input.profile)) {
-      const size = Math.max(input.profile.minimumBlockMin, chunk)
-      const slot = calendar.take(size, wantsStage, deadline, after ?? undefined)
-      if (!slot) break
-
+    const place = (slot: { date: IsoDate; startMin: number; endMin: number }): void => {
       blocks.push({
         taskId: scored.task.id,
         areaId: scored.task.areaId,
@@ -397,11 +418,27 @@ export function planRange(input: RangePlanInput): RangeProposal {
         score: scored.score,
         explanation: explain(scored)
       })
-      placedMin += size
+      placedMin += slot.endMin - slot.startMin
       finishedAt.set(
         scored.task.id,
         latest(finishedAt.get(scored.task.id) ?? null, { date: slot.date, minute: slot.endMin })
       )
+    }
+
+    if (wantsStage) {
+      // Whole half-days until the work is covered; the last one may hold more than is left.
+      while (placedMin < needMin) {
+        const slot = calendar.takeWhole(input.profile.minimumBlockMin, deadline, after ?? undefined)
+        if (!slot) break
+        place(slot)
+      }
+    } else {
+      for (const chunk of splitIntoBlocks(needMin, input.profile)) {
+        const size = Math.max(input.profile.minimumBlockMin, chunk)
+        const slot = calendar.take(size, false, deadline, after ?? undefined)
+        if (!slot) break
+        place(slot)
+      }
     }
 
     const missing = needMin - placedMin

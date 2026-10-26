@@ -268,7 +268,9 @@ export function JarvisCorner() {
     // One change at a time: a settings event during a start would otherwise open a second
     // capture, and two streams interleaved into the detector drown the wake word.
     let busy: Promise<void> = Promise.resolve()
+    let retry: ReturnType<typeof setTimeout> | null = null
     const sync = (): void => {
+      if (retry) clearTimeout(retry)
       busy = busy
         .then(async () => {
           const on = await api.window.wakeWordOn()
@@ -279,12 +281,17 @@ export function JarvisCorner() {
             wake.current = null
           }
         })
-        .catch((error: unknown) => console.warn('Wake word unavailable:', error))
+        .catch((error: unknown) => {
+          console.warn('Wake word unavailable:', error)
+          // No microphone at start-up (still waking, a headset coming): try again shortly.
+          if (!stopped) retry = setTimeout(sync, 30_000)
+        })
     }
     sync()
     const off = events.on('data:invalidated', ({ domain }) => domain === 'settings' && sync())
     return () => {
       stopped = true
+      if (retry) clearTimeout(retry)
       off()
       void wake.current?.stop()
     }

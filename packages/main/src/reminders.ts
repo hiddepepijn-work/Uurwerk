@@ -2,14 +2,16 @@
  * The laptop's side of the reminders: the same list the phone schedules, shown as Windows
  * notifications when their moment comes — 30 and 15 minutes before a task or appointment and
  * as it starts, each with its own sound, and
- * "verzamel je spullen" / "lukt het?" at 30 and 15 minutes before leaving.
+ * "verzamel je spullen" / "lukt het?" at 30 and 15 minutes before leaving; "gelukt?" when a
+ * planned task's block ends, and the tasks still not done (taskNudges).
  *
  * A check every half minute rather than timers per reminder: the plan changes under us
  * (sync, replans), and re-reading it is cheaper than keeping timers in step with it.
  */
 
 import { Notification } from 'electron'
-import { upcomingReminders } from '@core/services/reminders.js'
+import { extraNudges, taskNudges, upcomingReminders } from '@core/services/reminders.js'
+import { extraNudgeInput, prepSweep } from '@core/services/prep.js'
 import { toIsoDate } from '@core/util/time.js'
 import type { Backend } from '@backend/create.js'
 import { emitEvent } from './events.js'
@@ -32,7 +34,14 @@ export function startReminders(backend: Backend, onOpen: () => void): void {
       const blocks = plan ? backend.store.plans.blocks(plan.id) : []
       const events = backend.calendar.eventsInRange(now - 3_600_000, now + 6 * 3_600_000)
 
-      for (const reminder of upcomingReminders(blocks, events, checkedUntil, now + 1)) {
+      const due = [
+        ...upcomingReminders(blocks, events, checkedUntil, now + 1, (taskId) => backend.store.tasks.get(taskId)),
+        ...taskNudges(backend.store.tasks.list({ status: 'active' }), checkedUntil, now + 1),
+        ...extraNudges(extraNudgeInput(backend.store, now), checkedUntil, now + 1)
+      ]
+      for (const reminder of due) {
+        // Halfway is for the phone's Live Activity; here only "gelukt?" at the end.
+        if (reminder.kind === 'checkin' && reminder.checkin?.stage !== 'end') continue
         if (shown.has(reminder.key)) continue
         shown.add(reminder.key)
         const notification = new Notification({
@@ -53,7 +62,25 @@ export function startReminders(backend: Backend, onOpen: () => void): void {
     checkedUntil = now + 1
   }
 
-  handle = setInterval(check, CHECK_MS)
+  // Preparation for what is coming: at start and every ten minutes (core/services/prep.ts).
+  const sweep = (): void => {
+    try {
+      const done = prepSweep(backend.store, Date.now())
+      if (done.created.length > 0) {
+        log.info(`Preparation: ${done.created.length} task(s) added.`)
+        emitEvent('data:invalidated', { domain: 'tasks' })
+      }
+    } catch (error) {
+      log.warn('Preparation sweep failed.', error)
+    }
+  }
+  sweep()
+  let ticks = 0
+
+  handle = setInterval(() => {
+    if (++ticks % 20 === 0) sweep()
+    check()
+  }, CHECK_MS)
 }
 
 export function stopReminders(): void {

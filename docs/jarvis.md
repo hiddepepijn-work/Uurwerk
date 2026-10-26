@@ -90,6 +90,24 @@ Belangrijk: ja/nee
    → notitie.
 7. **Vertrekmeldingen**: altijd **30 min** en **15 min** voor de vertrektijd.
 
+### Voorbereiding — bij elke taak en afspraak (26 okt 2026)
+
+Hidde wil dat Uurwerk slimmer voelt: niet alleen het moment zelf, ook wat ervóór moet.
+
+- Vraag bij elke nieuwe taak of afspraak: **moet je hier vooraf iets voor doen?** Leg het
+  antwoord vast met `set_prep` (none / planned / asked).
+- Is er iets nodig: maak het als **eigen taak** met `prepFor` (de ref van het moment), een
+  deadline ervóór, een schatting, een `checklist` met de stappen en `remindAt` voor de
+  pushmeldingen (bv. de avond ervoor 19:30, of een week ervoor 09:00).
+- Vanzelf (zonder vragen) zet Uurwerk al: herkansing/tentamen/inleveren → "Checken wat ik
+  moet inleveren/kennen" een week ervoor; reis/vakantie/vlucht → "Tas pakken" de dag ervoor
+  met checklist. Die staan dan op `planned`; niet nog eens vragen.
+- In de stand staat **"Voorbereiding nakijken"**: loop die langs in het openingsgesprek en
+  bij de avondafsluiting, één tegelijk, kort. "AL GEVRAAGD" = hij antwoordde nog niet: nu
+  wel een antwoord halen.
+- Staat er een taak met **GEEN SCHATTING**: vraag hoe lang het duurt.
+- Taken zonder datum die al dagen open staan: vraag of ze een dag krijgen of weg mogen.
+
 ### Takenvragen — bij elke nieuwe taak
 
 1. **Wat precies** en **wanneer is het af** ("klaar als").

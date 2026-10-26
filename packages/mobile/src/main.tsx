@@ -27,7 +27,8 @@ import { createBackendFrom } from '@backend/create.js'
 import { installHost, unavailable, type SecretKey } from '@backend/host.js'
 import { buildImplementation } from '@backend/implementation.js'
 import { isServerOnly } from '@backend/server-only.js'
-import { upcomingReminders } from '@core/services/reminders.js'
+import { extraNudges, taskNudges, upcomingReminders } from '@core/services/reminders.js'
+import { extraNudgeInput, prepSweep } from '@core/services/prep.js'
 import { toIsoDate } from '@core/util/time.js'
 
 import { App } from '@renderer/app/App.js'
@@ -137,12 +138,22 @@ async function start(): Promise<void> {
 
   /** The reminders for a window, read straight from this copy of the database. */
   const reminders = (fromMs: number, toMs: number) => {
+    // Preparation for what is coming first, so its reminders are in this round too.
+    try {
+      prepSweep(backend.store, Date.now())
+    } catch (error) {
+      console.warn('[prep] sweep failed', error)
+    }
     const blocks = []
     for (let day = fromMs; day < toMs + 86_400_000; day += 86_400_000) {
       const plan = backend.store.plans.accepted('day', toIsoDate(day))
       if (plan) blocks.push(...backend.store.plans.blocks(plan.id))
     }
-    return upcomingReminders(blocks, backend.calendar.eventsInRange(fromMs, toMs + 86_400_000), fromMs, toMs, (taskId) => backend.store.tasks.get(taskId))
+    return [
+      ...upcomingReminders(blocks, backend.calendar.eventsInRange(fromMs, toMs + 86_400_000), fromMs, toMs, (taskId) => backend.store.tasks.get(taskId)),
+      ...taskNudges(backend.store.tasks.list({ status: 'active' }), fromMs, toMs),
+      ...extraNudges(extraNudgeInput(backend.store, Date.now()), fromMs, toMs)
+    ].sort((a, b) => a.at - b.at)
   }
   // A changed plan moves its reminders; batched, because a replan is many writes.
   let rescheduleTimer: ReturnType<typeof setTimeout> | null = null

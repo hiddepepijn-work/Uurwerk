@@ -67,7 +67,13 @@ const SOUNDS = ['ochtend.caf', 'avond.caf', 'herinnering.caf', 'vertrek.caf', 'c
  * Leaving keeps its spoken clip — "Hidde, lukt het? Nog een kwartier…" must not be missed.
  */
 const soundOf = (reminder: Reminder): string | undefined =>
-  reminder.kind === 'leave' ? 'vertrek.caf' : reminder.cue ? `cue-${reminder.cue}.caf` : undefined
+  reminder.kind === 'leave'
+    ? 'vertrek.caf'
+    : reminder.cue
+      ? `cue-${reminder.cue}.caf`
+      : reminder.kind === 'nudge' || reminder.kind === 'checkin'
+        ? 'herinnering.caf'
+        : undefined
 
 /** The two test notifications (Settings → Sounds); rescheduling leaves them alone. */
 const TEST_IDS = [999_000_001, 999_000_002]
@@ -181,17 +187,21 @@ export async function scheduleNotifications(
   const style = await styleOf()
   for (const reminder of reminders(now, now + REMINDER_HOURS * 3_600_000)) {
     if (notifications.length >= MAX_PENDING) break
-    // The check-ins are the Live Activity's now: its Klaar/Bezig buttons ask the same question.
-    if (reminder.kind === 'checkin') continue
-    const quiet = style === 'empty' && reminder.kind !== 'leave'
+    // "Al bezig?" halfway is the Live Activity's: its Klaar/Bezig buttons ask the same question.
+    // "Gelukt?" at the end is a notification too: with the app asleep the Live Activity can be
+    // gone, and a task not done then went unmentioned (13 Oct 2026).
+    if (reminder.kind === 'checkin' && reminder.checkin?.stage !== 'end') continue
+    // Words are the point of these two: never the empty style.
+    const quiet = style === 'empty' && !['leave', 'checkin', 'nudge'].includes(reminder.kind)
     notifications.push({
       id: reminderId(reminder.key),
       title: quiet ? '' : reminder.title,
       body: quiet ? '' : reminder.body,
-      threadIdentifier: 'agenda',
+      threadIdentifier: reminder.kind === 'nudge' || reminder.kind === 'checkin' ? 'taken' : 'agenda',
       schedule: { at: new Date(reminder.at), allowWhileIdle: true },
       sound: soundOf(reminder),
-      extra: { reminder: reminder.kind, cue: reminder.cue ?? null }
+      ...(reminder.checkin ? { actionTypeId: 'checkin-end' } : {}),
+      extra: { reminder: reminder.kind, cue: reminder.cue ?? null, ...(reminder.checkin ?? {}) }
     })
   }
 
@@ -207,7 +217,8 @@ async function clearDeliveredCues(): Promise<void> {
     const delivered = (await LocalNotifications.getDeliveredNotifications()).notifications
     const cues = delivered.filter((entry) => {
       const extra = (entry.extra ?? {}) as { reminder?: string }
-      return !!extra.reminder || TEST_IDS.includes(entry.id)
+      // What is still to be done stays until it is answered.
+      return (!!extra.reminder && extra.reminder !== 'nudge' && extra.reminder !== 'checkin') || TEST_IDS.includes(entry.id)
     })
     if (cues.length > 0) await LocalNotifications.removeDeliveredNotifications({ notifications: cues })
   } catch {

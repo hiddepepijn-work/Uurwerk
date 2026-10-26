@@ -49,14 +49,15 @@ beforeEach(() => {
     allowedAreas: [],
     areaTargets: {},
     enabled: true,
-    // The whole day is internship time here, so these tests stay about ranking and fit.
-    stageStartMin: 8 * 60,
-    stageEndMin: 18 * 60
+    // No internship hours here, so these tests stay about ranking and fit; internship work
+    // goes in whole half-days and has its own tests.
+    stageStartMin: null,
+    stageEndMin: null
   })
 })
 
 const task = (title: string, fields: Partial<Parameters<Store['tasks']['create']>[0]> = {}) =>
-  store.tasks.create({ title, areaId: SYSTEM_AREAS.stage, estimateMin: 60, ...fields })
+  store.tasks.create({ title, areaId: SYSTEM_AREAS.work, estimateMin: 60, ...fields })
 
 const titlesIn = (blocks: Array<{ taskId?: string | null }>): string[] =>
   blocks.map((block) => (block.taskId ? (store.tasks.get(block.taskId)?.title ?? '?') : '?'))
@@ -418,5 +419,42 @@ describe('explanations', () => {
     const after = store.plans.blocks(store.plans.accepted('day', today)!.id)
 
     expect(after).toEqual(before)
+  })
+})
+
+// ------------------------------------------------------ internship half-days
+
+describe('internship half-days', () => {
+  it('places internship work as the whole morning and the whole afternoon', () => {
+    store.availability.upsert({
+      week: null,
+      weekday: ((new Date().getDay() + 6) % 7) + 1,
+      startMin: 9 * 60,
+      endMin: 22 * 60,
+      allowedAreas: [],
+      areaTargets: {},
+      enabled: true,
+      stageStartMin: 9 * 60,
+      stageEndMin: 17 * 60 + 30
+    })
+    store.availability.addEvent({
+      date: today,
+      startMin: 12 * 60 + 30,
+      endMin: 13 * 60,
+      title: 'Lunch',
+      kind: 'break',
+      areaId: null,
+      recurring: false
+    })
+    task('Field report', { areaId: SYSTEM_AREAS.stage, estimateMin: 8 * 60 })
+
+    const spans = planner
+      .proposeDay(today, { intensity: 'balanced' })
+      .blocks.map((block) => [block.startMin, block.endMin])
+
+    expect(spans).toEqual([
+      [9 * 60, 12 * 60 + 30],
+      [13 * 60, 17 * 60 + 30]
+    ])
   })
 })

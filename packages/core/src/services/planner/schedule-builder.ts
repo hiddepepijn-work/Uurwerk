@@ -9,6 +9,8 @@
  *   2. at-risk work goes first, because a missed deadline is a different kind of failure
  *   3. then simply the highest-scoring work that fits
  *   4. buffer is never filled
+ *   5. internship work takes whole half-days — the morning up to lunch, the afternoon after
+ *      it — instead of ninety-minute pieces, and the buffer does not apply to those
  *
  * Unlocking downstream work is not a separate step: it is a weighted term in the score
  * (priority-score.ts), so it competes with the other reasons rather than jumping the queue.
@@ -83,6 +85,14 @@ class GapList {
     }
     return null
   }
+
+  /** The earliest internship gap of at least `minMinutes`, taken whole: one half-day. */
+  takeWhole(minMinutes: number): { startMin: number; endMin: number } | null {
+    const index = this.gaps.findIndex((gap) => gap.stage && gap.minutes >= minMinutes)
+    if (index < 0) return null
+    const gap = this.gaps.splice(index, 1)[0]!
+    return { startMin: gap.startMin, endMin: gap.startMin + gap.minutes }
+  }
 }
 
 export function buildDaySchedule(input: {
@@ -119,6 +129,36 @@ export function buildDaySchedule(input: {
           : 'this day is internship hours only — plan it before or after them',
         minutes: scored.scheduleMin
       })
+      continue
+    }
+
+    if (wantsStage) {
+      let placedMin = 0
+      while (placedMin < scored.scheduleMin) {
+        const slot = gaps.takeWhole(input.profile.minimumBlockMin)
+        if (!slot) break
+        blocks.push({
+          taskId: scored.task.id,
+          areaId: scored.task.areaId,
+          date: input.date,
+          startMin: slot.startMin,
+          endMin: slot.endMin,
+          kind: 'task',
+          source: 'planner',
+          score: scored.score,
+          explanation: explain(scored)
+        })
+        placedMin += slot.endMin - slot.startMin
+      }
+      spent += placedMin
+      if (placedMin < scored.scheduleMin) {
+        unplaced.push({
+          taskId: scored.task.id,
+          taskTitle: scored.task.title,
+          reason: placedMin > 0 ? 'partially placed — the rest did not fit today' : 'no internship half-day left on this day',
+          minutes: scored.scheduleMin - placedMin
+        })
+      }
       continue
     }
 

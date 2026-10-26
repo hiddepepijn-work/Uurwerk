@@ -11,7 +11,7 @@
  * from jarvis.liveSession (it already holds a device token for that), good once, for a minute.
  *
  * Down the socket, as JSON: heard, reply_start, reply_text, audio_mp3 (one sentence each),
- * tool_call, turn_done, error. Up: binary PCM (16-bit, 24 kHz, while Hidde talks), and
+ * tool_call, turn_done, nothing (a sentence without words: back to listening), error. Up: binary PCM (16-bit, 24 kHz, while Hidde talks), and
  * end (he paused), text (typed), cutoff (he interrupted; ms of the answer he heard),
  * tool_result.
  */
@@ -162,7 +162,8 @@ export class SentenceChunker {
   }
 }
 
-const VOICE = process.env.JARVIS_CASCADE_VOICE?.trim() || 'nl-NL-MaartenNeural'
+/** Fenna, the voice of the chat answers: Hidde finds it much nicer than Maarten (26 Oct 2026). */
+const VOICE = process.env.JARVIS_CASCADE_VOICE?.trim() || 'nl-NL-FennaNeural'
 
 const escapeXml = (text: string): string =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
@@ -344,10 +345,21 @@ class LiveListener {
  * (measured 28 Sep 2026), with the words ready. That replaces waiting for a pause on the
  * device and transcribing afterwards, which took about 1.6 s together.
  */
+/**
+ * Flux hangs up on a socket that has not pinged for 60 s (INACTIVE_CLIENT, measured 13 Oct
+ * 2026). Between turns no audio goes up, so after one long answer it was gone and every
+ * sentence after it went the slow way, with no words on screen. A websocket ping keeps it
+ * (audio-free, so not billed); KeepAlive as a JSON message is refused and closes it.
+ */
+const FLUX_PING_MS = 20_000
+
 class FluxListener {
   private ready: Promise<boolean>
+  private pinger: ReturnType<typeof setInterval> | null = null
   /** Audio streamed, in bytes: Flux bills by the minute of audio. */
   bytes = 0
+  /** The socket closed: a new one is needed for the next sentence. */
+  dead = false
 
   private socket!: WebSocket
 
@@ -364,10 +376,19 @@ class FluxListener {
             const query = new URLSearchParams({ model: 'flux-general-multi', language_hint: 'nl', encoding: 'linear16', sample_rate: String(SAMPLE_RATE), eot_threshold: '0.85' })
             for (const term of terms) query.append('keyterm', term)
             this.socket = new WebSocketClient(`wss://api.deepgram.com/v2/listen?${query}`, { headers: { Authorization: `Token ${key}` } })
-            this.socket.on('open', () => resolve(true))
+            this.socket.on('open', () => {
+              this.pinger = setInterval(() => this.socket.readyState === this.socket.OPEN && this.socket.ping(), FLUX_PING_MS)
+              resolve(true)
+            })
             this.socket.on('error', (error) => {
               log.warn('Jarvis cascade: Flux did not connect.', error)
+              this.dead = true
               resolve(false)
+            })
+            this.socket.on('close', (code, reason) => {
+              this.dead = true
+              if (this.pinger) clearInterval(this.pinger)
+              log.info('Jarvis cascade: Flux closed.', { code, reason: String(reason).slice(0, 200) })
             })
             this.listen(onTurn, onHearing)
           })
@@ -376,12 +397,13 @@ class FluxListener {
 
   private listen(onTurn: (text: string) => void, onHearing?: (text: string) => void): void {
     this.socket.on('message', (data) => {
-      let event: { type?: string; event?: string; transcript?: string }
+      let event: { type?: string; event?: string; transcript?: string; code?: string; description?: string }
       try {
         event = JSON.parse(String(data)) as typeof event
       } catch {
         return
       }
+      if (event.type === 'Error') log.warn('Jarvis cascade: Flux error.', { code: event.code, description: event.description })
       if (event.type === 'TurnInfo' && event.event === 'EndOfTurn') onTurn((event.transcript ?? '').trim())
       // What he is saying, while he says it: the screen shows it live.
       else if (event.type === 'TurnInfo' && event.transcript) onHearing?.(event.transcript.trim())
@@ -394,6 +416,7 @@ class FluxListener {
   }
 
   close(): void {
+    if (this.pinger) clearInterval(this.pinger)
     try {
       void this.ready.then(() => this.socket?.close())
     } catch {
@@ -451,6 +474,17 @@ class VoiceSession {
   private toolCount = 0
   private closed = false
   private spent = 0
+  /** Audio bytes of Flux connections already closed, for the bill. */
+  private fluxBytes = 0
+  private keyterms: Promise<string[]> | null = null
+  private fluxOpenedAt = 0
+  /**
+   * An answer is being made. What he says meanwhile waits for it instead of cancelling it:
+   * a cough or an "eh" during the thinking threw the answer away (13 Oct 2026), and two
+   * answers at once each saw a history without the other.
+   */
+  private answering = false
+  private waiting: string[] = []
 
   constructor(
     private readonly ws: WebSocket,
@@ -478,6 +512,8 @@ class VoiceSession {
         const pcm = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer)
         this.utterance.push(pcm)
         this.listener?.append(pcm)
+        // At most one new connection every five seconds, should Deepgram be down.
+        if (this.flux?.dead && Date.now() - this.fluxOpenedAt > 5000) this.openFlux()
         this.flux?.append(pcm)
       }
       else void this.control(String(data))
@@ -487,14 +523,26 @@ class VoiceSession {
 
     const deepgramKey = deps.secret('deepgramKey')
     const openaiKey = deps.secret('openaiKey')
-    if (deepgramKey) {
-      this.flux = new FluxListener(deepgramKey, (text) => this.fluxTurn(text), keytermsFor(deps.api), (text) => this.send({ type: 'hearing', text }))
-    }
+    if (deepgramKey) this.openFlux()
     else if (openaiKey) this.listener = new LiveListener(openaiKey)
     for (const text of FILLERS) void fillerAudio(text)
     // The cache is made while he is still saying hello, not while he waits for an answer.
     void this.brain.warm().catch((error: unknown) => log.warn('Jarvis cascade: cache failed.', error))
     if (opening) void this.answer(opening)
+  }
+
+  /** A Flux connection: at the start, and again when the last one closed. */
+  private openFlux(): void {
+    const key = this.deps.secret('deepgramKey')
+    if (!key) return
+    if (this.flux) {
+      this.fluxBytes += this.flux.bytes
+      this.flux.close()
+      log.info('Jarvis cascade: Flux reconnecting.')
+    }
+    this.keyterms ??= keytermsFor(this.deps.api)
+    this.fluxOpenedAt = Date.now()
+    this.flux = new FluxListener(key, (text) => this.fluxTurn(text), this.keyterms, (text) => this.send({ type: 'hearing', text }))
   }
 
   private send(message: Record<string, unknown>): void {
@@ -531,7 +579,7 @@ class VoiceSession {
     // The old way already took this sentence (Flux was late): once is enough.
     if (Date.now() < this.ignoreFluxUntil) return
     this.fluxHandled = true
-    if (!text.trim()) return
+    if (!text.trim()) return this.send({ type: 'nothing' })
     this.send({ type: 'heard', text })
     if (this.command(text)) return
     void this.answer(text)
@@ -567,7 +615,7 @@ class VoiceSession {
     this.utterance = []
     if (pcm.length < SAMPLE_RATE * 2 * MIN_SPEECH_S) {
       this.listener?.discard()
-      return
+      return this.send({ type: 'nothing' })
     }
     const key = this.deps.secret('openaiKey')
     if (!key) return this.send({ type: 'error', message: 'Geen openaiKey voor spraakherkenning op de server.' })
@@ -583,7 +631,7 @@ class VoiceSession {
       }
     }
     this.spent += (pcm.length / (SAMPLE_RATE * 2) / 60) * STT_PER_MINUTE
-    if (!text) return
+    if (!text) return this.send({ type: 'nothing' })
     this.send({ type: 'heard', text })
     if (this.command(text)) return
     await this.answer(text)
@@ -666,7 +714,23 @@ class VoiceSession {
     })
   }
 
+  /** One answer at a time; what comes in meanwhile is answered next, together. */
   private async answer(text: string): Promise<void> {
+    if (this.answering) {
+      this.waiting.push(text)
+      log.info('Jarvis cascade: heard while answering; next in line.', { text })
+      return
+    }
+    this.answering = true
+    try {
+      await this.answerNow(text)
+      while (this.waiting.length > 0 && !this.closed) await this.answerNow(this.waiting.splice(0).join(' '))
+    } finally {
+      this.answering = false
+    }
+  }
+
+  private async answerNow(text: string): Promise<void> {
     const turn = ++this.turn
     this.spoken = []
     this.send({ type: 'reply_start' })
@@ -749,7 +813,8 @@ class VoiceSession {
     recent = { history: this.brain.conversation, endedAt: Date.now(), day: dayKey(), id: this.id, turns: this.turns }
     this.listener?.close()
     this.flux?.close()
-    if (this.flux) this.spent += (this.flux.bytes / (SAMPLE_RATE * 2) / 60) * FLUX_PER_MINUTE
+    const fluxBytes = this.fluxBytes + (this.flux?.bytes ?? 0)
+    if (fluxBytes > 0) this.spent += (fluxBytes / (SAMPLE_RATE * 2) / 60) * FLUX_PER_MINUTE
     await this.brain.close().catch(() => undefined)
     if (this.spent > 0) {
       const spend = addCostUsd(this.deps.usagePath, this.spent)

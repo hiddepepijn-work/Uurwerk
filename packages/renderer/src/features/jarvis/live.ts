@@ -42,6 +42,11 @@ const VOICE_RATE = 24_000
 const LEAVE_BEAT_MS = 700
 /** A goodbye never keeps the call open longer than this, whatever is still going on. */
 const LEAVE_CAP_MS = 20_000
+/**
+ * Thinking with nothing back from the server for this long: the sentence got lost (no words
+ * heard, a dropped line). Say so and listen again, rather than thinking forever.
+ */
+const STUCK_MS = 12_000
 /** Samples per chunk sent: 40 ms. */
 const CHUNK = 960
 /** Audio kept from before the gate opened, so the first syllable is not lost. */
@@ -138,6 +143,10 @@ interface WireEvents {
   closed(code: number, reason: string): void
   /** The server recognised a command and answers nothing ("5 sec"). */
   command?(name: string): void
+  /** The sentence had no words in it (a cough, a click): nothing to answer. */
+  nothing?(): void
+  /** Anything at all came from the server: it is alive and on it. */
+  alive?(): void
 }
 
 interface Wire {
@@ -432,13 +441,6 @@ class OpenAIWire implements Wire {
  */
 class CascadeWire implements Wire {
   private socket: WebSocket | null = null
-  /** The gate is open: this audio belongs to one sentence, from its first chunk to the pause. */
-  private streaming = false
-  /**
-   * Set by the call: a new sentence starts. If an answer is still coming or playing, that
-   * answer stops (the call knows what is playing; the server may be done already).
-   */
-  bargeIn: () => void = () => undefined
 
   static open(live: JarvisLiveSession, events: WireEvents): Promise<CascadeWire> {
     const wire = new CascadeWire()
@@ -467,10 +469,14 @@ class CascadeWire implements Wire {
         } catch {
           return
         }
+        events.alive?.()
         switch (event.type) {
           case 'hearing':
           case 'heard':
             events.heard(event.text ?? '', true)
+            break
+          case 'nothing':
+            events.nothing?.()
             break
           case 'reply_start':
             events.replyStart()
@@ -507,18 +513,16 @@ class CascadeWire implements Wire {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message))
   }
 
+  /**
+   * A new sentence does not stop an answer that is still being made: the server answers it
+   * next (13 Oct 2026: an "eh" during the thinking threw the answer away, every time). While
+   * he speaks the microphone is deaf anyway; cutting him off is a tap.
+   */
   audio(pcm: ArrayBuffer): void {
-    // A new sentence while an answer is coming: that answer stops, this is a new question.
-    // Not the tail of the sentence just heard: Flux often answers before the gate closes.
-    if (!this.streaming) {
-      this.streaming = true
-      this.bargeIn()
-    }
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(pcm)
   }
 
   paused(): void {
-    this.streaming = false
     this.send({ type: 'end' })
   }
 
@@ -560,6 +564,9 @@ export class LiveCall {
   private replyDone = true
   /** Jarvis said "even kijken" or runs tools, and is still working on the answer. */
   private working = false
+  /** When the server last sent anything, and when thinking began: for STUCK_MS. */
+  private lastServer = 0
+  private thinkingSince = 0
   /** Tapped away: drop the rest of this answer. */
   private muted = false
   private usage: JarvisLiveUsage = { ...EMPTY }
@@ -604,6 +611,7 @@ export class LiveCall {
 
   private setPhase(phase: OrbState): void {
     if (this.phase === phase) return
+    if (phase === 'thinking') this.thinkingSince = performance.now()
     this.phase = phase
     this.handlers.onPhase(phase)
   }
@@ -762,6 +770,13 @@ export class LiveCall {
       command: (name) => {
         if (name === 'sprint') this.sprint()
       },
+      nothing: () => {
+        trail('niets verstaan in die zin')
+        if (this.phase === 'thinking' && this.replyDone && !this.working) this.setPhase('listening')
+      },
+      alive: () => {
+        this.lastServer = performance.now()
+      },
       closed: (code, reason) => {
         // A connection replaced by a resumed one closes quietly.
         if (wire !== null && this.wire !== wire) return
@@ -772,14 +787,6 @@ export class LiveCall {
     }
     if (live.provider === 'cascade') {
       const cascade = await CascadeWire.open(live, events)
-      // Talking over him: stop his voice here and tell the server how much was heard.
-      cascade.bargeIn = () => {
-        this.heard = ''
-        if (this.playing.size > 0 || !this.replyDone) {
-          this.cutOff()
-          this.setPhase('listening')
-        }
-      }
       // Flux decides when the turn ends and needs to hear the pause for it: keep sending
       // 2 s of it. Without Flux the server falls back to the gate closing.
       this.gate.hangoverMs = 2000
@@ -858,7 +865,7 @@ export class LiveCall {
       if (decision.closed) {
         trail(`stil; verstuurd tot nu: ${this.sentChunks} stukjes, gehoord: "${this.heard.trim().slice(0, 80)}"`)
         this.wire.paused()
-        if (this.phase === 'listening' && this.heard) this.setPhase('thinking')
+        if (this.phase === 'listening' && (this.heard || !this.replyDone)) this.setPhase('thinking')
       }
     } else {
       this.preroll.push(pcm)
@@ -951,6 +958,22 @@ export class LiveCall {
       } else {
         this.level.current = Math.min(1, this.micLevel * 8)
         if (this.phase === 'speaking' && this.replyDone) this.setPhase(this.working ? 'thinking' : 'listening')
+      }
+      const now = performance.now()
+      if (
+        // Our own line only: it says when it is alive; the realtime models do not.
+        this.wire instanceof CascadeWire &&
+        this.phase === 'thinking' &&
+        !this.gate.isOpen &&
+        now - this.thinkingSince > STUCK_MS &&
+        now - this.lastServer > STUCK_MS
+      ) {
+        trail(`vastgelopen op denken (${Math.round((now - this.lastServer) / 1000)} s niets van de server); weer luisteren`)
+        this.replyDone = true
+        this.working = false
+        this.reply = 'Ik heb je niet verstaan. Zeg het nog eens?'
+        this.handlers.onReply(this.reply)
+        this.setPhase('listening')
       }
       this.frame = requestAnimationFrame(tick)
     }

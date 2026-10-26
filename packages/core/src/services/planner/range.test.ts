@@ -34,17 +34,32 @@ beforeEach(() => {
       allowedAreas: [],
       areaTargets: {},
       enabled: true,
-      // These tests are about deadlines and capacity, so the whole day is internship time.
-      stageStartMin: 9 * 60,
-      stageEndMin: 17 * 60
+      // These tests are about deadlines and capacity, so the day has no internship hours:
+      // internship work goes in whole half-days and is tested on its own below.
+      stageStartMin: null,
+      stageEndMin: null
+    })
+  }
+  // The store seeds an open weekend; these tests are about the working week.
+  for (const weekday of [6, 7]) {
+    store.availability.upsert({
+      week: null,
+      weekday,
+      startMin: 10 * 60,
+      endMin: 18 * 60,
+      allowedAreas: [],
+      areaTargets: {},
+      enabled: false,
+      stageStartMin: null,
+      stageEndMin: null
     })
   }
 })
 
-function task(title: string, estimateMin: number, dueDate?: string): string {
+function task(title: string, estimateMin: number, dueDate?: string, areaId: string = SYSTEM_AREAS.work): string {
   return store.tasks.create({
     title,
-    areaId: SYSTEM_AREAS.stage,
+    areaId,
     estimateMin,
     ...(dueDate ? { dueDate } : {})
   }).id
@@ -84,14 +99,14 @@ describe('the deadline decides the order', () => {
     // High priority and a big estimate would win the day planner's ranking outright.
     const loud = store.tasks.create({
       title: 'Loud but later',
-      areaId: SYSTEM_AREAS.stage,
+      areaId: SYSTEM_AREAS.work,
       estimateMin: 30 * 60,
       priority: 'high',
       dueDate: DUE_LATE
     }).id
     const quiet = store.tasks.create({
       title: 'Quiet but sooner',
-      areaId: SYSTEM_AREAS.stage,
+      areaId: SYSTEM_AREAS.work,
       estimateMin: 4 * 60,
       priority: 'low',
       dueDate: DUE_EARLY
@@ -642,7 +657,7 @@ describe('the internship window', () => {
 
   it('keeps internship work inside the internship hours', () => {
     longDays()
-    task('Field report', 10 * 60, DUE_LATE)
+    task('Field report', 10 * 60, DUE_LATE, SYSTEM_AREAS.stage)
 
     const proposal = planner.proposeRange(MONDAY, END)
 
@@ -670,7 +685,7 @@ describe('the internship window', () => {
     longDays()
     // Nine to six is nine hours a day, minus the buffer. Forty hours before Wednesday needs
     // the evenings to fit, and the evenings are not the internship's to take.
-    task('Impossible by Wednesday', 40 * 60, '2026-11-18')
+    task('Impossible by Wednesday', 40 * 60, '2026-11-18', SYSTEM_AREAS.stage)
 
     const proposal = planner.proposeRange(MONDAY, END)
 
@@ -691,7 +706,7 @@ describe('the internship window', () => {
       stageStartMin: null,
       stageEndMin: null
     })
-    task('Field report', 30 * 60, DUE_LATE)
+    task('Field report', 30 * 60, DUE_LATE, SYSTEM_AREAS.stage)
 
     const proposal = planner.proposeRange(MONDAY, END)
 
@@ -736,6 +751,19 @@ describe('weekends', () => {
     openWeekend()
     // The weekday window here is nine to five and entirely internship hours, so personal
     // work has nowhere to go during the week. The weekend is last resort, not never.
+    for (let weekday = 1; weekday <= 5; weekday++) {
+      store.availability.upsert({
+        week: null,
+        weekday,
+        startMin: 9 * 60,
+        endMin: 17 * 60,
+        allowedAreas: [],
+        areaTargets: {},
+        enabled: true,
+        stageStartMin: 9 * 60,
+        stageEndMin: 17 * 60
+      })
+    }
     personal('Errands', 2 * 60, DUE_LATE)
 
     const proposal = planner.proposeRange(MONDAY, END)
@@ -766,5 +794,67 @@ describe('weekends', () => {
     const proposal = planner.proposeRange(MONDAY, END)
 
     expect(proposal.blocks.every((block) => block.date < '2026-11-21')).toBe(true)
+  })
+})
+
+/**
+ * An internship day is two blocks: nine to half past twelve, lunch, one to half past five.
+ *
+ * The planner used to cut internship work into ninety-minute pieces, which turned a day
+ * into a row of fragments. Now each half-day is one block, given whole to one task.
+ */
+describe('internship half-days', () => {
+  const stageDays = (): void => {
+    for (let weekday = 1; weekday <= 5; weekday++) {
+      store.availability.upsert({
+        week: null,
+        weekday,
+        startMin: 9 * 60,
+        endMin: 22 * 60,
+        allowedAreas: [],
+        areaTargets: {},
+        enabled: true,
+        stageStartMin: 9 * 60,
+        stageEndMin: 17 * 60 + 30
+      })
+    }
+  }
+
+  it('fills a day with exactly the morning and the afternoon', () => {
+    stageDays()
+    const id = task('Field report', 10 * 60, DUE_LATE, SYSTEM_AREAS.stage)
+
+    const monday = planner
+      .proposeRange(MONDAY, END)
+      .blocks.filter((block) => block.taskId === id && block.date === MONDAY)
+      .map((block) => [block.startMin, block.endMin])
+
+    expect(monday).toEqual([
+      [9 * 60, 12 * 60 + 30],
+      [13 * 60, 17 * 60 + 30]
+    ])
+  })
+
+  it('gives a short task the whole half-day rather than a ninety-minute piece', () => {
+    stageDays()
+    const short = task('Workshop', 60, DUE_LATE, SYSTEM_AREAS.stage)
+    const next = task('Report', 60, DUE_LATE, SYSTEM_AREAS.stage)
+
+    const blocks = planner.proposeRange(MONDAY, END).blocks
+    const spans = blocks.map((block) => block.endMin - block.startMin)
+
+    expect(minutesFor({ blocks }, short)).toBe(3 * 60 + 30)
+    expect(minutesFor({ blocks }, next)).toBe(4 * 60 + 30)
+    expect(spans.every((minutes) => minutes >= 3 * 60 + 30)).toBe(true)
+  })
+
+  it('still cuts work outside the internship hours into focus blocks', () => {
+    stageDays()
+    const id = task('School assignment', 4 * 60, DUE_LATE, SYSTEM_AREAS.personal)
+
+    const mine = planner.proposeRange(MONDAY, END).blocks.filter((block) => block.taskId === id)
+
+    expect(mine.length).toBeGreaterThan(1)
+    for (const block of mine) expect(block.startMin).toBeGreaterThanOrEqual(17 * 60 + 30)
   })
 })

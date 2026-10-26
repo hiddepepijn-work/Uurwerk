@@ -5,7 +5,7 @@ import { createBackend } from '@backend/create.js'
 import { installHost, unavailable, type Host } from '@backend/host.js'
 import { buildImplementation } from '@backend/implementation.js'
 
-import { runTool } from '@core/services/jarvis-tools.js'
+import { occurrences, runTool } from '@core/services/jarvis-tools.js'
 
 let api: TimeTrackerAPI
 
@@ -60,7 +60,7 @@ async function proposeAndConfirm(name: string, input: Record<string, unknown>): 
 
 describe('Jarvis tools', () => {
   it('only proposes: nothing is written before confirm', async () => {
-    const result = (await runTool(api, 'create_task', { title: 'Iets', areaId: 'personal', noDeadline: true, date: '2026-10-02', start: '10:00', end: '11:00' })) as Proposed
+    const result = (await runTool(api, 'create_task', { title: 'Iets', areaId: 'personal', noDeadline: true, date: ahead(5), start: '10:00', end: '11:00' })) as Proposed
     expect(result.summary).toContain('Iets')
     expect(await api.tasks.list({ status: 'active' })).toHaveLength(0)
   })
@@ -71,14 +71,14 @@ describe('Jarvis tools', () => {
       areaId: 'school',
       priority: 'high',
       estimateMinutes: 120,
-      dueDate: '2026-10-02',
+      dueDate: ahead(5),
       notes: 'Klaar als: ingeleverd in Brightspace\nBelangrijk: ja',
-      date: '2026-10-02', start: '10:00', end: '11:00'
+      date: ahead(5), start: '10:00', end: '11:00'
     })) as Proposed
     const first = (await runTool(api, 'confirm', {})) as Confirmed
     expect(first.executed).toHaveLength(1)
     const [task] = await api.tasks.list({ status: 'active' })
-    expect(task).toMatchObject({ title: 'Rapport hoofdstuk 3', areaId: 'school', estimateMin: 120, dueDate: '2026-10-02' })
+    expect(task).toMatchObject({ title: 'Rapport hoofdstuk 3', areaId: 'school', estimateMin: 120, dueDate: ahead(5) })
     expect(task!.notes).toContain('Brightspace')
 
     // The "ja" again, after "Load failed": reported as done, not done twice.
@@ -93,13 +93,13 @@ describe('Jarvis tools', () => {
   })
 
   it('reports a failure instead of claiming success', async () => {
-    const result = await proposeAndConfirm('create_task', { title: 'X', areaId: 'school', projectName: 'Bestaat niet', noDeadline: true, date: '2026-10-02', start: '10:00', end: '11:00' })
+    const result = await proposeAndConfirm('create_task', { title: 'X', areaId: 'school', projectName: 'Bestaat niet', noDeadline: true, date: ahead(5), start: '10:00', end: '11:00' })
     expect(result.executed).toHaveLength(0)
     expect(result.failed[0]!.error).toContain('Bestaat niet')
   })
 
   it('drops proposals on cancel', async () => {
-    await runTool(api, 'create_task', { title: 'Nee toch', areaId: 'personal', noDeadline: true, date: '2026-10-02', start: '10:00', end: '11:00' })
+    await runTool(api, 'create_task', { title: 'Nee toch', areaId: 'personal', noDeadline: true, date: ahead(5), start: '10:00', end: '11:00' })
     expect(await runTool(api, 'cancel', {})).toEqual({ cancelled: 1 })
     expect(await runTool(api, 'confirm', {})).toHaveProperty('error')
     expect(await api.tasks.list({ status: 'active' })).toHaveLength(0)
@@ -533,5 +533,156 @@ describe('Jarvis tools: all-day items', () => {
     const task = await api.tasks.create({ title: 'Kaartjes schrijven', areaId: 'personal', estimateMin: 30 })
     const placed = await proposeAndConfirm('schedule_task', { taskId: task.id, date: ahead(9), start: '10:00', end: '10:30' })
     expect(placed.failed).toEqual([])
+  })
+})
+
+/** A day as YYYY-MM-DD, some days after another. */
+const plus = (day: string, count: number): string => {
+  const d = new Date(`${day}T12:00:00`)
+  d.setDate(d.getDate() + count)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+describe('Jarvis tools: series and several days', () => {
+  it('works out the days of a series', () => {
+    // 2026-10-13 is a Tuesday.
+    expect(occurrences('2026-10-13', undefined)).toEqual(['2026-10-13'])
+    expect(occurrences('2026-10-13', { until: '2026-10-27' })).toEqual(['2026-10-13', '2026-10-20', '2026-10-27'])
+    expect(occurrences('2026-10-13', { until: '2026-10-19', weekdays: ['ma', 'di', 'wo', 'do', 'vr'] })).toEqual([
+      '2026-10-13',
+      '2026-10-14',
+      '2026-10-15',
+      '2026-10-16',
+      '2026-10-19'
+    ])
+    expect(occurrences('2026-10-13', { until: '2026-11-10', everyWeeks: 2 })).toEqual(['2026-10-13', '2026-10-27', '2026-11-10'])
+    // Over the change to winter time (25 Oct) the days stay whole days.
+    expect(occurrences('2026-10-24', { until: '2026-10-26', weekdays: ['za', 'zo', 'ma'] })).toEqual(['2026-10-24', '2026-10-25', '2026-10-26'])
+    expect(() => occurrences('2026-10-13', {})).toThrow(/tot wanneer/)
+    expect(() => occurrences('2026-10-13', { until: '2026-10-01' })).toThrow(/voor de eerste/)
+    expect(() => occurrences('2026-10-13', { until: '2027-06-01', weekdays: ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'] })).toThrow(/Meer dan/)
+  })
+
+  it('puts a weekly all-day item on every one of its days', async () => {
+    const first = next(3)
+    const done = await proposeAndConfirm('create_day_item', { title: 'Voetbal', date: first, repeat: { until: plus(first, 28) } })
+    expect(done.failed).toEqual([])
+    expect(done.executed[0]!.summary).toMatch(/elke wo t\/m .* \(5 keer\)/)
+    const from = new Date(`${first}T00:00:00`).getTime()
+    const events = (await api.calendar.eventsInRange(from, from + 31 * 86_400_000)).filter((event) => event.title === 'Voetbal')
+    expect(events.length).toBe(5)
+    for (const event of events) expect(new Date(event.startsAt).getDay()).toBe(3)
+  })
+
+  it('makes a recurring appointment, with its travel each time', async () => {
+    const tuesday = next(2)
+    const done = await proposeAndConfirm('create_appointment', {
+      title: 'Training',
+      date: tuesday,
+      start: '19:00',
+      end: '20:30',
+      areaId: 'personal',
+      travelMinutes: 15,
+      repeat: { until: plus(tuesday, 9), weekdays: ['di', 'do'] }
+    })
+    expect(done.failed).toEqual([])
+    expect(done.executed[0]!.result.times).toBe(4)
+    const from = new Date(`${tuesday}T00:00:00`).getTime()
+    const events = await api.calendar.eventsInRange(from, from + 12 * 86_400_000)
+    expect(events.filter((event) => event.title === 'Training' && event.kind !== 'travel').length).toBe(4)
+    expect(events.filter((event) => event.kind === 'travel').length).toBe(8)
+  })
+
+  it('makes an appointment that runs over several days', async () => {
+    const friday = next(5)
+    const sunday = plus(friday, 2)
+    const done = await proposeAndConfirm('create_appointment', {
+      title: 'Weekend weg',
+      date: friday,
+      endDate: sunday,
+      start: '18:00',
+      end: '16:00',
+      areaId: 'personal',
+      travelMinutes: 0
+    })
+    expect(done.failed).toEqual([])
+    const from = new Date(`${friday}T00:00:00`).getTime()
+    const [event] = (await api.calendar.eventsInRange(from, from + 3 * 86_400_000)).filter((entry) => entry.title === 'Weekend weg')
+    expect(new Date(event!.startsAt).getHours()).toBe(18)
+    expect(event!.endsAt).toBe(new Date(`${sunday}T16:00:00`).getTime())
+  })
+
+  it('makes a task per time for a recurring task, each due that day', async () => {
+    const monday = next(1)
+    const done = await proposeAndConfirm('create_task', {
+      title: 'Hardlopen',
+      areaId: 'personal',
+      estimateMinutes: 20,
+      date: monday,
+      start: '07:30',
+      end: '07:50',
+      repeat: { until: plus(monday, 11), weekdays: ['ma', 'wo', 'vr'] }
+    })
+    expect(done.failed).toEqual([])
+    expect(done.executed[0]!.result.times).toBe(6)
+    const tasks = (await api.tasks.list({ status: 'active' })).filter((task) => task.title === 'Hardlopen')
+    expect(tasks.length).toBe(6)
+    expect(new Set(tasks.map((task) => task.dueDate)).size).toBe(6)
+    const day = await api.plans.day(plus(monday, 2))
+    expect(day.blocks.some((block) => block.taskTitle === 'Hardlopen' && block.startMin === 450)).toBe(true)
+  })
+
+  it('works on one task over several days, skipping a day with an appointment in the way', async () => {
+    const task = await api.tasks.create({ title: 'Verslag schrijven', areaId: 'school', estimateMin: 300 })
+    const monday = next(1)
+    const tuesday = plus(monday, 1)
+    await proposeAndConfirm('create_appointment', { title: 'Tandarts', date: tuesday, start: '09:30', end: '10:00', areaId: 'personal', travelMinutes: 0 })
+    const done = await proposeAndConfirm('schedule_task', {
+      taskId: task.id,
+      date: monday,
+      start: '09:00',
+      end: '10:00',
+      repeat: { until: plus(monday, 4), weekdays: ['ma', 'di', 'wo', 'do', 'vr'] }
+    })
+    expect(done.failed).toEqual([])
+    const result = done.executed[0]!.result as { times: number; skipped?: string[] }
+    expect(result.times).toBe(4)
+    expect(result.skipped?.[0]).toMatch(new RegExp(`^${tuesday}`))
+    expect((await api.plans.day(monday)).blocks.some((block) => block.taskId === task.id)).toBe(true)
+    expect((await api.plans.day(tuesday)).blocks.some((block) => block.taskId === task.id)).toBe(false)
+  })
+
+  it('moves a new task with a time off an appointment before asking, and then places it', async () => {
+    const day = next(4)
+    await proposeAndConfirm('create_appointment', { title: 'Fietsen ophalen', date: day, start: '20:00', end: '21:00', areaId: 'personal', travelMinutes: 0 })
+    const proposed = (await runTool(api, 'create_task', { title: 'Kast fixen', areaId: 'personal', estimateMinutes: 60, date: day, start: '20:00', end: '21:00' })) as Proposed & { conflict?: string }
+    expect(proposed.conflict).toContain('Fietsen ophalen')
+    expect(proposed.summary).toContain('21:00–22:00')
+    const done = (await runTool(api, 'confirm', { pendingIds: [proposed.pendingId] })) as Confirmed
+    expect(done.failed).toEqual([])
+    expect(done.executed[0]!.result.placed).toBe(`${day} 21:00–22:00`)
+  })
+
+  it('asks until when before it proposes a series', async () => {
+    const answer = (await runTool(api, 'create_day_item', { title: 'Voetbal', date: next(3), repeat: {} })) as { error?: string }
+    expect(answer.error).toMatch(/tot wanneer/)
+  })
+})
+
+describe('Jarvis tools: plan_range says what it will plan', () => {
+  it('names the tasks in the proposal and keeps to the ones asked for', async () => {
+    const wanted = await api.tasks.create({ title: 'Scriptie lezen', areaId: 'personal', estimateMin: 60, dueDate: ahead(12) })
+    await api.tasks.create({ title: 'Vluchten Azië', areaId: 'personal', estimateMin: 60, dueDate: ahead(13) })
+    const all = (await runTool(api, 'plan_range', { from: ahead(1), to: ahead(10) })) as Proposed
+    expect(all.summary).toMatch(/plant: .*Scriptie lezen/)
+    expect(all.summary).toContain('Vluchten Azië')
+    await runTool(api, 'cancel', {})
+    const done = await proposeAndConfirm('plan_range', { from: ahead(1), to: ahead(10), taskIds: [wanted.id] })
+    expect(done.failed).toEqual([])
+    expect(done.executed[0]!.summary).not.toContain('Vluchten Azië')
+    const titles = new Set<string>()
+    for (let day = 1; day <= 10; day++) for (const block of (await api.plans.day(ahead(day))).blocks) if (block.taskTitle) titles.add(block.taskTitle)
+    expect(titles.has('Scriptie lezen')).toBe(true)
+    expect(titles.has('Vluchten Azië')).toBe(false)
   })
 })

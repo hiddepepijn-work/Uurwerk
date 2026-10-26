@@ -30,6 +30,7 @@ import { startScreenTime, stopScreenTime } from './screen-time.js'
 import { syncAllAccounts } from '@backend/calendar/index.js'
 import { applyAutoLaunch, launchedAtLogin } from './startup.js'
 import { log } from './logger.js'
+import { startClaudeLink, stopClaudeLink } from './claude-link.js'
 import { startAudioContext, stopAudioContext } from './audio-context.js'
 
 let backend: Backend | null = null
@@ -110,6 +111,8 @@ function start(): void {
   startMorningCheck(backend, () => openInWindow('planDay'))
   startReminders(backend, () => openInWindow('today'))
   startFocusGuard(backend)
+  // Claude Code plans along from the terminal; its writes run here, not on the file.
+  startClaudeLink(backend)
   // Counts wall-clock minutes while the machine is awake — independent of the timer, and
   // the only figure here that says anything when you are not tracking.
   startScreenTime(backend)
@@ -452,6 +455,7 @@ app.on('before-quit', (event) => {
   stopReminders()
   stopFocusGuard()
   stopScreenTime()
+  stopClaudeLink()
   stopCapture()
   // A half-encoded timelapse holds a hidden window open, which would keep the app alive.
   cancelTimelapse()

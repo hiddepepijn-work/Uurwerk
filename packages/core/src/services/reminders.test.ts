@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { CalendarEvent, PlanBlock } from '../contract/types.js'
 import { fromIsoDate } from '../util/time.js'
-import { upcomingReminders } from './reminders.js'
+import { markedImportant, taskNudges, upcomingReminders } from './reminders.js'
 
 const DAY = '2026-09-28'
 const at = (h: number, m = 0): number => fromIsoDate(DAY).getTime() + (h * 60 + m) * 60_000
@@ -118,5 +118,68 @@ describe('check-ins on planned tasks', () => {
     const short = upcomingReminders([block(14 * 60, 14 * 60 + 20)], [], at(0), at(24), () => open).filter((reminder) => reminder.kind === 'checkin')
     expect(short.map((reminder) => reminder.checkin!.stage)).toEqual(['end'])
     expect(all(undefined).some((reminder) => reminder.kind === 'checkin')).toBe(false)
+  })
+})
+
+describe('taskNudges: tasks not done yet', () => {
+  const task = (title: string, dueDate: string | null, extra: Partial<{ status: 'open' | 'done' | 'blocked'; priority: 'high' | 'medium' | 'low'; notes: string }> = {}) => ({
+    id: title,
+    title,
+    dueDate,
+    status: extra.status ?? ('open' as const),
+    priority: extra.priority ?? ('medium' as const),
+    notes: extra.notes ?? null
+  })
+  const wholeDay = (day: string): [number, number] => [fromIsoDate(day).getTime(), fromIsoDate(day).getTime() + 86_400_000]
+
+  it('names overdue tasks twice a day, all in one notification', () => {
+    const nudges = taskNudges([task('Belasting', '2026-09-25'), task('Tandarts bellen', '2026-09-27'), task('Later', '2026-10-30')], ...wholeDay(DAY))
+    const overdue = nudges.filter((nudge) => nudge.key.startsWith('nudge:overdue'))
+    expect(overdue.map((nudge) => nudge.at)).toEqual([at(10), at(19)])
+    expect(overdue[0]).toMatchObject({ title: '2 taken over hun deadline', body: 'Belasting, Tandarts bellen' })
+  })
+
+  it('says one overdue task by name, with its deadline', () => {
+    const [first] = taskNudges([task('Belasting', '2026-09-25')], ...wholeDay(DAY))
+    expect(first).toMatchObject({ kind: 'nudge', title: 'Nog niet gedaan: Belasting' })
+    expect(first!.body).toContain('vr 25/9')
+  })
+
+  it('reminds of a deadline today in the morning and the afternoon', () => {
+    const today = taskNudges([task('Inleveren', DAY)], ...wholeDay(DAY))
+    expect(today.map((nudge) => [nudge.at, nudge.title])).toEqual([
+      [at(9, 30), 'Vandaag af: Inleveren'],
+      [at(17), 'Vandaag af: Inleveren']
+    ])
+  })
+
+  it('says nothing about done or waiting tasks, or tasks without a deadline', () => {
+    const quiet = taskNudges(
+      [task('Klaar', '2026-09-20', { status: 'done' }), task('Wacht', '2026-09-20', { status: 'blocked' }), task('Ooit', null)],
+      ...wholeDay(DAY)
+    )
+    expect(quiet).toEqual([])
+  })
+
+  it('reminds of an important deadline 14, 7, 3 and 1 day ahead', () => {
+    const from = fromIsoDate('2026-09-14').getTime()
+    const nudges = taskNudges([task('Assessment', '2026-10-05', { notes: 'Doel: halen. Belangrijk: ja' })], from, from + 22 * 86_400_000)
+    const ahead = nudges.filter((nudge) => nudge.key.startsWith('nudge:ahead'))
+    expect(ahead.map((nudge) => new Date(nudge.at).getDate())).toEqual([21, 28, 2, 4])
+    expect(ahead.at(-1)!.body).toMatch(/^Morgen deadline/)
+    // Not important: nothing ahead, only on the day itself.
+    const plain = taskNudges([task('Gewoon', '2026-10-05')], from, from + 22 * 86_400_000)
+    expect(plain.map((nudge) => nudge.key.split(':')[1])).toEqual(['today', 'today'])
+  })
+
+  it('reads importance from the priority or the notes', () => {
+    expect(markedImportant({ priority: 'high', notes: null })).toBe(true)
+    expect(markedImportant({ priority: 'low', notes: 'Belangrijk: Ja' })).toBe(true)
+    expect(markedImportant({ priority: 'medium', notes: 'Belangrijk: nee' })).toBe(false)
+  })
+
+  it('keeps to the window it is asked for', () => {
+    const nudges = taskNudges([task('Belasting', '2026-09-25')], at(12), at(20))
+    expect(nudges.map((nudge) => nudge.at)).toEqual([at(19)])
   })
 })

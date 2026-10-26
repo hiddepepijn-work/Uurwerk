@@ -13,7 +13,7 @@
 
 import type { TimeTrackerAPI } from '@core/contract/api.js'
 import { findMeetingTimes, type MeetingTimesInput } from './meeting-times.js'
-import type { IsoDate, JarvisCard, Priority, TaskPatch } from '@core/contract/types.js'
+import type { IsoDate, JarvisCard, PrepStatus, Priority, TaskPatch } from '@core/contract/types.js'
 
 export interface ToolSpec {
   name: string
@@ -38,6 +38,36 @@ const object = (properties: Record<string, unknown>, required: string[] = []) =>
   required,
   additionalProperties: false
 })
+
+const WEEKDAY_NAMES = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'] as const
+
+/** "Elke dinsdag", "ma t/m vr", "om de week": the same thing on more days, up to a last day. */
+const repeat = {
+  ...object(
+    {
+      until: { ...date, description: 'Laatste dag van de reeks; vraag Hidde tot wanneer als hij het niet zegt' },
+      weekdays: {
+        type: 'array',
+        items: { type: 'string', enum: [...WEEKDAY_NAMES] },
+        description: 'Op deze dagen; weglaten = de weekdag van date. Elke dag: alle zeven.'
+      },
+      everyWeeks: { type: 'integer', minimum: 1, maximum: 4, description: '1 = elke week (standaard), 2 = om de week' }
+    },
+    ['until']
+  ),
+  description: 'Herhalen. Alleen als Hidde zegt dat het terugkomt ("elke …", "ma t/m vr", "om de week").'
+}
+
+/** Steps inside a task, and moments of its own: what makes a task more than a title. */
+const taskExtras = {
+  checklist: { type: 'array', items: { type: 'string' }, description: 'Stappen binnen de taak (paspoort, oplader, tickets…)' },
+  remindAt: {
+    type: 'array',
+    items: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$' },
+    description: 'Eigen meldmomenten "YYYY-MM-DDTHH:MM": push op dat moment, met wat er nog open staat'
+  },
+  prepFor: { type: 'string', description: 'Voorbereiding voor deze taak (t:…) of afspraak (a:…)' }
+}
 
 export const TOOLS: ToolSpec[] = [
   {
@@ -113,6 +143,20 @@ export const TOOLS: ToolSpec[] = [
         projectName: { type: 'string', description: 'Naam van het project uit de stand; weglaten als er geen past' }
       },
       ['text']
+    ),
+    writes: false
+  },
+  {
+    name: 'set_prep',
+    description:
+      'Leg vast of een taak (t:…) of afspraak (a:…) voorbereiding nodig heeft: none = niets nodig, planned = voorbereiding staat erin als taak, asked = gevraagd, nog geen antwoord. Direct, geen ja nodig. Gebruik bij alles onder "Voorbereiding nakijken" in de stand.',
+    parameters: object(
+      {
+        ref: { type: 'string' },
+        status: { type: 'string', enum: ['none', 'asked', 'planned'] },
+        note: { type: 'string', description: 'Wat Hidde zei, kort' }
+      },
+      ['ref', 'status']
     ),
     writes: false
   },
@@ -193,7 +237,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'create_task',
     description:
-      'Nieuwe taak; zet alles wat je hoorde in notes. Zonder tijd: staat meteen op de lijst, geen ja nodig. Moet hij meteen op een tijd: geef date, start en end mee, dan is aanmaken en inplannen één voorstel (na ja: confirm).',
+      'Nieuwe taak; zet alles wat je hoorde in notes. Zonder tijd: staat meteen op de lijst, geen ja nodig. Moet hij meteen op een tijd: geef date, start en end mee, dan is aanmaken en inplannen één voorstel (na ja: confirm). Vraag altijd hoe lang het duurt (estimateMinutes) en of Hidde vooraf iets moet doen; zo ja: een aparte taak met prepFor, checklist en remindAt, en daarna set_prep.',
     parameters: object(
       {
         title: { type: 'string' },
@@ -212,7 +256,9 @@ export const TOOLS: ToolSpec[] = [
         date: { ...date, description: 'Optioneel: meteen inplannen op deze dag (met start en end)' },
         noDeadline: { type: 'boolean', description: 'Alleen als Hidde zegt dat het niet uitmaakt wanneer het af is' },
         start: clock,
-        end: clock
+        end: clock,
+        repeat: { ...repeat, description: 'Met date/start/end: een eigen taak per keer, elk met die dag als deadline ("elke ma en do hardlopen 19:00").' },
+        ...taskExtras
       },
       ['title', 'areaId']
     ),
@@ -221,7 +267,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'update_task',
-    description: 'Taak aanpassen (titel, prioriteit, schatting, deadline, notitie, status).' + PROPOSAL,
+    description: 'Taak aanpassen (titel, prioriteit, schatting, deadline, notitie, status, checklist, meldmomenten). checklistDone vinkt stappen af.' + PROPOSAL,
     parameters: object(
       {
         taskId: { type: 'string' },
@@ -230,7 +276,9 @@ export const TOOLS: ToolSpec[] = [
         estimateMinutes: { type: 'integer', minimum: 0 },
         dueDate: { type: ['string', 'null'] },
         notes: { type: 'string' },
-        status: { type: 'string', enum: ['open', 'done', 'blocked'] }
+        status: { type: 'string', enum: ['open', 'done', 'blocked'] },
+        ...taskExtras,
+        checklistDone: { type: 'array', items: { type: 'string' }, description: 'Stappen die af zijn (tekst zoals in de checklist)' }
       },
       ['taskId']
     ),
@@ -248,7 +296,8 @@ export const TOOLS: ToolSpec[] = [
         date,
         start: clock,
         end: clock,
-        move: { type: 'boolean', description: 'true = verzetten: andere blokken van deze taak op die dag weghalen' }
+        move: { type: 'boolean', description: 'true = verzetten: andere blokken van deze taak op die dag weghalen' },
+        repeat: { ...repeat, description: 'Dezelfde taak op meer dagen aan werken ("ma t/m vr een uur aan X"): een blok per dag.' }
       },
       ['taskId', 'date', 'start', 'end']
     ),
@@ -257,8 +306,13 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'plan_range',
-    description: 'Planner plant een periode opnieuw; afspraken en handmatige blokken blijven.' + PROPOSAL,
-    parameters: object({ from: date, to: date }, ['from', 'to']),
+    description:
+      'Planner plant een periode opnieuw met álle open taken; afspraken en handmatige blokken blijven. Alleen als Hidde de hele planning opnieuw wil. Noemt hij taken: taskIds (of propose_plan). Noem de taken uit het voorstel.' +
+      PROPOSAL,
+    parameters: object(
+      { from: date, to: date, taskIds: { type: 'array', items: { type: 'string' }, description: 'Alleen deze taken inplannen' } },
+      ['from', 'to']
+    ),
     writes: true,
     proposes: true
   },
@@ -279,7 +333,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'create_appointment',
     description:
-      'Nieuwe afspraak (vaste tijd, met iemand of ergens). Reistijd is verplicht: weet je die niet, vraag Hidde eerst waar het is en hoe lang hij onderweg is (online of thuis = 0).' +
+      'Nieuwe afspraak (vaste tijd, met iemand of ergens). Over meer dagen: endDate. Terugkerend: repeat. Reistijd is verplicht: weet je die niet, vraag Hidde eerst waar het is en hoe lang hij onderweg is (online of thuis = 0).' +
       PROPOSAL,
     parameters: object(
       {
@@ -287,11 +341,13 @@ export const TOOLS: ToolSpec[] = [
         date,
         start: clock,
         end: clock,
+        endDate: { ...date, description: 'Loopt het over meer dagen (weekend weg, kamp): de dag waarop het eindigt, met end als tijd' },
         areaId: { type: 'string', enum: AREAS },
         location: { type: 'string' },
         travelMinutes: { type: 'integer', minimum: 0, description: 'Reistijd heen in minuten; 0 alleen als het online of thuis is' },
         travelBack: { type: 'boolean', description: 'Dezelfde reis terug na afloop' },
-        notes: { type: 'string', description: 'Doel, Wie, Meenemen/voorbereiden, Bijzonderheden, Belangrijk: ja/nee' }
+        notes: { type: 'string', description: 'Doel, Wie, Meenemen/voorbereiden, Bijzonderheden, Belangrijk: ja/nee' },
+        repeat
       },
       ['title', 'date', 'start', 'end', 'areaId', 'travelMinutes']
     ),
@@ -300,13 +356,14 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'create_day_item',
-    description: 'Iets voor de hele dag, bovenin de dag in plaats van in de tijdlijn (verjaardag, vakantie, vrij, deadline, "weet dat …"). Geen tijd, geen reis; de planning gaat er gewoon omheen. Meerdere dagen: endDate.' + PROPOSAL,
+    description: 'Iets voor de hele dag, bovenin de dag in plaats van in de tijdlijn (verjaardag, vakantie, vrij, deadline, "weet dat …"). Geen tijd, geen reis; de planning gaat er gewoon omheen. Meerdere dagen achter elkaar: endDate. Terugkerend ("elke woensdag voetbal"): repeat.' + PROPOSAL,
     parameters: object(
       {
         title: { type: 'string' },
         date,
         endDate: { ...date, description: 'Laatste dag, als het meerdere dagen is' },
-        areaId: { type: 'string', enum: AREAS }
+        areaId: { type: 'string', enum: AREAS },
+        repeat
       },
       ['title', 'date']
     ),
@@ -406,6 +463,75 @@ const fromToday = (from: IsoDate): IsoDate => {
 }
 
 type Input = Record<string, unknown>
+
+/** The strings in a list a model sent; anything else is dropped. */
+const strings = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '').map((entry) => entry.trim()) : []
+
+/** Most occurrences one proposal makes: half a year of three times a week, with room. */
+const MAX_OCCURRENCES = 80
+/** How far ahead a series may run. */
+const MAX_SERIES_DAYS = 366
+
+/** Monday = 0 … Sunday = 6. */
+const weekdayIndex = (day: IsoDate): number => (new Date(`${day}T12:00:00`).getDay() + 6) % 7
+
+const addDays = (day: IsoDate, count: number): IsoDate => {
+  const d = new Date(`${day}T12:00:00`)
+  d.setDate(d.getDate() + count)
+  return isoDate(d)
+}
+
+/** Whole days from one day to another (0 = the same day). */
+const dayDiff = (from: IsoDate, to: IsoDate): number =>
+  Math.round((new Date(`${to}T12:00:00`).getTime() - new Date(`${from}T12:00:00`).getTime()) / 86_400_000)
+
+/**
+ * The days a thing happens on: just `first`, or with `repeat` every chosen weekday (every
+ * week, or every n-th week) from `first` up to and including `until`.
+ */
+export function occurrences(first: IsoDate, given: unknown): IsoDate[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(first)) throw new Error('Datums als YYYY-MM-DD.')
+  if (given === undefined || given === null) return [first]
+  const spec = given as { until?: unknown; weekdays?: unknown; everyWeeks?: unknown }
+  const until = typeof spec.until === 'string' ? spec.until : ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(until)) throw new Error('Herhalen: tot wanneer? Vraag Hidde de laatste dag (until).')
+  if (until < first) throw new Error('Herhalen: de laatste dag ligt voor de eerste.')
+  if (dayDiff(first, until) > MAX_SERIES_DAYS) throw new Error('Herhalen kan tot een jaar vooruit; kies een eerdere einddatum.')
+  const names = Array.isArray(spec.weekdays) && spec.weekdays.length > 0 ? spec.weekdays.map(String) : [WEEKDAY_NAMES[weekdayIndex(first)]!]
+  const wanted = new Set(
+    names.map((name) => {
+      const index = (WEEKDAY_NAMES as readonly string[]).indexOf(name.toLowerCase().slice(0, 2))
+      if (index < 0) throw new Error(`Onbekende weekdag: ${name}`)
+      return index
+    })
+  )
+  const every = typeof spec.everyWeeks === 'number' && spec.everyWeeks >= 1 ? Math.floor(spec.everyWeeks) : 1
+  // Weeks counted from the Monday of the first day's week, so "om de week" keeps its rhythm.
+  const monday = addDays(first, -weekdayIndex(first))
+  const days: IsoDate[] = []
+  for (let day = first; day <= until; day = addDays(day, 1)) {
+    if (!wanted.has(weekdayIndex(day))) continue
+    if (Math.floor(dayDiff(monday, day) / 7) % every !== 0) continue
+    days.push(day)
+    if (days.length > MAX_OCCURRENCES) throw new Error(`Meer dan ${MAX_OCCURRENCES} keer; kies een eerdere einddatum.`)
+  }
+  if (days.length === 0) throw new Error('Herhalen: geen enkele dag valt in die reeks.')
+  return days
+}
+
+/** ", elke di en do t/m 2026-12-15 (18 keer)", or '' when it does not repeat. */
+function repeatText(input: Input): string {
+  if (!input.repeat) return ''
+  const spec = input.repeat as { until: string; weekdays?: string[]; everyWeeks?: number }
+  const count = occurrences(String(input.date), input.repeat).length
+  const names = spec.weekdays?.length ? spec.weekdays : [WEEKDAY_NAMES[weekdayIndex(String(input.date))]!]
+  const list = names.join(', ').replace(/, ([^,]*)$/, ' en $1')
+  const weeks = spec.everyWeeks ?? 1
+  const rhythm = weeks === 1 ? 'elke' : weeks === 2 ? 'om de week op' : `elke ${weeks} weken op`
+  const which = names.length === 7 && weeks === 1 ? 'elke dag' : `${rhythm} ${list}`
+  return `, ${which} t/m ${spec.until} (${count} keer)`
+}
 
 // ------------------------------------------------------------------ refs
 // A uuid costs the model some twenty tokens every time it reads or repeats one. The
@@ -512,7 +638,20 @@ async function snapshot(api: TimeTrackerAPI, from: IsoDate, to: IsoDate, withTas
       }
       const estimate = task.estimateMin ? `, ${task.estimateMin} min` : ''
       const due = task.dueDate ? `, deadline ${task.dueDate}` : ''
-      lines.push(`  ${ref('t', task.id)} ${task.title} [${task.areaId ?? '-'}] ${task.priority}${estimate}${due}${late}${risk}`)
+      const steps = task.checklist.length > 0 ? `, checklist ${task.checklist.filter((item) => item.done).length}/${task.checklist.length}` : ''
+      const prep = task.prepFor ? `, voorbereiding voor ${task.prepFor.slice(0, 8)}` : ''
+      const noEstimate = task.estimateMin === null ? ', GEEN SCHATTING' : ''
+      lines.push(`  ${ref('t', task.id)} ${task.title} [${task.areaId ?? '-'}] ${task.priority}${estimate}${due}${steps}${prep}${noEstimate}${late}${risk}`)
+    }
+    // What has not been checked for preparation: ask about these, then set_prep (26 Oct 2026).
+    const open = await api.prep.open().catch(() => ({ asked: [], unchecked: [] }))
+    const toCheck = [...open.asked.map((item) => ({ ...item, asked: true })), ...open.unchecked.map((item) => ({ ...item, asked: false }))]
+    if (toCheck.length > 0) {
+      lines.push('', 'Voorbereiding nakijken (vraag: moet Hidde hier vooraf iets voor doen? daarna set_prep)')
+      for (const item of toCheck.slice(0, 15)) {
+        const short = item.ref.startsWith('t:') ? ref('t', item.ref.slice(2)) : ref('a', item.ref.slice(2))
+        lines.push(`  ${short} ${item.title} (${item.date})${item.asked ? ' AL GEVRAAGD, geen antwoord' : ''}`)
+      }
     }
   }
   const projects = await api.projects.list()
@@ -681,15 +820,15 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
     (typeof id === 'string' && (await api.tasks.get(id).catch(() => null))?.title) || 'onbekende taak'
   switch (name) {
     case 'create_task':
-      return `Nieuwe taak "${String(input.title)}" (${String(input.areaId)}${typeof input.estimateMinutes === 'number' ? `, ${input.estimateMinutes} min` : ''}${input.dueDate ? `, deadline ${String(input.dueDate)}` : ''})${plannedAt(input) ? `, ingepland op ${String(input.date)} ${String(input.start)}–${String(input.end)}` : ''}`
+      return `Nieuwe taak "${String(input.title)}" (${String(input.areaId)}${typeof input.estimateMinutes === 'number' ? `, ${input.estimateMinutes} min` : ''}${input.dueDate && !input.repeat ? `, deadline ${String(input.dueDate)}` : ''})${plannedAt(input) ? `, ingepland op ${String(input.date)} ${String(input.start)}–${String(input.end)}` : ''}${repeatText(input)}`
     case 'update_task': {
       const changes = Object.keys(input).filter((key) => key !== 'taskId')
       return `Taak "${await taskTitle(input.taskId)}" aanpassen: ${changes.join(', ') || 'niets'}`
     }
     case 'schedule_task':
-      return `Taak "${await taskTitle(input.taskId)}" ${input.move === true ? 'verzetten naar' : 'inplannen op'} ${String(input.date)} ${String(input.start)}–${String(input.end)}`
+      return `Taak "${await taskTitle(input.taskId)}" ${input.move === true ? 'verzetten naar' : 'inplannen op'} ${String(input.date)} ${String(input.start)}–${String(input.end)}${repeatText(input)}`
     case 'plan_range':
-      return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} opnieuw laten maken (afspraken en handmatige blokken blijven)`
+      return `Planning van ${fromToday(String(input.from))} t/m ${String(input.to)} opnieuw laten maken (afspraken en handmatige blokken blijven)${await rangeTasks(api, input)}`
     case 'unschedule_task':
       return `Taak "${await taskTitle(input.taskId)}" uit de planning halen ${input.date ? `op ${String(input.date)}` : 'vanaf nu'}`
     case 'clear_planning':
@@ -697,9 +836,9 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
     case 'log_worked_time':
       return `Gewerkt ${String(input.date)} ${String(input.start)}–${String(input.end)}${Array.isArray(input.breaks) && input.breaks.length ? `, ${input.breaks.length} pauze(s) eraf` : ''}`
     case 'create_day_item':
-      return `Hele dag: "${String(input.title)}" op ${String(input.date)}${input.endDate && input.endDate !== input.date ? ` t/m ${String(input.endDate)}` : ''}`
+      return `Hele dag: "${String(input.title)}" op ${String(input.date)}${input.endDate && input.endDate !== input.date ? ` t/m ${String(input.endDate)}` : ''}${repeatText(input)}`
     case 'create_appointment':
-      return `Nieuwe afspraak "${String(input.title)}" op ${String(input.date)} ${String(input.start)}–${String(input.end)}${typeof input.travelMinutes === 'number' && input.travelMinutes > 0 ? `, ${input.travelMinutes} min reistijd` : ''}`
+      return `Nieuwe afspraak "${String(input.title)}" op ${String(input.date)} ${String(input.start)}–${spansDays(input) ? `${String(input.endDate)} ` : ''}${String(input.end)}${typeof input.travelMinutes === 'number' && input.travelMinutes > 0 ? `, ${input.travelMinutes} min reistijd` : ''}${repeatText(input)}`
     case 'move_appointment':
       return `Afspraak verzetten naar ${String(input.date)} ${String(input.start)}–${String(input.end)}`
     case 'delete_appointment':
@@ -718,13 +857,38 @@ async function describe(api: TimeTrackerAPI, name: string, input: Input): Promis
   return name
 }
 
-/** Checks what can be checked before the "ja", so a proposal that cannot work is not asked. */
+/**
+ * Which tasks a plan_range would put in, said before the "ja": on 7 Oct 2026 it planned the
+ * travel to-do's nobody asked for, and nobody heard that coming.
+ */
+async function rangeTasks(api: TimeTrackerAPI, input: Input): Promise<string> {
+  const days = daysBetween(fromToday(String(input.from)), String(input.to))
+  const only = Array.isArray(input.taskIds) ? new Set(input.taskIds.map(String)) : null
+  const preview = await api.planner.proposeRange(days[0]!, days[days.length - 1]!).catch(() => null)
+  if (!preview) return ''
+  const titles = new Map<string, string>()
+  for (const block of preview.blocks) {
+    if (!block.taskId || titles.has(block.taskId) || (only && !only.has(block.taskId))) continue
+    titles.set(block.taskId, (await api.tasks.get(block.taskId).catch(() => null))?.title ?? 'taak')
+  }
+  return titles.size === 0 ? '; er valt geen taak in te plannen' : `; plant: ${[...titles.values()].join(', ')}`
+}
+
+/** An appointment that ends on a later day than it starts. */
+const spansDays = (input: Input): boolean => typeof input.endDate === 'string' && input.endDate !== input.date
+
 /** A new task that is to go into the day right away. */
 const plannedAt = (input: Input): boolean =>
   typeof input.date === 'string' && typeof input.start === 'string' && typeof input.end === 'string'
 
 async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promise<void> {
-  if (name === 'schedule_task') await slotFor(api, input)
+  if (input.repeat !== undefined) {
+    if (typeof input.date !== 'string') throw new Error('Herhalen vraagt een eerste dag (date).')
+    if (name === 'create_task' && !plannedAt(input)) throw new Error('Een terugkerende taak vraagt date, start en end.')
+    occurrences(input.date, input.repeat)
+  }
+  // A series is checked day by day when it is made: a clash skips that one day.
+  if (name === 'schedule_task' && input.repeat === undefined) await slotFor(api, input)
   // A to-do needs no time, but it does need a day it is done by (Hidde, 28 Sep 2026).
   if (name === 'create_task' && !input.dueDate && !input.date && input.noDeadline !== true) {
     throw new Error('Wanneer moet het af zijn? Vraag Hidde een datum (een tijd is niet nodig); zegt hij dat het niet uitmaakt: noDeadline true.')
@@ -732,6 +896,9 @@ async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promis
   if (name === 'create_task' && (input.date || input.start || input.end)) {
     if (!plannedAt(input)) throw new Error('Meteen inplannen vraagt date, start én end.')
     if (minuteOf(String(input.end)) <= minuteOf(String(input.start))) throw new Error('Het einde ligt voor het begin.')
+    // Over an appointment it was proposed anyway, and after the "ja" made but not placed
+    // (13 Oct 2026): checked now, so the next free moment is what gets proposed.
+    if (input.repeat === undefined) await slotFor(api, { ...input, taskId: undefined })
   }
   if (name === 'add_rule' && input.type === 'stage_window') {
     if (!Array.isArray(input.days) || typeof input.from !== 'string' || typeof input.to !== 'string') {
@@ -747,7 +914,10 @@ async function precheck(api: TimeTrackerAPI, name: string, input: Input): Promis
   if (name === 'create_appointment' && typeof input.travelMinutes !== 'number') {
     throw new Error('Reistijd ontbreekt. Vraag Hidde eerst waar het is en hoe lang hij onderweg is (online of thuis = 0).')
   }
-  if (['create_appointment', 'move_appointment'].includes(name)) {
+  if (name === 'create_appointment' && spansDays(input)) {
+    if (String(input.endDate) < String(input.date)) throw new Error('De einddag ligt voor de begindag.')
+    if (dayDiff(String(input.date), String(input.endDate)) > 31) throw new Error('Langer dan een maand: maak er een hele-dag-item van.')
+  } else if (['create_appointment', 'move_appointment'].includes(name)) {
     if (minuteOf(String(input.end)) <= minuteOf(String(input.start))) throw new Error('Het einde ligt voor het begin.')
   }
 }
@@ -796,7 +966,8 @@ async function propose(api: TimeTrackerAPI, name: string, given: Input): Promise
     // A task over an appointment: the code finds the next free moment and proposes that, so
     // one "ja" is enough. Left to the models, they offered a time out loud, then proposed it
     // on "ja" and asked again (challenge set, all models).
-    if (name === 'schedule_task' && message.startsWith('Overlapt met')) {
+    const timed = name === 'schedule_task' || (name === 'create_task' && !!input && plannedAt(input))
+    if (timed && input?.repeat === undefined && message.startsWith('Overlapt met')) {
       const moved = await nextFreeSlot(api, input!)
       if (moved) {
         const summary = await describe(api, name, moved)
@@ -884,6 +1055,10 @@ function cardsFor(tool: string, input: Input, result: unknown): JarvisCard[] {
     when,
     date: typeof date === 'string' ? date : null
   })
+  if (input.repeat !== undefined && typeof out.times === 'number') {
+    const kind = tool === 'create_task' ? 'taak' : tool === 'schedule_task' ? 'planning' : 'afspraak'
+    return [card(kind, 'nieuw', out.series, `${out.times}× · ${shortDay(String(out.first))} – ${shortDay(String(out.last))}`, out.first)]
+  }
   switch (tool) {
     case 'create_task':
       return [
@@ -1012,6 +1187,14 @@ export async function runTool(api: TimeTrackerAPI, name: string, input: Input): 
         type: rule.type,
         description: rule.description
       }))
+
+    case 'set_prep': {
+      const ref = String(input.ref ?? '').trim()
+      if (!/^[ta]:/.test(ref)) return { error: 'ref is t:<taak> of a:<afspraak>, zoals in de stand.' }
+      const full = ref.startsWith('t:') ? `t:${await resolveTask(api, ref)}` : `a:${await resolveEvent(api, ref)}`
+      const check = await api.prep.set(full, input.status as PrepStatus, typeof input.note === 'string' ? input.note : null)
+      return { saved: check.status, next: 'Vastgelegd. Kort bevestigen.' }
+    }
 
     case 'add_idea': {
       const text = String(input.text ?? '').trim()
@@ -1191,7 +1374,13 @@ async function slotFor(
   const endMin = minuteOf(String(input.end))
   if (endMin <= startMin) throw new Error('Het einde ligt voor het begin.')
   if (day < isoDate(new Date())) throw new Error('Die dag is al voorbij.')
-  const task = typeof input.taskId === 'string' ? await api.tasks.get(input.taskId) : null
+  // A task still to be made (create_task with a time) is checked by its title and area.
+  const task =
+    typeof input.taskId === 'string'
+      ? await api.tasks.get(input.taskId)
+      : typeof input.title === 'string'
+        ? { id: '', title: input.title, areaId: typeof input.areaId === 'string' ? input.areaId : null }
+        : null
   if (!task) throw new Error('Die taak bestaat niet; haal de taskId op met list_tasks.')
 
   const plan = await api.plans.day(day)
@@ -1229,8 +1418,39 @@ async function slotFor(
 const plannerBlocks = async (api: TimeTrackerAPI, day: IsoDate) =>
   (await api.plans.day(day)).blocks.filter((block) => block.source === 'planner' && !block.locked && !block.fixed)
 
+/** The tools that take `repeat`. */
+const SERIES = new Set(['create_task', 'schedule_task', 'create_day_item', 'create_appointment'])
+
+/**
+ * A series is the one-off thing on each of its days, every one a row of its own: it syncs,
+ * shows and reminds like anything made by hand, and one can be moved or dropped alone.
+ * A day that cannot be done (a clash) is skipped and named; the rest still stand.
+ */
+async function executeSeries(api: TimeTrackerAPI, name: string, input: Input): Promise<unknown> {
+  const first = String(input.date)
+  const span = typeof input.endDate === 'string' ? dayDiff(first, input.endDate) : null
+  const made: IsoDate[] = []
+  const skipped: string[] = []
+  for (const day of occurrences(first, input.repeat)) {
+    const one: Input = { ...input, date: day, repeat: undefined }
+    if (span !== null) one.endDate = addDays(day, span)
+    if (name === 'create_task') one.dueDate = day
+    try {
+      const result = (await execute(api, name, one)) as Record<string, unknown>
+      if (typeof result.notPlaced === 'string') skipped.push(`${day}: taak gemaakt, niet ingepland (${result.notPlaced})`)
+      made.push(day)
+    } catch (error) {
+      skipped.push(`${day}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  if (made.length === 0) throw new Error(`Geen enkele keer gelukt. ${skipped.slice(0, 3).join('; ')}`)
+  const title = name === 'schedule_task' ? ((await api.tasks.get(String(input.taskId)).catch(() => null))?.title ?? 'taak') : String(input.title)
+  return { series: title, times: made.length, first: made[0], last: made[made.length - 1], ...(skipped.length > 0 ? { skipped } : {}) }
+}
+
 /** Does the work of a confirmed proposal, and reads the result back from the database. */
 async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise<unknown> {
+  if (input.repeat !== undefined && SERIES.has(name)) return executeSeries(api, name, input)
   switch (name) {
     case 'create_task': {
       let projectId: string | null = null
@@ -1250,7 +1470,10 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
         dueDate: (input.dueDate as string | undefined) ?? null,
         earliestStartDate: (input.earliestStartDate as string | undefined) ?? null,
         notes: (input.notes as string | undefined) ?? null,
-        focusMode: (input.focusMode as 'auto' | 'always' | 'never' | undefined) ?? 'auto'
+        focusMode: (input.focusMode as 'auto' | 'always' | 'never' | undefined) ?? 'auto',
+        checklist: strings(input.checklist).map((text) => ({ text, done: false })),
+        remindAt: strings(input.remindAt),
+        prepFor: typeof input.prepFor === 'string' && input.prepFor.trim() ? input.prepFor.trim() : null
       })
       if (!(await api.tasks.get(task.id))) throw new Error('De taak staat na het aanmaken niet in de database.')
       if (!plannedAt(input)) return { created: task.title, taskId: task.id, focus: task.focusMode }
@@ -1276,6 +1499,16 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
       if (input.dueDate !== undefined) patch.dueDate = input.dueDate as string | null
       if (typeof input.notes === 'string') patch.notes = input.notes
       if (typeof input.status === 'string') patch.status = input.status as TaskPatch['status']
+      if (Array.isArray(input.remindAt)) patch.remindAt = strings(input.remindAt)
+      if (typeof input.prepFor === 'string') patch.prepFor = input.prepFor.trim() || null
+      if (Array.isArray(input.checklist) || Array.isArray(input.checklistDone)) {
+        const current = (await api.tasks.get(taskId))?.checklist ?? []
+        const done = new Set(strings(input.checklistDone).map((text) => text.toLowerCase()))
+        const list = Array.isArray(input.checklist)
+          ? strings(input.checklist).map((text) => ({ text, done: current.some((item) => item.text === text && item.done) }))
+          : current
+        patch.checklist = list.map((item) => ({ ...item, done: item.done || done.has(item.text.toLowerCase()) }))
+      }
       const task = await api.tasks.update(taskId, patch)
       return { updated: task.title }
     }
@@ -1319,6 +1552,15 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
       const days = daysBetween(fromToday(String(input.from)), String(input.to))
       const before = (await Promise.all(days.map((day) => plannerBlocks(api, day)))).flat().length
       const result = await api.planner.applyRange(days[0]!, days[days.length - 1]!)
+      // Only the tasks he named: what the planner added besides them goes again.
+      if (Array.isArray(input.taskIds)) {
+        const only = new Set(input.taskIds.map(String))
+        for (const day of days) {
+          for (const block of await plannerBlocks(api, day)) {
+            if (block.kind === 'task' && (!block.taskId || !only.has(block.taskId))) await api.plans.removeBlock(block.id)
+          }
+        }
+      }
       const after = (await Promise.all(days.map((day) => plannerBlocks(api, day)))).flat()
       return {
         from: days[0],
@@ -1428,7 +1670,8 @@ async function execute(api: TimeTrackerAPI, name: string, input: Input): Promise
         location: (input.location as string | undefined) ?? null,
         description: (input.notes as string | undefined) ?? null,
         startsAt: at(day, String(input.start)),
-        endsAt: at(day, String(input.end)),
+        // Over more days: it ends on endDate, at `end`.
+        endsAt: at(spansDays(input) ? String(input.endDate) : day, String(input.end)),
         origin: 'uurwerk',
         classificationStatus: 'unclassified',
         includeInPlanning: true,

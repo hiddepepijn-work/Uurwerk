@@ -127,6 +127,7 @@ export const CHANNELS = {
   // This copy and the VPS. Offline first: everything above works without it.
   sync: ['status', 'pair', 'now', 'unpair'],
   ideas: ['list', 'add', 'update', 'remove'],
+  prep: ['get', 'set', 'open'],
   // "5 sec": the device's own countdown and ten-minute focus.
   sprint: ['status', 'start', 'stop'],
   // Geld. Local to this copy: never forwarded to the server.

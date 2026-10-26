@@ -1,4 +1,4 @@
-import type { NewTask, Priority, Task, TaskFilter, TaskPatch } from '../../contract/types.js'
+import type { ChecklistItem, NewTask, Priority, Task, TaskFilter, TaskPatch } from '../../contract/types.js'
 import { Db, newId } from '../connection.js'
 import { MINUTE_MS } from '../../util/time.js'
 
@@ -22,11 +22,27 @@ interface TaskRow {
   must_do_date: string | null
   notes: string | null
   focus_mode: Task['focusMode'] | null
+  checklist: string | null
+  remind_at: string | null
+  prep_for: string | null
   sort_order: number
   created_at: number
   completed_at: number | null
   logged_ms: number | null
 }
+
+/** A JSON list column: anything unreadable is an empty list, not an error on every read. */
+function parseList<T>(text: string | null): T[] {
+  if (!text) return []
+  try {
+    const value: unknown = JSON.parse(text)
+    return Array.isArray(value) ? (value as T[]) : []
+  } catch {
+    return []
+  }
+}
+
+const listOrNull = (list: unknown[] | undefined): string | null => (list && list.length > 0 ? JSON.stringify(list) : null)
 
 const SELECT = /* sql */ `
   SELECT
@@ -71,6 +87,9 @@ export class TaskRepo {
     mustDoDate: row.must_do_date,
     notes: row.notes ?? null,
     focusMode: row.focus_mode ?? 'auto',
+    checklist: parseList<ChecklistItem>(row.checklist).filter((item) => typeof item?.text === 'string'),
+    remindAt: parseList<string>(row.remind_at).filter((at) => typeof at === 'string'),
+    prepFor: row.prep_for ?? null,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     completedAt: row.completed_at,
@@ -119,8 +138,11 @@ export class TaskRepo {
     return row ? this.map(row) : null
   }
 
-  create(input: NewTask): Task {
-    const id = newId()
+  /**
+   * `id` only for work that must never be made twice: the preparation sweep derives its ids
+   * from what it prepares, so two devices doing the same sweep write the same row.
+   */
+  create(input: NewTask, id: string = newId()): Task {
     const now = Date.now()
     const nextOrder =
       (this.db.get<{ n: number | null }>('SELECT MAX(sort_order) AS n FROM tasks')?.n ?? 0) + 1
@@ -128,8 +150,9 @@ export class TaskRepo {
     this.db.run(
       `INSERT INTO tasks
          (id, project_id, area_id, work_type_id, title, priority, status, estimate_min,
-          due_date, earliest_start_date, must_do_date, notes, focus_mode, sort_order, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          due_date, earliest_start_date, must_do_date, notes, focus_mode, checklist, remind_at,
+          prep_for, sort_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         input.projectId ?? null,
@@ -144,6 +167,9 @@ export class TaskRepo {
         input.mustDoDate ?? null,
         input.notes?.trim() || null,
         input.focusMode ?? 'auto',
+        listOrNull(input.checklist),
+        listOrNull(input.remindAt),
+        input.prepFor ?? null,
         nextOrder,
         now
       ]
@@ -167,7 +193,8 @@ export class TaskRepo {
       `UPDATE tasks SET
          project_id = ?, area_id = ?, work_type_id = ?, title = ?, priority = ?, status = ?,
          estimate_min = ?, due_date = ?, earliest_start_date = ?, blocked_reason = ?,
-         must_do_date = ?, notes = ?, focus_mode = ?, sort_order = ?, completed_at = ?
+         must_do_date = ?, notes = ?, focus_mode = ?, checklist = ?, remind_at = ?, prep_for = ?,
+         sort_order = ?, completed_at = ?
        WHERE id = ?`,
       [
         next.projectId,
@@ -183,6 +210,9 @@ export class TaskRepo {
         next.mustDoDate,
         next.notes?.trim() || null,
         next.focusMode,
+        listOrNull(next.checklist),
+        listOrNull(next.remindAt),
+        next.prepFor,
         next.sortOrder,
         completedAt,
         id

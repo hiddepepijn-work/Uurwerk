@@ -239,6 +239,8 @@ ${remembers ? '✓' : '✗'} nieuw gesprek, "Wat hebben we net samen ingepland?"
   if (!heardOk) problems += 1
   console.log(`\n${heardOk ? '✓' : '✗'} doei ook zonder tool herkend: "${bye.heard}"${falseGoodbyes.length ? `; ten onrechte: ${falseGoodbyes.join(' | ')}` : ''}`)
 
+  problems += await carRegressions()
+
   socket.close(1000)
   await sleep(3000)
   const freeAfter = !voiceBusy()
@@ -249,6 +251,90 @@ ${remembers ? '✓' : '✗'} nieuw gesprek, "Wat hebben we net samen ingepland?"
   console.log(`kast fixen in de planning van morgen: ${blocks.map((block) => `${block.startMin / 60}:00`).join(', ') || 'niet'}`)
   server.close()
   process.exit(problems ? 1 : 0)
+
+  /**
+   * What went wrong in the car on 13 Oct 2026, each on the same line: an "eh" while he was
+   * thinking threw the answer away; after a minute of quiet Flux had hung up, so nothing was
+   * heard any more; and a sentence without words left him thinking forever.
+   */
+  async function carRegressions(): Promise<number> {
+    socket.close(1000)
+    await sleep(1000)
+    await connect()
+    let failed = 0
+    const seen = { replies: [] as string[], current: '', nothing: 0, heard: [] as Array<{ text: string; at: number }> }
+    socket.onmessage = (message: MessageEvent) => {
+      const event = JSON.parse(String(message.data)) as { type: string; text?: string; delta?: string; id?: string; name?: string; args?: Record<string, unknown> }
+      if (event.type === 'reply_start') seen.current = ''
+      if (event.type === 'reply_text') seen.current += event.delta ?? ''
+      if (event.type === 'turn_done') seen.replies.push(seen.current.trim())
+      if (event.type === 'nothing') seen.nothing += 1
+      if (event.type === 'heard') seen.heard.push({ text: event.text ?? '', at: Date.now() })
+      if (event.type === 'tool_call') {
+        void runTool(api, event.name ?? '', event.args ?? {})
+          .then((result) => ({ result }), (error: unknown) => ({ error: String(error) }))
+          .then((result) => socket.send(JSON.stringify({ type: 'tool_result', id: event.id, result })))
+      }
+    }
+    const stream = async (pcm: Buffer): Promise<void> => {
+      for (let at = 0; at < pcm.length; at += 1920) {
+        socket.send(pcm.subarray(at, at + 1920))
+        await sleep(40)
+      }
+    }
+    /** The gate's tail of quiet, then 'end'; returns when 'end' went. */
+    const pause = async (): Promise<number> => {
+      for (let quiet = 0; quiet < 900; quiet += 40) {
+        socket.send(Buffer.alloc(1920))
+        await sleep(40)
+      }
+      socket.send(JSON.stringify({ type: 'end' }))
+      return Date.now()
+    }
+    const until = async (check: () => boolean, ms: number): Promise<boolean> => {
+      for (const started = Date.now(); Date.now() - started < ms; await sleep(100)) if (check()) return true
+      return check()
+    }
+
+    // 1. A second sentence while he thinks about the first: both answered, in order.
+    await stream(await clip('Wat staat er morgen op de planning?'))
+    await pause()
+    await sleep(500)
+    await stream(await clip('En wat staat er overmorgen?'))
+    await pause()
+    await until(() => seen.replies.length >= 2, 60_000)
+    const bothOk = seen.replies.length >= 2 && seen.replies.every((reply) => reply.length > 0)
+    if (!bothOk) failed += 1
+    console.log(`\n${bothOk ? '✓' : '✗'} praten tijdens het denken: ${seen.replies.length} antwoorden, geen weggegooid`)
+    for (const reply of seen.replies) console.log(`   Jarvis: ${reply.slice(0, 140)}`)
+
+    // 2. Seventy seconds without a sound (an answer listened to, a moment of thought): the next
+    // sentence is still heard live, before the gate's pause ends — not the slow way after it.
+    console.log('\n   (70 s stil…)')
+    await sleep(70_000)
+    const heardBefore = seen.heard.length
+    await stream(await clip('Hoe laat is het nu?'))
+    const spoken = Date.now()
+    const endSent = await pause()
+    await until(() => seen.heard.length > heardBefore, 10_000)
+    const late = seen.heard[heardBefore]
+    const liveOk = !!late?.text && late.at < endSent + 300
+    if (!liveOk) failed += 1
+    console.log(`${liveOk ? '✓' : '✗'} na 70 s stilte nog live verstaan: "${late?.text ?? ''}" ${late ? `${late.at - spoken} ms na de laatste klank (${late.at < endSent ? 'voor' : 'na'} de pauze)` : 'niet'}`)
+    await until(() => seen.replies.length >= 3, 30_000)
+
+    // 3. A sound without words: he says so (nothing), instead of thinking forever.
+    const nothingBefore = seen.nothing
+    const repliesBefore = seen.replies.length
+    const noise = Buffer.alloc(24_000 * 2 * 0.6)
+    for (let at = 0; at < noise.length; at += 2) noise.writeInt16LE(Math.round((Math.random() - 0.5) * 1200), at)
+    await stream(noise)
+    await pause()
+    const answered = await until(() => seen.nothing > nothingBefore || seen.replies.length > repliesBefore, 12_000)
+    if (!answered) failed += 1
+    console.log(`${answered ? '✓' : '✗'} geluid zonder woorden: ${seen.nothing > nothingBefore ? "'nothing' terug" : seen.replies.length > repliesBefore ? 'toch een antwoord' : 'NIETS (blijft denken)'}`)
+    return failed
+  }
 }
 
 main().catch((error) => {

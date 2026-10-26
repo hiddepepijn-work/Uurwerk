@@ -17,9 +17,9 @@
  */
 
 import type { CalendarEvent, PlanBlock, Task } from '../contract/types.js'
-import { fromIsoDate } from '../util/time.js'
+import { fromIsoDate, toIsoDate } from '../util/time.js'
 
-export type ReminderKind = 'task' | 'appointment' | 'gather' | 'leave' | 'checkin'
+export type ReminderKind = 'task' | 'appointment' | 'gather' | 'leave' | 'checkin' | 'nudge'
 
 /** How close the thing is, as a sound. */
 export type ReminderCue = 'soon30' | 'soon15' | 'begins'
@@ -155,6 +155,185 @@ export function upcomingReminders(
       body: `${event.title} om ${clock(event.startsAt)}${where} · vertrek ${clock(leave)}`,
       cue: 'soon15'
     })
+  }
+
+  return out.filter((reminder) => reminder.at >= fromMs && reminder.at < toMs).sort((a, b) => a.at - b.at)
+}
+
+// ------------------------------------------------------------------ not done yet
+
+/**
+ * Tasks that are not done, said at fixed moments — not only around a planned block, which a
+ * task without a block never had (13 Oct 2026: "hij stuurt geen reminders van taken die we
+ * nog niet hebben gedaan"):
+ *
+ *   past its deadline        10:00 and 19:00, every day until it is done or moved
+ *   deadline today           09:30 and 17:00
+ *   important                09:15, 14, 7, 3 and 1 day before the deadline ("weet je nog")
+ *
+ * One notification per moment with every task in it, not one each: five overdue tasks are
+ * one message. Waiting (blocked) and done tasks say nothing.
+ */
+const NUDGE_MOMENTS = {
+  overdue: [
+    { hour: 10, minute: 0 },
+    { hour: 19, minute: 0 }
+  ],
+  today: [
+    { hour: 9, minute: 30 },
+    { hour: 17, minute: 0 }
+  ],
+  ahead: { hour: 9, minute: 15 }
+}
+const AHEAD_DAYS = [14, 7, 3, 1]
+
+/** High priority, or "Belangrijk: ja" in the notes Jarvis keeps. */
+export const markedImportant = (task: Pick<Task, 'priority' | 'notes'>): boolean =>
+  task.priority === 'high' || /belangrijk:\s*ja/i.test(task.notes ?? '')
+
+const listed = (titles: string[]): string =>
+  titles.length <= 3 ? titles.join(', ') : `${titles.slice(0, 3).join(', ')} en ${titles.length - 3} meer`
+
+const shortDate = (day: string): string => {
+  const d = fromIsoDate(day)
+  return `${['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'][d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`
+}
+
+export function taskNudges(
+  tasks: Pick<Task, 'id' | 'title' | 'status' | 'dueDate' | 'priority' | 'notes'>[],
+  fromMs: number,
+  toMs: number
+): Reminder[] {
+  const open = tasks.filter((task) => task.dueDate && (task.status === 'open' || task.status === 'in_progress'))
+  const out: Reminder[] = []
+  const at = (day: string, hour: number, minute: number): number => fromIsoDate(day).getTime() + (hour * 60 + minute) * MIN
+
+  for (let ms = fromIsoDate(toIsoDate(fromMs)).getTime(); ms < toMs; ms += 86_400_000) {
+    // Noon, so a clock change never lands on the wrong day.
+    const day = toIsoDate(ms + 12 * 3_600_000)
+    const overdue = open.filter((task) => task.dueDate! < day)
+    const today = open.filter((task) => task.dueDate === day)
+
+    if (overdue.length > 0) {
+      for (const { hour, minute } of NUDGE_MOMENTS.overdue) {
+        out.push({
+          key: `nudge:overdue:${day}:${hour}`,
+          kind: 'nudge',
+          at: at(day, hour, minute),
+          title: overdue.length === 1 ? `Nog niet gedaan: ${overdue[0]!.title}` : `${overdue.length} taken over hun deadline`,
+          body: overdue.length === 1 ? `Deadline was ${shortDate(overdue[0]!.dueDate!)}. Doen, of een nieuw moment kiezen.` : listed(overdue.map((task) => task.title))
+        })
+      }
+    }
+    if (today.length > 0) {
+      for (const { hour, minute } of NUDGE_MOMENTS.today) {
+        out.push({
+          key: `nudge:today:${day}:${hour}`,
+          kind: 'nudge',
+          at: at(day, hour, minute),
+          title: today.length === 1 ? `Vandaag af: ${today[0]!.title}` : `Vandaag af: ${today.length} taken`,
+          body: today.length === 1 ? 'Deadline is vandaag en hij staat nog open.' : listed(today.map((task) => task.title))
+        })
+      }
+    }
+    for (const task of open) {
+      if (!markedImportant(task)) continue
+      const daysLeft = Math.round((fromIsoDate(task.dueDate!).getTime() - fromIsoDate(day).getTime()) / 86_400_000)
+      if (!AHEAD_DAYS.includes(daysLeft)) continue
+      out.push({
+        key: `nudge:ahead:${task.id}:${day}`,
+        kind: 'nudge',
+        at: at(day, NUDGE_MOMENTS.ahead.hour, NUDGE_MOMENTS.ahead.minute),
+        title: `Weet je nog: ${task.title}`,
+        body:
+          daysLeft === 1
+            ? `Morgen deadline (${shortDate(task.dueDate!)}). Wat moet er nog, en heb je alles?`
+            : `Over ${daysLeft} dagen deadline (${shortDate(task.dueDate!)}). Staat er tijd voor ingepland?`
+      })
+    }
+  }
+  return out.filter((reminder) => reminder.at >= fromMs && reminder.at < toMs).sort((a, b) => a.at - b.at)
+}
+
+// ------------------------------------------------------------------ the rest of the nagging
+
+/**
+ * What else Hidde asked to be told (26 Oct 2026), beyond deadlines:
+ *
+ *   no date, for days        11:30 every day: open tasks with no deadline, older than 3 days
+ *   own moments              each task's remindAt, exactly then
+ *   tomorrow is empty        21:00 on a working evening when tomorrow has no work planned
+ *   preparation asked        12:15 every day until answered: "moet je hier nog iets voor doen?"
+ */
+const UNDATED_AFTER_DAYS = 3
+
+export interface ExtraNudgeInput {
+  tasks: Pick<Task, 'id' | 'title' | 'status' | 'dueDate' | 'mustDoDate' | 'createdAt' | 'remindAt' | 'checklist' | 'notes'>[]
+  /** Minutes of task blocks planned on a day. */
+  plannedMinOn: (day: string) => number
+  /** Titles of what is waiting for a preparation answer. */
+  prepAsked: string[]
+}
+
+export function extraNudges(input: ExtraNudgeInput, fromMs: number, toMs: number): Reminder[] {
+  const open = input.tasks.filter((task) => task.status === 'open' || task.status === 'in_progress')
+  const out: Reminder[] = []
+  const at = (day: string, hour: number, minute: number): number => fromIsoDate(day).getTime() + (hour * 60 + minute) * MIN
+
+  for (let ms = fromIsoDate(toIsoDate(fromMs)).getTime(); ms < toMs; ms += 86_400_000) {
+    const day = toIsoDate(ms + 12 * 3_600_000)
+    const dayStart = fromIsoDate(day).getTime()
+
+    const undated = open.filter(
+      (task) => !task.dueDate && !task.mustDoDate && dayStart - task.createdAt > UNDATED_AFTER_DAYS * 86_400_000
+    )
+    if (undated.length > 0) {
+      out.push({
+        key: `nudge:undated:${day}`,
+        kind: 'nudge',
+        at: at(day, 11, 30),
+        title: undated.length === 1 ? `Nog zonder datum: ${undated[0]!.title}` : `${undated.length} taken staan nog zonder datum`,
+        body: `${listed(undated.map((task) => task.title))}. Geef ze een dag, of gooi ze weg.`
+      })
+    }
+
+    if (input.prepAsked.length > 0) {
+      out.push({
+        key: `nudge:prep:${day}`,
+        kind: 'nudge',
+        at: at(day, 12, 15),
+        title: 'Moet je hier nog iets voor doen?',
+        body: `${listed(input.prepAsked)}. Zeg het Jarvis, of zet het bij de taak.`
+      })
+    }
+
+    // Sunday to Thursday evening: tomorrow is a working day.
+    const tomorrow = toIsoDate(dayStart + 36 * 3_600_000)
+    const weekday = fromIsoDate(tomorrow).getDay()
+    if (weekday >= 1 && weekday <= 5 && input.plannedMinOn(tomorrow) === 0) {
+      out.push({
+        key: `nudge:tomorrow:${day}`,
+        kind: 'nudge',
+        at: at(day, 21, 0),
+        title: 'Morgen staat nog niks',
+        body: 'Plan je dag nu: open Uurwerk of zeg het tegen Jarvis.'
+      })
+    }
+  }
+
+  for (const task of open) {
+    for (const moment of task.remindAt) {
+      const when = new Date(moment).getTime()
+      if (Number.isNaN(when)) continue
+      const left = task.checklist.filter((item) => !item.done).map((item) => item.text)
+      out.push({
+        key: `nudge:own:${task.id}:${moment}`,
+        kind: 'nudge',
+        at: when,
+        title: task.title,
+        body: left.length > 0 ? `Nog: ${listed(left)}` : (task.notes?.split('\n')[0] ?? 'Staat nog open.')
+      })
+    }
   }
 
   return out.filter((reminder) => reminder.at >= fromMs && reminder.at < toMs).sort((a, b) => a.at - b.at)

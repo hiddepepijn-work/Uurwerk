@@ -29,6 +29,7 @@ import { reasons, type DayProposal, type RangeProposal } from '@core/services/pl
 import { buildReportDocument, packDocument, reportFileName } from '@core/report/docx.js'
 import { prefillSummary } from '@core/report/summary.js'
 import { dayRange, fromIsoDate, toIsoDate, toIsoWeek, weekRange } from '@core/util/time.js'
+import { prepOpen, type PrepItem } from '@core/services/prep.js'
 
 import {
   connectIcloud,
@@ -812,6 +813,20 @@ export function buildImplementation(
       wakeWordOn: async () => ((await host().window.wakeWordOn?.()) ?? false) && store.settings.get().jarvisWakeWord,
       wakeAudio: async (pcm) => host().window.wakeAudio?.(pcm),
       quit: async () => host().window.quit()
+    },
+
+    prep: {
+      get: async (ref) => store.prep.get(ref),
+      set: async (ref, status, note) => {
+        const check = store.prep.set(ref, status, note ?? null)
+        emitEvent('data:invalidated', { domain: 'tasks' })
+        return check
+      },
+      open: async () => {
+        const open = prepOpen(store, Date.now())
+        const shape = (item: PrepItem) => ({ ref: item.ref, title: item.title, date: item.date, important: item.important })
+        return { asked: open.asked.map(shape), unchecked: open.unchecked.map(shape) }
+      }
     },
 
     ideas: {

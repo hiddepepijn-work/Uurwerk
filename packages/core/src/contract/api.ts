@@ -79,6 +79,8 @@ import type {
   WorkType,
   Idea,
   IdeaStatus,
+  PrepCheck,
+  PrepStatus,
   NewIdea,
   IsoMonth,
   MoneyClosing,
@@ -213,6 +215,14 @@ export interface SwitchOutcome {
 export type SegmentPatch = Partial<
   Pick<TimeSegment, 'taskId' | 'areaId' | 'startedAt' | 'endedAt' | 'note'>
 >
+
+/** A task or appointment that may need preparing, as Jarvis and the screens see it. */
+export interface PrepOpenItem {
+  ref: string
+  title: string
+  date: string
+  important: boolean
+}
 
 export interface TimeTrackerAPI {
   /** The category above projects; carries the hour and sharing rules. */
@@ -649,6 +659,17 @@ export interface TimeTrackerAPI {
     add(idea: NewIdea): Promise<Idea>
     update(id: string, patch: Partial<Pick<Idea, 'text' | 'projectId' | 'areaId' | 'status'>>): Promise<Idea>
     remove(id: string): Promise<void>
+  }
+
+  /**
+   * Preparation (migration 023): has anyone checked whether a task ("t:<id>") or appointment
+   * ("a:<id>") needs something done before it. `open` lists what is waiting for an answer
+   * and what nobody has looked at yet, with titles and dates.
+   */
+  prep: {
+    get(ref: string): Promise<PrepCheck | null>
+    set(ref: string, status: PrepStatus, note?: string | null): Promise<PrepCheck>
+    open(): Promise<{ asked: PrepOpenItem[]; unchecked: PrepOpenItem[] }>
   }
 
   /** "5 sec": a five-second countdown, then ten minutes of focus on a timer of its own. */
